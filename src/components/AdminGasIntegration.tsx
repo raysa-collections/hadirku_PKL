@@ -283,6 +283,16 @@ export const AdminGasIntegration: React.FC = () => {
 
         <div className="flex flex-wrap items-center gap-2 shrink-0">
           <button
+            onClick={handleFetchFromSheet}
+            disabled={syncingAll}
+            className="px-3.5 py-2.5 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-lg shadow-cyan-950/40 transition cursor-pointer disabled:opacity-50"
+            title="Tarik seluruh data absensi terkini dari sheet Data_Absensi_PKL"
+          >
+            <DownloadCloud className={`w-4 h-4 ${syncingAll ? 'animate-bounce' : ''}`} />
+            <span>Tarik Presensi dari Sheet</span>
+          </button>
+
+          <button
             onClick={handleSyncAllStudents}
             disabled={syncingAll}
             className="px-3.5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-lg shadow-emerald-950/40 transition cursor-pointer disabled:opacity-50"
@@ -324,7 +334,7 @@ export const AdminGasIntegration: React.FC = () => {
       </div>
 
       {/* URL Config Card */}
-      <div className="p-5 rounded-3xl bg-slate-900 border border-slate-800 space-y-3">
+      <div className="p-5 rounded-3xl bg-slate-900 border border-slate-800 space-y-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
@@ -369,6 +379,76 @@ export const AdminGasIntegration: React.FC = () => {
             <span>{testingStatus.message}</span>
           </div>
         )}
+
+        {/* MULTI-USER CLOUD SHARING CARD */}
+        <div className="p-4 rounded-2xl bg-slate-950 border border-cyan-500/30 space-y-3 pt-3">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-white flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-cyan-400" />
+              Bagikan ke Siswa (Solusi Multi-User Banyak HP & Vercel)
+            </span>
+            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+              Auto Connect
+            </span>
+          </div>
+
+          <p className="text-[11px] text-slate-300 leading-relaxed">
+            Agar hasil presensi seluruh siswa di HP masing-masing <strong>langsung terdata di aplikasi dan masuk ke Google Spreadsheet sekolah Anda</strong>, gunakan salah satu cara berikut:
+          </p>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+            {/* OPSI 1: LINK WHATSAPP AUTO CONNECT */}
+            <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 space-y-2 flex flex-col justify-between">
+              <div>
+                <span className="font-bold text-emerald-400 block text-xs">Cara 1: Kirim Tautan Otomatis ke Grup WA Siswa</span>
+                <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">
+                  Tautan ini berisi kode penyambung otomatis. Ketika siswa membukanya di HP mereka, HP mereka akan langsung terhubung ke Google Spreadsheet Anda tanpa perlu setting apa pun.
+                </p>
+              </div>
+
+              <button
+                onClick={() => {
+                  const shareUrl = StorageService.getStudentShareUrl();
+                  const msg = `*PEMBERITAHUAN PRESENSI SISWA PKL SMKN 1 TEGALSARI*\nHalo seluruh siswa PKL, silakan catat absensi harian PKL melalui link resmi berikut:\n${shareUrl}\n\n*Catatan:* Link ini sudah otomatis terhubung ke sistem Google Spreadsheet sekolah. Pastikan izinkan Kamera & Lokasi GPS saat presensi.`;
+                  navigator.clipboard.writeText(msg);
+                  confetti({ particleCount: 30, spread: 50 });
+                  showToast('Pesan & Link WhatsApp siap absen berhasil disalin!');
+                }}
+                className="w-full py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 transition cursor-pointer shadow-md mt-2"
+              >
+                <Copy className="w-3.5 h-3.5" />
+                <span>Salin Pesan & Link WhatsApp</span>
+              </button>
+            </div>
+
+            {/* OPSI 2: VERCEL ENVIRONMENT VARIABLE */}
+            <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 space-y-2 flex flex-col justify-between">
+              <div>
+                <span className="font-bold text-cyan-400 block text-xs">Cara 2: Pasang di Vercel Environment Variables (Permanen)</span>
+                <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">
+                  Pasang variabel <code className="text-white font-mono font-bold bg-slate-950 px-1 py-0.5 rounded">VITE_GOOGLE_APPS_SCRIPT_URL</code> di Vercel. SEMUA pengunjung domain vercel.app Anda akan langsung terhubung tanpa parameter apa pun!
+                </p>
+              </div>
+
+              <button
+                onClick={() => {
+                  const currentUrl = scriptUrl.trim();
+                  if (!currentUrl) {
+                    alert('Harap isi URL Google Apps Script terlebih dahulu di atas.');
+                    return;
+                  }
+                  navigator.clipboard.writeText(currentUrl);
+                  confetti({ particleCount: 30, spread: 50 });
+                  showToast('URL Google Apps Script disalin! Tempelkan di Vercel -> Settings -> Environment Variables');
+                }}
+                className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-cyan-300 font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 border border-slate-700 transition cursor-pointer mt-2"
+              >
+                <Copy className="w-3.5 h-3.5" />
+                <span>Salin URL untuk Vercel Env</span>
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Navigation Sub-Tabs */}

@@ -40,21 +40,48 @@ export const AdminAttendanceManagement: React.FC = () => {
     coords?: string;
   } | null>(null);
 
+  const [isSyncing, setIsSyncing] = useState(false);
+  const isConnected = StorageService.isGoogleSheetConnected();
+
   const reloadData = () => {
     setRecords(StorageService.getAttendance());
   };
 
   const showToast = (msg: string) => {
     setToastMsg(msg);
-    setTimeout(() => setToastMsg(null), 3000);
+    setTimeout(() => setToastMsg(null), 3500);
   };
+
+  const handleCloudPull = async () => {
+    if (!StorageService.isGoogleSheetConnected()) {
+      showToast('Hubungkan Google Spreadsheet terlebih dahulu di menu Sinkronisasi Spreadsheet.');
+      return;
+    }
+    setIsSyncing(true);
+    try {
+      const res = await StorageService.pullAttendanceFromCloud();
+      reloadData();
+      showToast(res.message);
+    } catch (e: any) {
+      showToast('Gagal menarik data: ' + e.message);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  // Auto-sync on mount
+  React.useEffect(() => {
+    if (StorageService.isGoogleSheetConnected()) {
+      StorageService.pullAttendanceFromCloud().then(reloadData).catch(() => {});
+    }
+  }, []);
 
   const handleEditClick = (record: AttendanceRecord) => {
     setEditingRecord({ ...record });
     setShowEditModal(true);
   };
 
-  const handleSaveEdit = (e: React.FormEvent) => {
+  const handleSaveEdit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingRecord) return;
 
@@ -70,6 +97,12 @@ export const AdminAttendanceManagement: React.FC = () => {
     showToast(`Presensi atas nama ${toSave.namaSiswa} berhasil dikoreksi.`);
     setShowEditModal(false);
     reloadData();
+
+    // Sync edited record to Google Spreadsheet
+    if (StorageService.isGoogleSheetConnected()) {
+      const action = toSave.jamPulang && toSave.jamPulang !== '-' ? 'CHECK_OUT' : 'CHECK_IN';
+      StorageService.syncToGoogleSheet(action, toSave).catch(err => console.warn('Edit sync error:', err));
+    }
   };
 
   const filtered = records.filter(r => {
@@ -105,9 +138,20 @@ export const AdminAttendanceManagement: React.FC = () => {
           </p>
         </div>
 
-        <span className="text-xs text-slate-400 font-mono self-start sm:self-auto">
-          Total Terdata: <strong className="text-white">{records.length}</strong> Presensi
-        </span>
+        <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+          <button
+            onClick={handleCloudPull}
+            disabled={isSyncing}
+            className="px-3 py-1.5 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-md cursor-pointer disabled:opacity-50"
+            title="Tarik data presensi langsung dari Google Spreadsheet"
+          >
+            <span className={isSyncing ? 'animate-spin' : ''}>🔄</span>
+            <span>{isSyncing ? 'Menarik...' : 'Tarik Data Terbaru'}</span>
+          </button>
+          <span className="text-xs text-slate-400 font-mono bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-xl">
+            Total: <strong className="text-white">{records.length}</strong> Presensi
+          </span>
+        </div>
       </div>
 
       {/* Filter and Search Bar */}

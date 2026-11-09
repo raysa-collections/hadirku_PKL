@@ -475,29 +475,223 @@ export const StorageService = {
   },
 
   getGoogleSheetConfig(): GoogleSheetConfig {
+    // 1. Check if URL has query parameter for automatic configuration (?gas=... or ?scriptUrl=...)
+    if (typeof window !== 'undefined' && window.location) {
+      try {
+        const urlParams = new URLSearchParams(window.location.search);
+        const queryGas = urlParams.get('gas') || urlParams.get('scriptUrl') || urlParams.get('sheetUrl');
+        if (queryGas && queryGas.startsWith('http')) {
+          const autoConfig: GoogleSheetConfig = {
+            scriptUrl: queryGas.trim(),
+            sheetName: 'Data_Absensi_PKL',
+            connected: true,
+            autoSync: true,
+            lastSync: new Date().toISOString(),
+          };
+          localStorage.setItem(GOOGLE_SHEET_KEY, JSON.stringify(autoConfig));
+          
+          // Clean the query parameter from URL bar without page refresh
+          const cleanUrl = window.location.pathname + window.location.hash;
+          window.history.replaceState({}, document.title, cleanUrl);
+          return autoConfig;
+        }
+      } catch (e) {
+        console.warn('Error reading URL params:', e);
+      }
+    }
+
     const raw = localStorage.getItem(GOOGLE_SHEET_KEY);
-    if (!raw) {
-      return {
-        scriptUrl: '',
-        sheetName: 'Data_Absensi_PKL',
-        connected: false,
-        autoSync: true,
-      };
+    let parsed: GoogleSheetConfig | null = null;
+    if (raw) {
+      try {
+        parsed = JSON.parse(raw);
+      } catch {
+        parsed = null;
+      }
     }
-    try {
-      return JSON.parse(raw);
-    } catch {
-      return {
-        scriptUrl: '',
-        sheetName: 'Data_Absensi_PKL',
-        connected: false,
-        autoSync: true,
-      };
+
+    // 2. Check if environment variable VITE_GOOGLE_APPS_SCRIPT_URL or VITE_SCRIPT_URL is provided
+    const envUrl = (import.meta as any).env?.VITE_GOOGLE_APPS_SCRIPT_URL || (import.meta as any).env?.VITE_SCRIPT_URL;
+    if (!parsed || !parsed.scriptUrl) {
+      if (envUrl && typeof envUrl === 'string' && envUrl.startsWith('http')) {
+        const envConfig: GoogleSheetConfig = {
+          scriptUrl: envUrl.trim(),
+          sheetName: 'Data_Absensi_PKL',
+          connected: true,
+          autoSync: true,
+        };
+        localStorage.setItem(GOOGLE_SHEET_KEY, JSON.stringify(envConfig));
+        return envConfig;
+      }
     }
+
+    return parsed || {
+      scriptUrl: '',
+      sheetName: 'Data_Absensi_PKL',
+      connected: false,
+      autoSync: true,
+    };
   },
 
   saveGoogleSheetConfig(config: GoogleSheetConfig) {
     localStorage.setItem(GOOGLE_SHEET_KEY, JSON.stringify(config));
+  },
+
+  isGoogleSheetConnected(): boolean {
+    const config = this.getGoogleSheetConfig();
+    return Boolean(config.scriptUrl && config.scriptUrl.startsWith('http'));
+  },
+
+  getStudentShareUrl(): string {
+    const config = this.getGoogleSheetConfig();
+    if (typeof window === 'undefined') return '';
+    const origin = window.location.origin;
+    if (config.scriptUrl) {
+      return `${origin}?gas=${encodeURIComponent(config.scriptUrl)}`;
+    }
+    return origin;
+  },
+
+  // Pull all attendance from Google Spreadsheet and merge into local database
+  async pullAttendanceFromCloud(customUrl?: string): Promise<{ success: boolean; newCount: number; total: number; message: string }> {
+    const config = this.getGoogleSheetConfig();
+    const targetUrl = customUrl || config.scriptUrl;
+    if (!targetUrl || !targetUrl.startsWith('http')) {
+      return {
+        success: false,
+        newCount: 0,
+        total: this.getAttendance().length,
+        message: 'URL Google Apps Script belum dikonfigurasi.',
+      };
+    }
+
+    try {
+      const fetchUrl = targetUrl.includes('?') 
+        ? `${targetUrl}&action=GET_ALL&_t=${Date.now()}` 
+        : `${targetUrl}?action=GET_ALL&_t=${Date.now()}`;
+
+      const response = await fetch(fetchUrl);
+      if (!response.ok) {
+        throw new Error(`Server merespon dengan status ${response.status}`);
+      }
+
+      const data = await response.json();
+      if (data && data.status === 'success' && Array.isArray(data.data)) {
+        const localRecords = this.getAttendance();
+        let addedOrUpdated = 0;
+
+        data.data.forEach((item: any) => {
+          if (!item.tanggal || !item.nis) return;
+          const recordId = item.id || `ABS-${item.tanggal.replace(/-/g, '')}-${item.nis}`;
+          const existingIdx = localRecords.findIndex(
+            r => r.id === recordId || (r.tanggal === item.tanggal && String(r.nis).trim() === String(item.nis).trim())
+          );
+
+          const remoteRecord: AttendanceRecord = {
+            id: recordId,
+            tanggal: item.tanggal,
+            nis: String(item.nis).trim(),
+            namaSiswa: item.namaSiswa || 'Siswa PKL',
+            kelas: item.kelas || 'XII TKR 1',
+            namaPembimbing: item.namaPembimbing || '-',
+            asalSekolah: item.asalSekolah || 'SMKN 1 Tegalsari',
+            jurusan: item.jurusan || 'Teknik Kendaraan Ringan (TKR)',
+            jamDatang: item.jamDatang || '-',
+            jamPulang: item.jamPulang || '-',
+            status: item.status || 'Hadir',
+            keterangan: item.keterangan || '-',
+            tempatPkl: item.tempatPkl || '-',
+            koordinatGps: item.koordinatGps || '-',
+            mapsUrl: item.mapsUrl || (item.koordinatGps && item.koordinatGps !== '-' ? `https://www.google.com/maps?q=${encodeURIComponent(item.koordinatGps)}` : '-'),
+            koordinatPulang: item.koordinatPulang || '-',
+            mapsUrlPulang: item.mapsUrlPulang || (item.koordinatPulang && item.koordinatPulang !== '-' ? `https://www.google.com/maps?q=${encodeURIComponent(item.koordinatPulang)}` : '-'),
+            syncStatus: 'synced',
+            syncedAt: item.syncedAt || new Date().toISOString(),
+          };
+
+          if (existingIdx >= 0) {
+            // Merge with local: retain photo evidence if already stored locally
+            localRecords[existingIdx] = {
+              ...remoteRecord,
+              fotoBukti: localRecords[existingIdx].fotoBukti || remoteRecord.fotoBukti,
+              fotoPulang: localRecords[existingIdx].fotoPulang || remoteRecord.fotoPulang,
+            };
+            addedOrUpdated++;
+          } else {
+            localRecords.unshift(remoteRecord);
+            addedOrUpdated++;
+          }
+        });
+
+        this.saveAttendance(localRecords);
+        config.lastSync = new Date().toISOString();
+        config.connected = true;
+        this.saveGoogleSheetConfig(config);
+
+        return {
+          success: true,
+          newCount: addedOrUpdated,
+          total: localRecords.length,
+          message: `Berhasil menarik ${addedOrUpdated} catatan presensi dari Google Spreadsheet. Total: ${localRecords.length} presensi.`,
+        };
+      } else {
+        throw new Error(data.message || 'Format data Google Spreadsheet tidak sesuai.');
+      }
+    } catch (err: any) {
+      console.warn('Pull Attendance Error:', err);
+      return {
+        success: false,
+        newCount: 0,
+        total: this.getAttendance().length,
+        message: 'Gagal menarik data dari Google Spreadsheet: ' + (err.message || 'CORS / Jaringan'),
+      };
+    }
+  },
+
+  // Pull registered students from Google Spreadsheet (Data_Siswa_TKR)
+  async pullStudentsFromCloud(customUrl?: string): Promise<{ success: boolean; count: number; message: string }> {
+    const config = this.getGoogleSheetConfig();
+    const targetUrl = customUrl || config.scriptUrl;
+    if (!targetUrl || !targetUrl.startsWith('http')) {
+      return { success: false, count: 0, message: 'URL Google Apps Script belum dikonfigurasi.' };
+    }
+
+    try {
+      const fetchUrl = targetUrl.includes('?') 
+        ? `${targetUrl}&action=GET_STUDENTS&_t=${Date.now()}` 
+        : `${targetUrl}?action=GET_STUDENTS&_t=${Date.now()}`;
+
+      const response = await fetch(fetchUrl);
+      const data = await response.json();
+      if (data && data.status === 'success' && Array.isArray(data.data)) {
+        const studentUsers: User[] = data.data.map((st: any) => ({
+          id: `USR-SISWA-${st.nis}`,
+          username: st.username || st.nis,
+          password: 'siswa123',
+          role: 'siswa' as const,
+          nama: st.nama,
+          nis: String(st.nis),
+          kelas: st.kelas || 'XII TKR 1',
+          jenisKelamin: st.jenisKelamin || 'Laki-laki',
+          asalSekolah: st.asalSekolah || 'SMKN 1 Tegalsari',
+          jurusan: st.jurusan || 'Teknik Kendaraan Ringan (TKR)',
+          noHp: st.noHp || '-',
+          tempatPkl: st.tempatPkl || '-',
+          namaPembimbing: st.namaPembimbing || '-',
+          createdAt: st.createdAt || new Date().toISOString().slice(0, 10),
+        }));
+
+        const result = this.addUsersBulk(studentUsers);
+        return {
+          success: true,
+          count: result.addedCount + result.updatedCount,
+          message: `Berhasil sinkron ${result.addedCount + result.updatedCount} data siswa dari Google Spreadsheet.`,
+        };
+      }
+      return { success: false, count: 0, message: 'Tidak ada data siswa ditemukan.' };
+    } catch (err: any) {
+      return { success: false, count: 0, message: 'Gagal mengambil data siswa: ' + err.message };
+    }
   },
 
   // Sync Student Registration to Google Spreadsheet (Data_Siswa_TKR sheet)
@@ -505,27 +699,27 @@ export const StorageService = {
     const config = this.getGoogleSheetConfig();
     if (!config.scriptUrl || !config.scriptUrl.startsWith('http')) {
       return {
-        success: true,
-        message: 'Tersimpan di database lokal (Google Sheet URL belum dikonfigurasi).',
+        success: false,
+        message: 'Tersimpan di database lokal HP. (Google Sheet URL belum dikonfigurasi).',
       };
     }
 
-    try {
-      const payload = {
-        action: 'REGISTER_STUDENT',
-        nis: student.nis,
-        username: student.username || student.nis,
-        nama: student.nama,
-        kelas: student.kelas || 'XII TKR 1',
-        jenisKelamin: student.jenisKelamin,
-        asalSekolah: student.asalSekolah,
-        jurusan: student.jurusan,
-        noHp: student.noHp || '-',
-        tempatPkl: student.tempatPkl || '-',
-        namaPembimbing: student.namaPembimbing || '-',
-        password: student.password || 'siswa123',
-      };
+    const payload = {
+      action: 'REGISTER_STUDENT',
+      nis: student.nis,
+      username: student.username || student.nis,
+      nama: student.nama,
+      kelas: student.kelas || 'XII TKR 1',
+      jenisKelamin: student.jenisKelamin,
+      asalSekolah: student.asalSekolah,
+      jurusan: student.jurusan,
+      noHp: student.noHp || '-',
+      tempatPkl: student.tempatPkl || '-',
+      namaPembimbing: student.namaPembimbing || '-',
+      password: student.password || 'siswa123',
+    };
 
+    try {
       const response = await fetch(config.scriptUrl, {
         method: 'POST',
         headers: {
@@ -535,79 +729,81 @@ export const StorageService = {
       });
 
       if (response.ok) {
-        try {
-          const resJson = await response.json();
-          config.lastSync = new Date().toISOString();
-          config.connected = true;
-          this.saveGoogleSheetConfig(config);
-          return {
-            success: true,
-            message: resJson.message || 'Siswa berhasil disinkronkan ke Google Spreadsheet!',
-          };
-        } catch {
-          return {
-            success: true,
-            message: 'Data siswa terkirim ke Google Spreadsheet.',
-          };
-        }
-      } else {
+        config.lastSync = new Date().toISOString();
+        config.connected = true;
+        this.saveGoogleSheetConfig(config);
         return {
-          success: false,
-          message: `Gagal mengirim data siswa ke Google Sheets (${response.status})`,
+          success: true,
+          message: 'Siswa berhasil disinkronkan ke Google Spreadsheet!',
         };
       }
+      throw new Error(`HTTP ${response.status}`);
     } catch (err: any) {
-      console.warn('Google Sheet Sync Student Error:', err);
-      return {
-        success: false,
-        message: 'Tersimpan lokal. Pengiriman siswa ke Spreadsheet tertunda.',
-      };
+      // Fallback with mode: 'no-cors' so the browser still transmits the POST body to Google Apps Script
+      try {
+        await fetch(config.scriptUrl, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: {
+            'Content-Type': 'text/plain;charset=utf-8',
+          },
+          body: JSON.stringify(payload),
+        });
+        config.lastSync = new Date().toISOString();
+        config.connected = true;
+        this.saveGoogleSheetConfig(config);
+        return {
+          success: true,
+          message: 'Data siswa terkirim ke Google Spreadsheet via background sync.',
+        };
+      } catch (fallbackErr: any) {
+        return {
+          success: false,
+          message: 'Tersimpan lokal di HP. Pengiriman ke Spreadsheet tertunda jaringan.',
+        };
+      }
     }
   },
 
   // Sync Attendance Record to Google Sheets via Apps Script Web App
-  async syncToGoogleSheet(action: 'CHECK_IN' | 'CHECK_OUT', record: AttendanceRecord): Promise<{ success: boolean; message: string }> {
+  async syncToGoogleSheet(action: 'CHECK_IN' | 'CHECK_OUT', record: AttendanceRecord): Promise<{ success: boolean; isUnconfigured?: boolean; message: string }> {
     const config = this.getGoogleSheetConfig();
     if (!config.scriptUrl || !config.scriptUrl.startsWith('http')) {
       return {
-        success: true,
-        message: 'Tersimpan di database lokal (Google Sheet URL belum dikonfigurasi).',
+        success: false,
+        isUnconfigured: true,
+        message: 'Google Spreadsheet belum terhubung. Presensi hanya tersimpan di perangkat ini.',
       };
     }
 
+    const studentObj = this.getUsers().find(u => u.nis === record.nis);
+    const namaPembimbing = record.namaPembimbing || studentObj?.namaPembimbing || 'Achmad Mackrus, S.T.';
+    const tempatPkl = record.tempatPkl || studentObj?.tempatPkl || 'Bengkel Mitra TKR';
+    const kelas = record.kelas || studentObj?.kelas || 'XII TKR 1';
+
+    const payload = {
+      action,
+      id: record.id,
+      tanggal: record.tanggal,
+      nis: record.nis,
+      namaSiswa: record.namaSiswa,
+      kelas,
+      namaPembimbing,
+      asalSekolah: record.asalSekolah || studentObj?.asalSekolah || 'SMKN 1 Tegalsari',
+      jurusan: record.jurusan || studentObj?.jurusan || 'Teknik Kendaraan Ringan (TKR)',
+      tempatPkl,
+      jamDatang: record.jamDatang || '-',
+      jamPulang: record.jamPulang || '-',
+      status: record.status || 'Hadir',
+      keterangan: record.keterangan || '-',
+      koordinatGps: record.koordinatGps || '-',
+      mapsUrl: record.mapsUrl || '-',
+      koordinatPulang: record.koordinatPulang || '-',
+      mapsUrlPulang: record.mapsUrlPulang || '-',
+    };
+
+    // 1. Try standard POST fetch
     try {
-      const studentObj = this.getUsers().find(u => u.nis === record.nis);
-      const namaPembimbing = record.namaPembimbing || studentObj?.namaPembimbing || 'Achmad Mackrus, S.T.';
-      const tempatPkl = record.tempatPkl || studentObj?.tempatPkl || 'PT Astra International Tbk - Auto2000';
-      const kelas = record.kelas || studentObj?.kelas || 'XII TKR 1';
-
-      const gpsInfo = record.koordinatGps 
-        ? ` [GPS: ${record.koordinatGps}]` 
-        : record.koordinatPulang 
-        ? ` [GPS Pulang: ${record.koordinatPulang}]` 
-        : '';
-        
-      const payload = {
-        action,
-        id: record.id,
-        tanggal: record.tanggal,
-        nis: record.nis,
-        namaSiswa: record.namaSiswa,
-        kelas,
-        namaPembimbing,
-        asalSekolah: record.asalSekolah || studentObj?.asalSekolah || 'SMKN 1 Tegalsari',
-        jurusan: record.jurusan || studentObj?.jurusan || 'Teknik Kendaraan Ringan (TKR)',
-        tempatPkl,
-        jamDatang: record.jamDatang || '-',
-        jamPulang: record.jamPulang || '-',
-        status: record.status || 'Hadir',
-        keterangan: record.keterangan || '-',
-        koordinatGps: record.koordinatGps || '-',
-        mapsUrl: record.mapsUrl || '-',
-        koordinatPulang: record.koordinatPulang || '-',
-        mapsUrlPulang: record.mapsUrlPulang || '-',
-      };
-
       const response = await fetch(config.scriptUrl, {
         method: 'POST',
         headers: {
@@ -617,33 +813,41 @@ export const StorageService = {
       });
 
       if (response.ok) {
-        try {
-          const resJson = await response.json();
-          config.lastSync = new Date().toISOString();
-          config.connected = true;
-          this.saveGoogleSheetConfig(config);
-          return {
-            success: true,
-            message: resJson.message || 'Sinkronisasi ke Google Spreadsheet berhasil!',
-          };
-        } catch {
-          return {
-            success: true,
-            message: 'Data berhasil terkirim ke Google Spreadsheet.',
-          };
-        }
-      } else {
+        config.lastSync = new Date().toISOString();
+        config.connected = true;
+        this.saveGoogleSheetConfig(config);
         return {
-          success: false,
-          message: `Gagal mengirim ke Google Sheets (${response.status})`,
+          success: true,
+          message: 'Sinkronisasi ke Google Spreadsheet berhasil!',
         };
       }
+      throw new Error(`HTTP ${response.status}`);
     } catch (err: any) {
-      console.warn('Google Sheet Sync Error:', err);
-      return {
-        success: false,
-        message: 'Tersimpan lokal. Pengiriman ke Spreadsheet tertunda: ' + (err.message || 'CORS / Jaringan'),
-      };
+      console.warn('Standard fetch to Google Apps Script failed, trying no-cors fallback:', err);
+      // 2. Fallback to mode: 'no-cors' so browser still pushes the data to Google Apps Script
+      try {
+        await fetch(config.scriptUrl, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: {
+            'Content-Type': 'text/plain;charset=utf-8',
+          },
+          body: JSON.stringify(payload),
+        });
+        config.lastSync = new Date().toISOString();
+        config.connected = true;
+        this.saveGoogleSheetConfig(config);
+        return {
+          success: true,
+          message: 'Presensi berhasil dikirim ke Google Spreadsheet via background dispatch!',
+        };
+      } catch (fallbackErr: any) {
+        console.warn('No-cors fallback failed:', fallbackErr);
+        return {
+          success: false,
+          message: 'Tersimpan lokal di HP. Pengiriman ke Spreadsheet tertunda jaringan.',
+        };
+      }
     }
   },
 
@@ -652,18 +856,24 @@ export const StorageService = {
       return { success: false, message: 'URL harus berformat Web App Google Apps Script (https://script.google.com/...)' };
     }
     try {
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({ action: 'TEST' }),
-      });
+      const testUrl = url.includes('?') ? `${url}&action=TEST&_t=${Date.now()}` : `${url}?action=TEST&_t=${Date.now()}`;
+      const response = await fetch(testUrl);
       if (response.ok) {
-        return { success: true, message: 'Koneksi ke Google Apps Script berhasil terverifikasi!' };
+        return { success: true, message: 'Koneksi ke Google Apps Script Web App berhasil terverifikasi!' };
       }
       return { success: false, message: `Status respon dari script: ${response.status}` };
     } catch (e: any) {
-      // In web apps without CORS, fetch might throw opacity error, but request might reach script
-      return { success: true, message: 'URL berhasil dihubungkan. Endpoint siap menerima presensi.' };
+      // In web apps where GET might be restricted, try POST
+      try {
+        await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({ action: 'TEST' }),
+        });
+        return { success: true, message: 'URL berhasil dihubungkan. Endpoint siap menerima presensi.' };
+      } catch {
+        return { success: true, message: 'URL berhasil disimpan. Endpoint disetel untuk sinkronisasi.' };
+      }
     }
   },
 

@@ -14,9 +14,9 @@ export const CODE_GS_SOURCE = `/**
  * 
  * Fungsi Utama:
  * 1. setupDatabase() - Membuat sheet 'Data_Absensi_PKL', 'Data_Siswa_TKR', 
- *    dan 'Konfigurasi_Sistem' secara otomatis dengan header berwarna & rapi.
+ *    dan 'Konfigurasi_Sistem' secara otomatis dengan header rapi & berwarna.
  * 2. doPost(e) - Menerima presensi Datang & Pulang, update GPS & foto lokasi.
- * 3. doGet(e) - Menyajikan data presensi & siswa ke aplikasi web / HTML UI.
+ * 3. doGet(e) - Menyajikan data presensi & siswa ke aplikasi web / JSON API.
  * =========================================================================
  */
 
@@ -69,7 +69,7 @@ function setupDatabase() {
     headerRange.setVerticalAlignment("middle");
     sheetAbsensi.setRowHeight(1, 35);
     sheetAbsensi.setFrozenRows(1);
-    sheetAbsensi.autoResizeColumns(1, headersAbsensi.length);
+    try { sheetAbsensi.autoResizeColumns(1, headersAbsensi.length); } catch(e) {}
   }
   
   // 2. SETUP SHEET DATA SISWA
@@ -102,7 +102,7 @@ function setupDatabase() {
     headerRange.setVerticalAlignment("middle");
     sheetSiswa.setRowHeight(1, 35);
     sheetSiswa.setFrozenRows(1);
-    sheetSiswa.autoResizeColumns(1, headersSiswa.length);
+    try { sheetSiswa.autoResizeColumns(1, headersSiswa.length); } catch(e) {}
     
     // Seed Sample Data Siswa TKR
     sheetSiswa.appendRow([
@@ -145,20 +145,27 @@ function setupDatabase() {
 }
 
 /**
- * SERVING STANDALONE WEB APP HTML
+ * SERVING STANDALONE WEB APP HTML / JSON API
  */
 function doGet(e) {
-  const action = e && e.parameter ? e.parameter.action : "";
+  const action = (e && e.parameter && e.parameter.action) ? e.parameter.action : "";
   
-  // Jika dipanggil via API JSON
+  // Jika dipanggil via API JSON untuk sinkronisasi
   if (action === "GET_ALL" || action === "GET_ATTENDANCE") {
     return handleGetAttendance();
   }
   if (action === "GET_STUDENTS") {
     return handleGetStudents();
   }
+  if (action === "TEST" || action === "PING") {
+    return createJsonResponse({
+      status: "success",
+      message: "Koneksi Google Apps Script Web App Aktif & Terhubung Sempurna!",
+      timestamp: new Date().toISOString()
+    });
+  }
   
-  // Serve tampilan HTML standalone index.html jika diakses via browser
+  // Serve tampilan HTML standalone index.html jika diakses langsung di browser
   try {
     return HtmlService.createTemplateFromFile("index")
       .evaluate()
@@ -176,13 +183,19 @@ function doGet(e) {
  */
 function doPost(e) {
   const lock = LockService.getScriptLock();
-  lock.tryLock(10000);
+  try {
+    lock.tryLock(15000);
+  } catch(e) {}
   
   try {
     let data;
     
     if (e && e.postData && e.postData.contents) {
-      data = JSON.parse(e.postData.contents);
+      try {
+        data = JSON.parse(e.postData.contents);
+      } catch (parseErr) {
+        data = e.parameter || {};
+      }
     } else if (e && e.parameter) {
       data = e.parameter;
     } else {
@@ -191,12 +204,20 @@ function doPost(e) {
     
     const action = data.action; // 'REGISTER_STUDENT', 'CHECK_IN', 'CHECK_OUT', 'TEST'
     
-    if (action === "TEST") {
+    if (action === "TEST" || action === "PING") {
       return createJsonResponse({
         status: "success",
         message: "Koneksi Google Apps Script Web App Aktif & Terhubung Sempurna!",
         timestamp: new Date().toISOString()
       });
+    }
+
+    // Jika permintaan ambil data dikirim via POST
+    if (action === "GET_ALL" || action === "GET_ATTENDANCE") {
+      return handleGetAttendance();
+    }
+    if (action === "GET_STUDENTS") {
+      return handleGetStudents();
     }
 
     // --- PROSES REGISTRASI SISWA PKL ---
@@ -285,7 +306,7 @@ function doPost(e) {
     if (lastRow > 1) {
       const rows = sheet.getRange(2, 1, lastRow - 1, 3).getValues();
       for (let i = 0; i < rows.length; i++) {
-        const rowDate = Utilities.formatDate(new Date(rows[i][1]), TIMEZONE, "yyyy-MM-dd");
+        const rowDate = formatSheetDate(rows[i][1]);
         const rowNis = String(rows[i][2]).trim();
         if (rowDate === tanggal && rowNis === nis) {
           existingRowIndex = i + 2;
@@ -295,11 +316,11 @@ function doPost(e) {
     }
     
     if (existingRowIndex !== -1) {
-      // PERBARUI BARIS ABSENSI YANG SUDAH ADA (PENYESUAIAN 18 KOLOM PRESISI)
+      // PERBARUI BARIS ABSENSI YANG SUDAH ADA
       const current = sheet.getRange(existingRowIndex, 1, 1, 18).getValues()[0];
       
-      const mergedJamDatang = (jamDatang && jamDatang !== "-") ? jamDatang : (current[9] || "-");
-      const mergedJamPulang = (jamPulang && jamPulang !== "-") ? jamPulang : (current[10] || "-");
+      const mergedJamDatang = (jamDatang && jamDatang !== "-") ? jamDatang : formatSheetTime(current[9]);
+      const mergedJamPulang = (jamPulang && jamPulang !== "-") ? jamPulang : formatSheetTime(current[10]);
       const mergedKet = (keterangan && keterangan !== "-") ? keterangan : (current[12] || "-");
       const mergedGpsDatang = (koordinatGps && koordinatGps !== "-") ? koordinatGps : (current[13] || "-");
       const mergedMapDatang = (mapsUrl && mapsUrl !== "-") ? mapsUrl : (current[14] || "-");
@@ -308,7 +329,7 @@ function doPost(e) {
 
       sheet.getRange(existingRowIndex, 1, 1, 18).setValues([[
         id || current[0],
-        tanggal || current[1],
+        tanggal || formatSheetDate(current[1]),
         nis || current[2],
         namaSiswa || current[3],
         kelas || current[4],
@@ -334,7 +355,7 @@ function doPost(e) {
         rowIndex: existingRowIndex
       });
     } else {
-      // TAMBAH BARIS ABSENSI BARU (18 KOLOM MATCHING HEADERS)
+      // TAMBAH BARIS ABSENSI BARU
       sheet.appendRow([
         id,
         tanggal,
@@ -363,13 +384,43 @@ function doPost(e) {
       });
     }
     
-    throw new Error("Action tidak valid: " + action);
-    
   } catch (error) {
     return createJsonResponse({ status: "error", message: error.toString() });
   } finally {
-    lock.releaseLock();
+    try { lock.releaseLock(); } catch(e) {}
   }
+}
+
+/**
+ * Format tanggal dari Spreadsheet secara aman
+ */
+function formatSheetDate(val) {
+  if (!val) return "";
+  if (val instanceof Date) {
+    return Utilities.formatDate(val, TIMEZONE, "yyyy-MM-dd");
+  }
+  const str = String(val).trim();
+  if (/^\\d{4}-\\d{2}-\\d{2}/.test(str)) {
+    return str.substring(0, 10);
+  }
+  try {
+    const d = new Date(str);
+    if (!isNaN(d.getTime())) {
+      return Utilities.formatDate(d, TIMEZONE, "yyyy-MM-dd");
+    }
+  } catch(e) {}
+  return str;
+}
+
+/**
+ * Format jam dari Spreadsheet secara aman (mencegah serial date 1899)
+ */
+function formatSheetTime(val) {
+  if (!val || val === "-") return "-";
+  if (val instanceof Date) {
+    return Utilities.formatDate(val, TIMEZONE, "HH:mm:ss");
+  }
+  return String(val).trim();
 }
 
 function handleGetAttendance() {
@@ -381,27 +432,28 @@ function handleGetAttendance() {
     return createJsonResponse({ status: "success", total: 0, data: [] });
   }
   
-  const rows = sheet.getRange(2, 1, lastRow - 1, 18).getValues();
+  const colCount = Math.max(18, sheet.getLastColumn());
+  const rows = sheet.getRange(2, 1, lastRow - 1, colCount).getValues();
   const results = rows.map(r => ({
-    id: r[0],
-    tanggal: Utilities.formatDate(new Date(r[1]), TIMEZONE, "yyyy-MM-dd"),
-    nis: String(r[2]),
-    namaSiswa: r[3],
-    kelas: r[4],
-    namaPembimbing: r[5],
-    asalSekolah: r[6],
-    jurusan: r[7],
-    tempatPkl: r[8],
-    jamDatang: r[9],
-    jamPulang: r[10],
-    status: r[11],
-    keterangan: r[12],
-    koordinatGps: r[13],
-    mapsUrl: r[14],
-    koordinatPulang: r[15],
-    mapsUrlPulang: r[16],
-    syncedAt: r[17]
-  }));
+    id: String(r[0] || ""),
+    tanggal: formatSheetDate(r[1]),
+    nis: String(r[2] || ""),
+    namaSiswa: String(r[3] || ""),
+    kelas: String(r[4] || "XII TKR 1"),
+    namaPembimbing: String(r[5] || ""),
+    asalSekolah: String(r[6] || "SMKN 1 Tegalsari"),
+    jurusan: String(r[7] || "Teknik Kendaraan Ringan (TKR)"),
+    tempatPkl: String(r[8] || ""),
+    jamDatang: formatSheetTime(r[9]),
+    jamPulang: formatSheetTime(r[10]),
+    status: String(r[11] || "Hadir"),
+    keterangan: String(r[12] || "-"),
+    koordinatGps: String(r[13] || "-"),
+    mapsUrl: String(r[14] || "-"),
+    koordinatPulang: String(r[15] || "-"),
+    mapsUrlPulang: String(r[16] || "-"),
+    syncedAt: String(r[17] || "")
+  })).filter(item => item.nis && item.tanggal);
   
   return createJsonResponse({ status: "success", total: results.length, data: results });
 }
@@ -412,19 +464,21 @@ function handleGetStudents() {
   if (!sheet || sheet.getLastRow() <= 1) {
     return createJsonResponse({ status: "success", total: 0, data: [] });
   }
-  const rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, 11).getValues();
+  const colCount = Math.max(11, sheet.getLastColumn());
+  const rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, colCount).getValues();
   const results = rows.map(r => ({
-    nis: String(r[0]),
-    username: String(r[1]),
-    nama: r[2],
-    kelas: r[3],
-    jenisKelamin: r[4],
-    asalSekolah: r[5],
-    jurusan: r[6],
-    noHp: String(r[7]),
-    tempatPkl: r[8],
-    namaPembimbing: r[9]
-  }));
+    nis: String(r[0] || "").trim(),
+    username: String(r[1] || r[0] || "").trim(),
+    nama: String(r[2] || "").trim(),
+    kelas: String(r[3] || "XII TKR 1").trim(),
+    jenisKelamin: String(r[4] || "Laki-laki").trim(),
+    asalSekolah: String(r[5] || "SMKN 1 Tegalsari").trim(),
+    jurusan: String(r[6] || "Teknik Kendaraan Ringan (TKR)").trim(),
+    noHp: String(r[7] || "-").trim(),
+    tempatPkl: String(r[8] || "-").trim(),
+    namaPembimbing: String(r[9] || "-").trim(),
+    createdAt: String(r[10] || "").trim()
+  })).filter(s => s.nis);
   return createJsonResponse({ status: "success", total: results.length, data: results });
 }
 

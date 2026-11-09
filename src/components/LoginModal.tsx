@@ -38,7 +38,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
 
   const isSiswa = selectedRole === 'siswa';
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
 
@@ -50,10 +50,10 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       return;
     }
 
-    const users = StorageService.getUsers();
+    let users = StorageService.getUsers();
     // Match based on role and credentials
     const targetRole = isSiswa ? 'siswa' : 'admin';
-    const user = users.find(u => {
+    let user = users.find(u => {
       if (u.role !== targetRole) return false;
 
       // For student: matches username (and NIS as fallback)
@@ -78,6 +78,21 @@ export const LoginModal: React.FC<LoginModalProps> = ({
 
       return false;
     });
+
+    // If not found locally and cloud is connected, try pull from Google Sheet
+    if (!user && isSiswa && StorageService.isGoogleSheetConnected()) {
+      try {
+        await StorageService.pullStudentsFromCloud();
+        users = StorageService.getUsers();
+        user = users.find(u => 
+          u.role === 'siswa' && 
+          (u.username.toLowerCase() === cleanId || u.nis.toLowerCase() === cleanId) && 
+          u.password === cleanPass
+        );
+      } catch (cloudErr) {
+        console.warn('Cloud login lookup error:', cloudErr);
+      }
+    }
 
     if (user) {
       StorageService.setCurrentUser(user);

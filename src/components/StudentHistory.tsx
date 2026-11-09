@@ -9,7 +9,9 @@ interface StudentHistoryProps {
 }
 
 export const StudentHistory: React.FC<StudentHistoryProps> = ({ user, onBackToDashboard }) => {
-  const allRecords = StorageService.getAttendance().filter(r => r.nis === user.nis);
+  const [allRecords, setAllRecords] = useState<AttendanceRecord[]>(() => 
+    StorageService.getAttendance().filter(r => r.nis === user.nis)
+  );
   
   const currentYear = new Date().getFullYear().toString();
   const currentMonth = String(new Date().getMonth() + 1).padStart(2, '0');
@@ -17,6 +19,21 @@ export const StudentHistory: React.FC<StudentHistoryProps> = ({ user, onBackToDa
   const [selectedMonth, setSelectedMonth] = useState<string>(currentMonth);
   const [selectedYear, setSelectedYear] = useState<string>(currentYear);
   const [searchQuery, setSearchQuery] = useState('');
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const reloadData = () => {
+    setAllRecords(StorageService.getAttendance().filter(r => r.nis === user.nis));
+  };
+
+  React.useEffect(() => {
+    if (StorageService.isGoogleSheetConnected()) {
+      setIsRefreshing(true);
+      StorageService.pullAttendanceFromCloud()
+        .then(reloadData)
+        .catch(err => console.warn('History pull error:', err))
+        .finally(() => setIsRefreshing(false));
+    }
+  }, [user.nis]);
 
   // Filter records
   const filteredRecords = allRecords.filter(record => {

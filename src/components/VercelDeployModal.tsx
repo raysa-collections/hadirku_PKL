@@ -277,13 +277,29 @@ export const VercelDeployModal: React.FC<VercelDeployModalProps> = ({ onClose })
                 <pre>{vercelJsonContent}</pre>
               </div>
 
-              <div className="p-3.5 rounded-2xl bg-blue-950/50 border border-blue-500/30 text-slate-300 text-xs space-y-1.5">
-                <span className="font-bold text-cyan-300 flex items-center gap-1.5">
-                  <Info className="w-4 h-4 text-cyan-400 shrink-0" /> Catatan Penting Setelah Deploy di Vercel:
+              <div className="p-4 rounded-2xl bg-blue-950/40 border border-blue-500/30 text-slate-300 text-xs space-y-3">
+                <span className="font-bold text-cyan-300 flex items-center gap-1.5 text-xs">
+                  <Info className="w-4 h-4 text-cyan-400 shrink-0" />
+                  KUNCI MULTI-USER: Cara Agar Presensi Seluruh Siswa Otomatis Terdata
                 </span>
-                <p>
-                  Setelah domain <strong className="text-white">https://nama-aplikasi.vercel.app</strong> Anda aktif, masuk ke menu Pembimbing di aplikasi lalu pastikan URL Web App Google Apps Script (<code className="font-mono text-cyan-300">https://script.google.com/.../exec</code>) sudah tersimpan agar sinkronisasi Google Spreadsheet tetap berjalan 100% online!
+                <p className="leading-relaxed text-[11px]">
+                  Saat di-onlinekan di Vercel, penyimpanan lokal browser (localStorage) di HP siswa terpisah dari laptop guru. Agar presensi yang dilakukan siswa dari HP masing-masing <strong>langsung masuk ke aplikasi dan Google Spreadsheet</strong>:
                 </p>
+                <div className="space-y-2 text-[11px]">
+                  <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800">
+                    <strong className="text-emerald-300 block mb-0.5">Opsi 1 (Sangat Mudah via WhatsApp):</strong>
+                    Buka tab <em>"Sinkron Jendela Siswa & Code.gs"</em> &gt; klik <em>"Salin Pesan & Link WhatsApp"</em>. Kirimkan ke grup siswa. Ketika siswa membukanya, HP mereka otomatis terhubung 100%!
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800">
+                    <strong className="text-cyan-300 block mb-0.5">Opsi 2 (Permanen di Vercel):</strong>
+                    Buka proyek Anda di <strong className="text-white">vercel.com</strong> &gt; menu <strong>Settings</strong> &gt; <strong>Environment Variables</strong>. Tambahkan variabel:
+                    <ul className="list-disc list-inside mt-1 space-y-0.5 pl-1 font-mono text-[10px]">
+                      <li>Key: <span className="text-emerald-400">VITE_GOOGLE_APPS_SCRIPT_URL</span></li>
+                      <li>Value: <span className="text-cyan-400">URL Web App Google Apps Script Anda</span></li>
+                    </ul>
+                    Lalu klik <strong>Deployments &gt; Redeploy</strong>. Dengan cara ini, semua siswa yang mengakses domain vercel.app akan otomatis tersambung tanpa perlu link khusus!
+                  </div>
+                </div>
               </div>
             </div>
           )}

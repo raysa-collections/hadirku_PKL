@@ -36,7 +36,20 @@ export default function App() {
   const [adminTab, setAdminTab] = useState<'dashboard' | 'students' | 'attendance' | 'reports' | 'gas_sync' | 'settings'>('dashboard');
   const [showGoogleSheetModal, setShowGoogleSheetModal] = useState(false);
   const [themeConfig, setThemeConfig] = useState<AppThemeConfig>(() => StorageService.getAppThemeConfig());
-  const sheetConfig = StorageService.getGoogleSheetConfig();
+  const [sheetConfig, setSheetConfig] = useState(() => StorageService.getGoogleSheetConfig());
+  const [cloudNotice, setCloudNotice] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    // If opened with ?gas=, storage.getGoogleSheetConfig already initialized it
+    const config = StorageService.getGoogleSheetConfig();
+    setSheetConfig(config);
+    if (config.connected && config.scriptUrl) {
+      if (typeof window !== 'undefined' && window.location.search.includes('gas')) {
+        setCloudNotice('Tautan presensi berhasil terhubung otomatis dengan Google Spreadsheet sekolah!');
+        setTimeout(() => setCloudNotice(null), 5000);
+      }
+    }
+  }, []);
 
   const handleLoginSuccess = (user: User) => {
     setCurrentUser(user);
@@ -63,6 +76,14 @@ export default function App() {
         {/* Subtle background ambient lights */}
         <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-96 h-96 bg-blue-600/10 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute bottom-10 right-10 w-80 h-80 bg-indigo-600/10 rounded-full blur-3xl pointer-events-none" />
+
+        {/* Cloud Auto-Connect Toast */}
+        {cloudNotice && (
+          <div className="w-full max-w-lg mb-4 p-3 rounded-2xl bg-emerald-950/90 border border-emerald-500/40 text-emerald-200 text-xs flex items-center justify-between shadow-xl animate-in fade-in">
+            <span>{cloudNotice}</span>
+            <button onClick={() => setCloudNotice(null)} className="text-slate-400 hover:text-white">✕</button>
+          </div>
+        )}
 
         {/* PWA Mobile Install Banner */}
         <div className="w-full max-w-3xl mb-4">
@@ -201,6 +222,17 @@ export default function App() {
 
           {/* Action Header Menu */}
           <div className="flex items-center gap-2">
+            {currentUser.role === 'siswa' && (
+              <span className={`px-2.5 py-1 rounded-xl text-[11px] font-semibold border flex items-center gap-1.5 ${
+                sheetConfig.connected || sheetConfig.scriptUrl
+                  ? 'bg-emerald-950/60 border-emerald-500/40 text-emerald-300'
+                  : 'bg-amber-950/60 border-amber-500/40 text-amber-300'
+              }`} title={sheetConfig.connected || sheetConfig.scriptUrl ? 'Terhubung dengan Google Spreadsheet Sekolah' : 'Penyimpanan Lokal (Belum Terhubung Cloud)'}>
+                <span className={`w-2 h-2 rounded-full ${sheetConfig.connected || sheetConfig.scriptUrl ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
+                <span className="hidden sm:inline">{sheetConfig.connected || sheetConfig.scriptUrl ? 'Cloud Terhubung' : 'Mode Lokal'}</span>
+              </span>
+            )}
+
             {currentUser.role === 'admin' && (
               <>
                 <button

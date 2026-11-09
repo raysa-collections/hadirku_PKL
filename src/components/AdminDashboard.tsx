@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { User, AttendanceRecord } from '../types/pkl';
 import { StorageService, getJakartaDate, formatIndonesianDate } from '../services/storage';
 import { 
@@ -14,20 +14,69 @@ import {
   CheckCircle2,
   Clock,
   ShieldCheck,
-  AlertCircle
+  AlertCircle,
+  RefreshCw,
+  Share2,
+  Copy,
+  Check,
+  Send
 } from 'lucide-react';
+import confetti from 'canvas-confetti';
 
 interface AdminDashboardProps {
-  onNavigateTab: (tab: 'dashboard' | 'students' | 'attendance' | 'reports') => void;
+  onNavigateTab: (tab: 'dashboard' | 'students' | 'attendance' | 'reports' | 'gas_sync') => void;
   onOpenGoogleSheetConfig: () => void;
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigateTab, onOpenGoogleSheetConfig }) => {
   const currentUser = StorageService.getCurrentUser();
-  const allUsers = StorageService.getUsers().filter(u => u.role === 'siswa');
-  const allAttendance = StorageService.getAttendance();
+  const [allUsers, setAllUsers] = useState<User[]>(() => StorageService.getUsers().filter(u => u.role === 'siswa'));
+  const [allAttendance, setAllAttendance] = useState<AttendanceRecord[]>(() => StorageService.getAttendance());
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncToast, setSyncToast] = useState<string | null>(null);
+  const [copiedLink, setCopiedLink] = useState(false);
+
   const todayDate = getJakartaDate();
   const sheetConfig = StorageService.getGoogleSheetConfig();
+  const isConnected = StorageService.isGoogleSheetConnected();
+  const studentShareUrl = StorageService.getStudentShareUrl();
+
+  const handleCloudSync = async (notify = true) => {
+    if (!StorageService.isGoogleSheetConnected()) {
+      if (notify) alert('Hubungkan Google Spreadsheet terlebih dahulu.');
+      return;
+    }
+    setIsSyncing(true);
+    try {
+      const attRes = await StorageService.pullAttendanceFromCloud();
+      await StorageService.pullStudentsFromCloud();
+      setAllAttendance(StorageService.getAttendance());
+      setAllUsers(StorageService.getUsers().filter(u => u.role === 'siswa'));
+      if (notify) {
+        setSyncToast(attRes.message || 'Sinkronisasi berhasil!');
+        confetti({ particleCount: 40, spread: 60 });
+        setTimeout(() => setSyncToast(null), 4000);
+      }
+    } catch (e: any) {
+      if (notify) alert('Gagal sinkron: ' + e.message);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  useEffect(() => {
+    if (StorageService.isGoogleSheetConnected()) {
+      handleCloudSync(false);
+    }
+  }, []);
+
+  const handleCopyWhatsAppText = () => {
+    const text = `*PEMBERITAHUAN PRESENSI PKL SMKN 1 TEGALSARI*\nHalo seluruh siswa PKL, silakan catat absensi harian PKL (Datang 04.00-12.00 WIB & Pulang 15.00-23.59 WIB) melalui link resmi berikut:\n${studentShareUrl}\n\n*Catatan:* Tautan di atas sudah otomatis terhubung ke sistem rekap kehadiran Google Spreadsheet sekolah. Pastikan aktifkan izin Kamera & Lokasi GPS di HP Anda saat presensi.`;
+    navigator.clipboard.writeText(text);
+    setCopiedLink(true);
+    confetti({ particleCount: 30, spread: 50 });
+    setTimeout(() => setCopiedLink(false), 3000);
+  };
 
   // Metrics for today
   const todayRecords = allAttendance.filter(r => r.tanggal === todayDate);
@@ -40,8 +89,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigateTab, o
   return (
     <div className="space-y-6">
       
+      {/* Toast Alert */}
+      {syncToast && (
+        <div className="p-3.5 rounded-2xl bg-emerald-950/90 border border-emerald-500/40 text-emerald-200 text-xs flex items-center justify-between shadow-xl animate-in fade-in">
+          <div className="flex items-center gap-2.5">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span>{syncToast}</span>
+          </div>
+          <button onClick={() => setSyncToast(null)} className="text-slate-400 hover:text-white text-xs">✕</button>
+        </div>
+      )}
+
       {/* Header Info Banner */}
-      <div className="p-6 rounded-3xl bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 border border-blue-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xl">
+      <div className="p-6 rounded-3xl bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 border border-blue-500/30 flex flex-col lg:flex-row lg:items-center justify-between gap-5 shadow-xl">
         <div className="space-y-1.5">
           <div className="flex flex-wrap items-center gap-2">
             <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-500/20 text-cyan-300 border border-blue-500/30">
@@ -57,18 +117,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigateTab, o
           </div>
 
           <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight">
-            Monitoring Kehadiran Siswa PKL Hari Ini
+            Monitoring Kehadiran Siswa PKL Hari Ini (Real-Time Cloud)
           </h2>
 
           <p className="text-xs text-slate-300 max-w-2xl leading-relaxed">
-            Selamat datang, <strong className="text-cyan-300 font-bold">{currentUser?.nama || 'Pembimbing PKL'}</strong> ({currentUser?.jabatan || 'Koordinator PKL'}). Pantau kehadiran, jam kedatangan, dan kepulangan seluruh siswa Praktik Kerja Lapangan secara real-time yang tersinkronisasi ke Google Spreadsheet.
+            Data presensi dari seluruh siswa di berbagai bengkel & instansi PKL disinkronisasikan otomatis via Google Spreadsheet.
           </p>
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
+          <button
+            onClick={() => handleCloudSync(true)}
+            disabled={isSyncing}
+            className="px-3.5 py-2.5 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold rounded-xl text-xs flex items-center gap-2 shadow-lg transition cursor-pointer disabled:opacity-50"
+            title="Tarik data presensi terbaru yang baru saja dikirim siswa dari HP mereka"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+            <span>{isSyncing ? 'Menyinkronkan...' : 'Tarik Data Terbaru'}</span>
+          </button>
+
           <button
             onClick={onOpenGoogleSheetConfig}
-            className={`px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 border transition ${
+            className={`px-3.5 py-2.5 rounded-xl text-xs font-semibold flex items-center gap-2 border transition cursor-pointer ${
               sheetConfig.connected || sheetConfig.scriptUrl
                 ? 'bg-emerald-950/60 border-emerald-500/40 text-emerald-300 hover:bg-emerald-900/60'
                 : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700'
@@ -79,6 +149,31 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigateTab, o
             <span className={`w-2 h-2 rounded-full ${sheetConfig.connected ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
           </button>
         </div>
+      </div>
+
+      {/* WHATSAPP SHARE CARD FOR STUDENTS (AUTO-CONNECT MULTI-USER) */}
+      <div className="p-4 sm:p-5 rounded-3xl bg-slate-900 border border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <span className="w-7 h-7 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold text-xs">
+              <Share2 className="w-4 h-4" />
+            </span>
+            <h3 className="text-xs sm:text-sm font-bold text-white">
+              Tautan Presensi Siswa (Sudah Otomatis Terhubung Google Spreadsheet)
+            </h3>
+          </div>
+          <p className="text-[11px] text-slate-400 max-w-2xl leading-relaxed">
+            Kirimkan tautan ini ke grup WhatsApp siswa PKL. Siswa yang membuka tautan ini di HP mereka akan <strong>langsung terhubung ke Google Spreadsheet sekolah tanpa perlu pengaturan apa pun</strong>.
+          </p>
+        </div>
+
+        <button
+          onClick={handleCopyWhatsAppText}
+          className="px-4 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-950/50 transition cursor-pointer shrink-0"
+        >
+          {copiedLink ? <Check className="w-4 h-4 text-emerald-200" /> : <Copy className="w-4 h-4" />}
+          <span>{copiedLink ? 'Tersalin untuk WhatsApp!' : 'Salin Pesan & Link WhatsApp'}</span>
+        </button>
       </div>
 
       {/* 5 Main Stat Cards */}

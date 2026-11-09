@@ -45,6 +45,12 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onNavi
   // Evaluate current attendance window using real-time Jakarta clock
   const timeRule: AttendanceTimeRule = evaluateAttendanceTime();
 
+  const [isCloudSyncing, setIsCloudSyncing] = useState(false);
+  const [sheetConfig, setSheetConfig] = useState(() => StorageService.getGoogleSheetConfig());
+  const [showConfigModal, setShowConfigModal] = useState(false);
+  const [manualUrlInput, setManualUrlInput] = useState('');
+  const isConnected = StorageService.isGoogleSheetConnected();
+
   const [feedbackToast, setFeedbackToast] = useState<{
     type: 'success' | 'warning' | 'error';
     title: string;
@@ -65,8 +71,44 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onNavi
     const timer = setInterval(() => {
       setDigitalTime(getJakartaTime());
     }, 1000);
+
+    // If Google Sheet is connected, pull from cloud so today's status is preserved across devices
+    if (StorageService.isGoogleSheetConnected()) {
+      setIsCloudSyncing(true);
+      StorageService.pullAttendanceFromCloud()
+        .then(() => {
+          refreshAttendance();
+        })
+        .catch(err => console.warn('Background pull error:', err))
+        .finally(() => setIsCloudSyncing(false));
+    }
+
     return () => clearInterval(timer);
   }, [user.nis]);
+
+  const handleManualConnect = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!manualUrlInput.trim().startsWith('http')) {
+      alert('Masukkan URL valid berawalan https://script.google.com/...');
+      return;
+    }
+    const updated = {
+      ...sheetConfig,
+      scriptUrl: manualUrlInput.trim(),
+      connected: true,
+      lastSync: new Date().toISOString(),
+    };
+    StorageService.saveGoogleSheetConfig(updated);
+    setSheetConfig(updated);
+    setShowConfigModal(false);
+    setFeedbackToast({
+      type: 'success',
+      title: 'Google Spreadsheet Terhubung!',
+      message: 'Aplikasi Anda kini terhubung ke Google Spreadsheet sekolah. Presensi Anda akan otomatis masuk ke rekap.',
+    });
+    // Trigger pull
+    StorageService.pullAttendanceFromCloud(manualUrlInput.trim()).then(refreshAttendance);
+  };
 
   const hasCheckedIn = Boolean(todayRecord);
   const hasCheckedOut = Boolean(todayRecord && todayRecord.jamPulang && todayRecord.jamPulang !== '-');
@@ -161,16 +203,24 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onNavi
         newRecord.syncStatus = 'synced';
         StorageService.addOrUpdateAttendance(newRecord);
         setTodayRecord({ ...newRecord });
+        confetti({ particleCount: 70, spread: 80 });
+        setFeedbackToast({
+          type: 'success',
+          title: 'Presensi Datang Berhasil Terkirim!',
+          message: `Waktu: ${timeNow} WIB (${status}). Bukti foto bengkel & titik GPS berhasil disimpan dan terkirim langsung ke Google Spreadsheet Guru Pembimbing!`,
+        });
+      } else {
+        newRecord.syncStatus = 'pending';
+        StorageService.addOrUpdateAttendance(newRecord);
+        setTodayRecord({ ...newRecord });
+        setFeedbackToast({
+          type: 'warning',
+          title: syncRes.isUnconfigured ? 'Tersimpan di HP (Spreadsheet Belum Terhubung)' : 'Tersimpan Lokal di HP',
+          message: syncRes.message || 'Presensi tersimpan di HP Anda, tetapi belum masuk ke rekap Google Spreadsheet sekolah.',
+        });
       }
 
       setIsSubmitting(false);
-      confetti({ particleCount: 70, spread: 80 });
-
-      setFeedbackToast({
-        type: 'success',
-        title: 'Presensi Datang Berhasil!',
-        message: `Waktu: ${timeNow} WIB (${status}). Bukti foto bengkel & titik koordinat GPS berhasil disimpan dan dikirim ke Google Spreadsheet.`,
-      });
     } else if (action === 'CHECK_OUT') {
       const recordId = `ABS-${dateNow.replace(/-/g, '')}-${user.nis}`;
       const baseRecord: AttendanceRecord = todayRecord || {
@@ -206,16 +256,24 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onNavi
         updatedRecord.syncStatus = 'synced';
         StorageService.addOrUpdateAttendance(updatedRecord);
         setTodayRecord({ ...updatedRecord });
+        confetti({ particleCount: 80, spread: 90 });
+        setFeedbackToast({
+          type: 'success',
+          title: 'Presensi Pulang Berhasil Terkirim!',
+          message: `Waktu kepulangan tercatat: ${timeNow} WIB. Bukti foto & GPS kepulangan berhasil diperbarui di Google Spreadsheet!`,
+        });
+      } else {
+        updatedRecord.syncStatus = 'pending';
+        StorageService.addOrUpdateAttendance(updatedRecord);
+        setTodayRecord({ ...updatedRecord });
+        setFeedbackToast({
+          type: 'warning',
+          title: syncRes.isUnconfigured ? 'Tersimpan di HP (Spreadsheet Belum Terhubung)' : 'Tersimpan Lokal di HP',
+          message: syncRes.message || 'Presensi kepulangan tersimpan di HP Anda.',
+        });
       }
 
       setIsSubmitting(false);
-      confetti({ particleCount: 80, spread: 90 });
-
-      setFeedbackToast({
-        type: 'success',
-        title: 'Presensi Pulang Berhasil!',
-        message: `Waktu kepulangan tercatat: ${timeNow} WIB. Bukti foto bengkel & koordinat GPS kepulangan berhasil diperbarui di Google Spreadsheet.`,
-      });
     }
   };
 
@@ -252,9 +310,64 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onNavi
           </div>
           <button
             onClick={() => setFeedbackToast(null)}
-            className="text-slate-400 hover:text-white text-xs px-2 py-1 rounded"
+            className="text-slate-400 hover:text-white text-xs px-2 py-1 rounded cursor-pointer"
           >
             ✕
+          </button>
+        </div>
+      )}
+
+      {/* CLOUD REAL-TIME SPREADSHEET STATUS CARD */}
+      {isConnected ? (
+        <div className="p-3.5 rounded-2xl bg-slate-900 border border-emerald-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-2.5">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+            <div>
+              <p className="font-bold text-emerald-300 flex items-center gap-1.5">
+                <span>Google Spreadsheet Terhubung (Multi-User Aktif)</span>
+              </p>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                Data presensi Anda otomatis terkirim langsung ke rekapan Guru Pembimbing secara online.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => {
+              setIsCloudSyncing(true);
+              StorageService.pullAttendanceFromCloud()
+                .then((res) => {
+                  refreshAttendance();
+                  setFeedbackToast({
+                    type: 'success',
+                    title: 'Sinkronisasi Selesai',
+                    message: res.message,
+                  });
+                })
+                .finally(() => setIsCloudSyncing(false));
+            }}
+            disabled={isCloudSyncing}
+            className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-cyan-300 rounded-xl text-[11px] font-semibold border border-slate-700 transition flex items-center gap-1.5 self-end sm:self-auto cursor-pointer"
+          >
+            <span className={isCloudSyncing ? 'animate-spin' : ''}>🔄</span>
+            <span>{isCloudSyncing ? 'Sinkronisasi...' : 'Cek Status Cloud'}</span>
+          </button>
+        </div>
+      ) : (
+        <div className="p-4 rounded-2xl bg-amber-950/70 border border-amber-500/50 text-amber-200 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-start gap-2.5">
+            <AlertCircle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+            <div>
+              <p className="font-bold text-white text-xs">Peringatan: Google Spreadsheet Belum Terhubung</p>
+              <p className="text-[11px] text-amber-200/90 mt-0.5 leading-relaxed">
+                Presensi yang Anda lakukan saat ini hanya tersimpan di memori HP ini dan <strong>belum terdata di rekapan Guru Pembimbing</strong>. Minta tautan presensi resmi ke Pembimbing atau klik tombol di samping untuk menyambungkan.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => setShowConfigModal(true)}
+            className="px-3.5 py-2 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded-xl text-xs transition shrink-0 self-end sm:self-auto cursor-pointer shadow-md"
+          >
+            Hubungkan Spreadsheet
           </button>
         </div>
       )}
@@ -634,6 +747,61 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onNavi
           onConfirm={handleConfirmVerification}
           onClose={() => setActiveModalAction(null)}
         />
+      )}
+
+      {/* Manual Connection Modal for Student */}
+      {showConfigModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl relative text-slate-200 animate-in fade-in zoom-in-95 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h4 className="font-bold text-white text-sm">Hubungkan Google Spreadsheet Sekolah</h4>
+              <button
+                onClick={() => setShowConfigModal(false)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg"
+              >
+                ✕
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed">
+              Masukkan <strong>URL Web App Google Apps Script</strong> yang diberikan oleh Guru Pembimbing Anda agar presensi harian langsung terkirim ke Spreadsheet sekolah:
+            </p>
+
+            <form onSubmit={handleManualConnect} className="space-y-3 text-xs">
+              <div>
+                <label className="block text-slate-400 mb-1 font-medium">URL Web App Apps Script:</label>
+                <input
+                  type="url"
+                  required
+                  value={manualUrlInput}
+                  onChange={(e) => setManualUrlInput(e.target.value)}
+                  placeholder="https://script.google.com/macros/s/AKfycb.../exec"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-mono text-xs focus:outline-none focus:border-cyan-500"
+                />
+              </div>
+
+              <div className="p-3 rounded-xl bg-blue-950/40 border border-blue-500/30 text-[11px] text-cyan-200">
+                💡 <strong>Tips:</strong> Anda juga bisa meminta Guru Pembimbing mengirimkan <em>"Tautan Presensi Siswa Otomatis"</em>. Membuka tautan tersebut sekali saja akan langsung menghubungkan HP Anda tanpa mengetik URL.
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setShowConfigModal(false)}
+                  className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold rounded-xl shadow-md"
+                >
+                  Simpan & Hubungkan
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
 
     </div>
