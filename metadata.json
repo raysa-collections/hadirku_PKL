@@ -1,0 +1,11 @@
+{
+  "name": "HADIRKU PKL TKR",
+  "description": "Aplikasi Kehadiran PKL TKR Semakasari yang memungkinkan siswa mencatat absensi secara real-time melalui fitur lokasi GPS.",
+  "requestFramePermissions": [
+    "camera",
+    "geolocation"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

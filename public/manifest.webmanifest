@@ -1,0 +1,32 @@
+{
+  "id": "/",
+  "name": "Android App Studio & Simulator",
+  "short_name": "AndroidApp",
+  "description": "Panduan interaktif dan pembuat aplikasi Android dengan PWA & ekspor APK Capacitor, simulator perangkat, dan uji fitur native HP.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "icons": [
+    {
+      "src": "/pwa-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-maskable-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
