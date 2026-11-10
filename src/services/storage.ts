@@ -24,20 +24,28 @@ export const DEFAULT_THEME_CONFIG: AppThemeConfig = {
 export const DEFAULT_REPORT_CONFIG: ReportPrintConfig = {
   kopBaris1: 'PEMERINTAH PROVINSI JAWA TIMUR • DINAS PENDIDIKAN',
   kopBaris2: 'SMK NEGERI 1 TEGALSARI — KELOMPOK TEKNOLOGI & REKAYASA',
-  kopBaris3: 'Bidang Kerja Khusus (BKK) & Hubungan Industri • Program Praktik Kerja Lapangan (PKL)',
+  kopBaris3: 'PROGRAM KEAHLIAN TEKNIK KENDARAAN RINGAN (TKR)',
   kopAlamat: "Jl. KH. Syafa'at No. 01 Blokagung, Tegalsari, Banyuwangi - Telp. (0333) 845678",
-  ttdKiriLabel: 'Mengetahui,\nPembimbing Tempat PKL',
-  ttdKiriNama: '( ............................................ )',
-  ttdKiriJabatan: 'Mentor / Pimpinan DU/DI',
+  logoKiriUrl: '',
+  logoKananUrl: '',
+  showLogoKiri: true,
+  showLogoKanan: true,
+  ttdKiriLabel: 'Mengetahui,\nSekretaris Jurusan TKR',
+  ttdKiriNama: 'Andrik Wiyono, S.T., M.Pd., Gr.',
+  ttdKiriJabatan: 'NIP. 19820415 201101 1 005',
   ttdKananKota: 'Tegalsari',
-  ttdKananLabel: 'Koordinator PKL & Hubin',
-  ttdKananNama: 'Drs. Bambang Sutrisno, M.Pd',
-  ttdKananNip: 'NIP. 197805122005011003',
+  ttdKananLabel: 'Kepala Program Keahlian TKR',
+  ttdKananNama: 'Achmad Mackrus, S.T.',
+  ttdKananNip: 'NIP. 19790820 200801 1 012',
   showKop: true,
   showTtd: true,
+  paperSize: 'A4',
+  paperOrientation: 'landscape',
+  paperMargin: 'normal',
+  tableFontSize: 'normal',
 };
 
-// Seed Initial Users
+// Initial system accounts (Only official administrator account; student accounts register dynamically or via import)
 export const INITIAL_USERS: User[] = [
   {
     id: 'USR-ADMIN-1',
@@ -56,70 +64,6 @@ export const INITIAL_USERS: User[] = [
     tempatPkl: 'Kantor BKK & Hubin Sekolah',
     namaPembimbing: 'Kepala Sekolah SMKN 1 Tegalsari',
     createdAt: '2026-01-01',
-  },
-  {
-    id: 'USR-SISWA-1',
-    username: 'ahmadrizki',
-    password: 'siswa123',
-    role: 'siswa',
-    nama: 'Ahmad Rizki Maulana',
-    nis: '20240101',
-    jenisKelamin: 'Laki-laki',
-    asalSekolah: 'SMKN 1 Tegalsari',
-    jurusan: 'Teknik Kendaraan Ringan Otomotif (TKR)',
-    kelas: 'XII TKR 1',
-    noHp: '085712345678',
-    tempatPkl: 'PT Astra International Tbk - Auto2000',
-    namaPembimbing: 'Achmad Mackrus, S.T.',
-    createdAt: '2026-01-10',
-  },
-  {
-    id: 'USR-SISWA-2',
-    username: 'dewilestari',
-    password: 'siswa123',
-    role: 'siswa',
-    nama: 'Dewi Lestari Putri',
-    nis: '20240102',
-    jenisKelamin: 'Perempuan',
-    asalSekolah: 'SMKN 1 Tegalsari',
-    jurusan: 'Rekayasa Perangkat Lunak (RPL)',
-    kelas: 'XII RPL 1',
-    noHp: '081398765432',
-    tempatPkl: 'PT Telkom Indonesia (Divisi IT Regional)',
-    namaPembimbing: 'Andrik Wiyono, S.T., M.Pd., Gr.',
-    createdAt: '2026-01-10',
-  },
-  {
-    id: 'USR-SISWA-3',
-    username: 'budipratama',
-    password: 'siswa123',
-    role: 'siswa',
-    nama: 'Budi Pratama Wijaya',
-    nis: '20240103',
-    jenisKelamin: 'Laki-laki',
-    asalSekolah: 'SMKN 1 Tegalsari',
-    jurusan: 'Teknik Kendaraan Ringan Otomotif (TKR)',
-    kelas: 'XII TKR 2',
-    noHp: '082155443322',
-    tempatPkl: 'Bengkel Resmi Honda Surya Mega Motor',
-    namaPembimbing: 'Eko Hariyono, S.Pd.T.',
-    createdAt: '2026-01-10',
-  },
-  {
-    id: 'USR-SISWA-4',
-    username: 'sitinuraini',
-    password: 'siswa123',
-    role: 'siswa',
-    nama: 'Siti Nur Aini',
-    nis: '20240104',
-    jenisKelamin: 'Perempuan',
-    asalSekolah: 'SMKN 1 Tegalsari',
-    jurusan: 'Akuntansi & Keuangan Lembaga',
-    kelas: 'XII AKL 1',
-    noHp: '087811223344',
-    tempatPkl: 'Bank Jatim Cabang Pembantu',
-    namaPembimbing: 'Gufron Al-Hakim, S.T.',
-    createdAt: '2026-01-12',
   },
 ];
 
@@ -202,44 +146,25 @@ export function evaluateAttendanceTime(overrideHour?: number, overrideMinute?: n
   const timeVal = hour + minute / 60;
   const timeStr = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
 
-  // Presensi Datang
-  let canCheckIn = false;
-  let checkInStatus: 'Hadir' | 'Terlambat' | 'Tidak Disiplin' | 'Closed' = 'Closed';
+  // Presensi Datang (24 Jam Aktif Fleksibel dengan Label Akurat)
+  let canCheckIn = true;
+  let checkInStatus: 'Hadir' | 'Terlambat' | 'Tidak Disiplin' | 'Closed' = 'Hadir';
   let checkInMessage = '';
 
-  if (timeVal >= 4 && timeVal <= 12) {
-    canCheckIn = true;
-    if (timeVal < 9) {
-      checkInStatus = 'Hadir';
-      checkInMessage = 'Presensi Hadir Tepat Waktu (04.00 - 08.59 WIB)';
-    } else {
-      checkInStatus = 'Terlambat';
-      checkInMessage = 'Presensi Terlambat (09.00 - 12.00 WIB)';
-    }
-  } else if (timeVal < 4) {
-    canCheckIn = false;
-    checkInStatus = 'Closed';
-    checkInMessage = 'Presensi datang belum dibuka (Buka pukul 04.00 WIB)';
+  if (timeVal < 9) {
+    checkInStatus = 'Hadir';
+    checkInMessage = 'Presensi Hadir Tepat Waktu (04.00 - 08.59 WIB)';
+  } else if (timeVal <= 12) {
+    checkInStatus = 'Terlambat';
+    checkInMessage = 'Presensi Terlambat (09.00 - 12.00 WIB)';
   } else {
-    canCheckIn = false;
-    checkInStatus = 'Tidak Disiplin';
-    checkInMessage = 'Batas presensi datang telah berakhir pada pukul 12.00 WIB (Kategori: Tidak Disiplin)';
+    checkInStatus = 'Terlambat';
+    checkInMessage = 'Presensi Terlambat / Susulan (Lewat Pukul 12.00 WIB)';
   }
 
-  // Presensi Pulang aktif: 15.00 WIB s/d 23.59 WIB
-  let canCheckOut = false;
-  let checkOutMessage = '';
-
-  if (timeVal >= 15 && timeVal <= 23.99) {
-    canCheckOut = true;
-    checkOutMessage = 'Presensi pulang dibuka (15.00 - 23.59 WIB)';
-  } else if (timeVal < 15) {
-    canCheckOut = false;
-    checkOutMessage = 'Presensi pulang belum dibuka (Buka mulai pukul 15.00 WIB)';
-  } else {
-    canCheckOut = false;
-    checkOutMessage = 'Batas presensi pulang berakhir pada pukul 23.59 WIB';
-  }
+  // Presensi Pulang (24 Jam Aktif Fleksibel)
+  let canCheckOut = true;
+  let checkOutMessage = 'Presensi Pulang Aktif';
 
   return {
     canCheckIn,
@@ -254,83 +179,9 @@ export function evaluateAttendanceTime(overrideHour?: number, overrideMinute?: n
   };
 }
 
-// Generate realistic past attendance records
+// Generate initial attendance records (Clean start, attendance records populate as students check in)
 export function generateSeedAttendance(): AttendanceRecord[] {
-  const today = getJakartaDate();
-  return [
-    {
-      id: 'ABS-20261104-20240101',
-      tanggal: '2026-11-04',
-      nis: '20240101',
-      namaSiswa: 'Ahmad Rizki Maulana',
-      asalSekolah: 'SMKN 1 Tegalsari',
-      jurusan: 'Teknik Kendaraan Ringan Otomotif (TKR)',
-      jamDatang: '07:25:10',
-      jamPulang: '16:05:42',
-      status: 'Hadir',
-      keterangan: 'Praktek tune-up & scanner OBD-II pada Avanza unit 3',
-      tempatPkl: 'PT Astra International Tbk - Auto2000',
-      koordinatGps: '-8.37512, 114.12945',
-      mapsUrl: 'https://www.google.com/maps?q=-8.37512,114.12945',
-      koordinatPulang: '-8.37515, 114.12948',
-      mapsUrlPulang: 'https://www.google.com/maps?q=-8.37515,114.12948',
-      syncStatus: 'synced',
-    },
-    {
-      id: 'ABS-20261104-20240102',
-      tanggal: '2026-11-04',
-      nis: '20240102',
-      namaSiswa: 'Dewi Lestari Putri',
-      asalSekolah: 'SMKN 1 Tegalsari',
-      jurusan: 'Rekayasa Perangkat Lunak (RPL)',
-      jamDatang: '07:45:00',
-      jamPulang: '16:15:30',
-      status: 'Hadir',
-      keterangan: 'Slicing UI dashboard internal customer care',
-      tempatPkl: 'PT Telkom Indonesia (Divisi IT Regional)',
-      koordinatGps: '-8.37490, 114.12880',
-      mapsUrl: 'https://www.google.com/maps?q=-8.37490,114.12880',
-      koordinatPulang: '-8.37492, 114.12885',
-      mapsUrlPulang: 'https://www.google.com/maps?q=-8.37492,114.12885',
-      syncStatus: 'synced',
-    },
-    {
-      id: 'ABS-20261104-20240103',
-      tanggal: '2026-11-04',
-      nis: '20240103',
-      namaSiswa: 'Budi Pratama Wijaya',
-      asalSekolah: 'SMKN 1 Tegalsari',
-      jurusan: 'Teknik Kendaraan Ringan Otomotif (TKR)',
-      jamDatang: '07:15:20',
-      jamPulang: '16:00:10',
-      status: 'Hadir',
-      keterangan: 'Perbaikan sistem pengereman & ganti kampas',
-      tempatPkl: 'Bengkel Resmi Honda Surya Mega Motor',
-      koordinatGps: '-8.37600, 114.13020',
-      mapsUrl: 'https://www.google.com/maps?q=-8.37600,114.13020',
-      koordinatPulang: '-8.37605, 114.13025',
-      mapsUrlPulang: 'https://www.google.com/maps?q=-8.37605,114.13025',
-      syncStatus: 'synced',
-    },
-    {
-      id: 'ABS-20261103-20240101',
-      tanggal: '2026-11-03',
-      nis: '20240101',
-      namaSiswa: 'Ahmad Rizki Maulana',
-      asalSekolah: 'SMKN 1 Tegalsari',
-      jurusan: 'Teknik Kendaraan Ringan Otomotif (TKR)',
-      jamDatang: '07:18:05',
-      jamPulang: '16:10:00',
-      status: 'Hadir',
-      keterangan: 'Overhaul transmisi manual Avanza 2018',
-      tempatPkl: 'PT Astra International Tbk - Auto2000',
-      koordinatGps: '-8.37512, 114.12945',
-      mapsUrl: 'https://www.google.com/maps?q=-8.37512,114.12945',
-      koordinatPulang: '-8.37514, 114.12940',
-      mapsUrlPulang: 'https://www.google.com/maps?q=-8.37514,114.12940',
-      syncStatus: 'synced',
-    },
-  ];
+  return [];
 }
 
 // Storage Manager
@@ -424,6 +275,11 @@ export const StorageService = {
   deleteUser(userId: string) {
     const users = this.getUsers().filter(u => u.id !== userId);
     this.saveUsers(users);
+    if (typeof window !== 'undefined') {
+      fetch(`/api/students/${userId}`, { method: 'DELETE' }).catch(err => {
+        console.warn('Failed to delete student on server:', err);
+      });
+    }
   },
 
   getCurrentUser(): User | null {
@@ -447,9 +303,7 @@ export const StorageService = {
   getAttendance(): AttendanceRecord[] {
     const raw = localStorage.getItem(ATTENDANCE_KEY);
     if (!raw) {
-      const initial = generateSeedAttendance();
-      localStorage.setItem(ATTENDANCE_KEY, JSON.stringify(initial));
-      return initial;
+      return [];
     }
     try {
       return JSON.parse(raw);
@@ -471,7 +325,111 @@ export const StorageService = {
       records.unshift(record);
     }
     this.saveAttendance(records);
+
+    // Asynchronously send to application server API so other devices receive it immediately
+    if (typeof window !== 'undefined') {
+      fetch('/api/attendance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(record),
+      }).then(async res => {
+        if (res.ok) {
+          const json = await res.json();
+          if (json && json.data) {
+            const cur = this.getAttendance();
+            const idx = cur.findIndex(r => r.id === record.id);
+            if (idx >= 0) {
+              cur[idx].syncStatus = json.sheetSynced ? 'synced' : 'pending';
+              if (json.sheetSynced) cur[idx].syncedAt = new Date().toISOString();
+              this.saveAttendance(cur);
+            }
+          }
+        }
+      }).catch(err => {
+        console.warn('Background server sync warning:', err);
+      });
+    }
+
     return record;
+  },
+
+  // Initialize server sync: load config, users, and all attendance from application server
+  async initServerSync(): Promise<void> {
+    if (typeof window === 'undefined') return;
+    try {
+      // 1. Fetch server config to pick up global Google Apps Script URL set by Teacher
+      const cfgRes = await fetch('/api/config');
+      if (cfgRes.ok) {
+        const json = await cfgRes.json();
+        if (json && json.status === 'success' && json.data) {
+          if (json.data.googleSheet?.scriptUrl) {
+            const current = this.getGoogleSheetConfig();
+            if (!current.scriptUrl || current.scriptUrl !== json.data.googleSheet.scriptUrl) {
+              this.saveGoogleSheetConfig(json.data.googleSheet, false);
+            }
+          }
+          if (json.data.appTheme) {
+            localStorage.setItem(THEME_KEY, JSON.stringify(json.data.appTheme));
+          }
+          if (json.data.tahunAjaran) {
+            localStorage.setItem(TAHUN_AJARAN_KEY, JSON.stringify(json.data.tahunAjaran));
+          }
+          if (json.data.reportConfig) {
+            localStorage.setItem(REPORT_CONFIG_KEY, JSON.stringify(json.data.reportConfig));
+          }
+        }
+      }
+
+      // 2. Fetch server attendance
+      await this.fetchAttendanceFromServer();
+
+      // 3. Fetch server students
+      await this.fetchStudentsFromServer();
+    } catch (e) {
+      console.warn('Initial server sync warning (running offline fallback):', e);
+    }
+  },
+
+  async fetchAttendanceFromServer(): Promise<AttendanceRecord[]> {
+    if (typeof window === 'undefined') return this.getAttendance();
+    try {
+      const res = await fetch(`/api/attendance?_t=${Date.now()}`);
+      if (res.ok) {
+        const json = await res.json();
+        if (json && json.status === 'success' && Array.isArray(json.data)) {
+          // Server is authoritative: adopt server records directly
+          const remoteRecords: AttendanceRecord[] = json.data;
+          this.saveAttendance(remoteRecords);
+          return remoteRecords;
+        }
+      }
+    } catch (err) {
+      console.warn('fetchAttendanceFromServer failed, using local cache:', err);
+    }
+    return this.getAttendance();
+  },
+
+  async fetchStudentsFromServer(): Promise<User[]> {
+    if (typeof window === 'undefined') return this.getUsers();
+    try {
+      const res = await fetch(`/api/students?_t=${Date.now()}`);
+      if (res.ok) {
+        const json = await res.json();
+        if (json && json.status === 'success' && Array.isArray(json.data)) {
+          const localUsers = this.getUsers();
+          const admins = localUsers.filter(u => u.role === 'admin');
+          const remoteStudents: User[] = json.data;
+
+          // Rebuild users strictly with official admins and server students (never resurrect deleted students)
+          const finalUsers = [...admins, ...remoteStudents];
+          this.saveUsers(finalUsers);
+          return finalUsers;
+        }
+      }
+    } catch (err) {
+      console.warn('fetchStudentsFromServer failed:', err);
+    }
+    return this.getUsers();
   },
 
   getGoogleSheetConfig(): GoogleSheetConfig {
@@ -488,7 +446,7 @@ export const StorageService = {
             autoSync: true,
             lastSync: new Date().toISOString(),
           };
-          localStorage.setItem(GOOGLE_SHEET_KEY, JSON.stringify(autoConfig));
+          this.saveGoogleSheetConfig(autoConfig, true);
           
           // Clean the query parameter from URL bar without page refresh
           const cleanUrl = window.location.pathname + window.location.hash;
@@ -520,7 +478,7 @@ export const StorageService = {
           connected: true,
           autoSync: true,
         };
-        localStorage.setItem(GOOGLE_SHEET_KEY, JSON.stringify(envConfig));
+        this.saveGoogleSheetConfig(envConfig, true);
         return envConfig;
       }
     }
@@ -533,8 +491,15 @@ export const StorageService = {
     };
   },
 
-  saveGoogleSheetConfig(config: GoogleSheetConfig) {
+  saveGoogleSheetConfig(config: GoogleSheetConfig, syncServer: boolean = true) {
     localStorage.setItem(GOOGLE_SHEET_KEY, JSON.stringify(config));
+    if (syncServer && typeof window !== 'undefined') {
+      fetch('/api/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ googleSheet: config }),
+      }).catch(err => console.warn('Sync config to server warning:', err));
+    }
   },
 
   isGoogleSheetConnected(): boolean {
@@ -554,6 +519,28 @@ export const StorageService = {
 
   // Pull all attendance from Google Spreadsheet and merge into local database
   async pullAttendanceFromCloud(customUrl?: string): Promise<{ success: boolean; newCount: number; total: number; message: string }> {
+    // 1. Try server pull first (server forwards directly, bypassing CORS)
+    try {
+      const serverRes = await fetch('/api/attendance/pull', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: customUrl }),
+      });
+      if (serverRes.ok) {
+        const json = await serverRes.json();
+        if (json && json.success) {
+          const updatedRecords = await this.fetchAttendanceFromServer();
+          return {
+            success: true,
+            newCount: json.count,
+            total: updatedRecords.length,
+            message: json.message,
+          };
+        }
+      }
+    } catch (e) {
+      console.warn('Server attendance pull fallback to client:', e);
+    }
     const config = this.getGoogleSheetConfig();
     const targetUrl = customUrl || config.scriptUrl;
     if (!targetUrl || !targetUrl.startsWith('http')) {
@@ -694,8 +681,32 @@ export const StorageService = {
     }
   },
 
-  // Sync Student Registration to Google Spreadsheet (Data_Siswa_TKR sheet)
+  // Sync Student Registration to Application Server & Google Spreadsheet (Data_Siswa_TKR sheet)
   async syncStudentToGoogleSheet(student: User): Promise<{ success: boolean; message: string }> {
+    // 1. Try sending to application server API first
+    if (typeof window !== 'undefined') {
+      try {
+        const serverRes = await fetch('/api/students', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(student),
+        });
+        if (serverRes.ok) {
+          const json = await serverRes.json();
+          if (json && json.status === 'success') {
+            return {
+              success: true,
+              message: json.sheetSynced 
+                ? 'Siswa berhasil didaftarkan di Server & Google Spreadsheet!'
+                : 'Siswa berhasil didaftarkan di Server Aplikasi (tersedia di semua perangkat)!',
+            };
+          }
+        }
+      } catch (err) {
+        console.warn('Server POST /api/students warning, trying direct client sync:', err);
+      }
+    }
+
     const config = this.getGoogleSheetConfig();
     if (!config.scriptUrl || !config.scriptUrl.startsWith('http')) {
       return {
@@ -765,8 +776,46 @@ export const StorageService = {
     }
   },
 
-  // Sync Attendance Record to Google Sheets via Apps Script Web App
+  // Sync Attendance Record to Application Server & Google Sheets
   async syncToGoogleSheet(action: 'CHECK_IN' | 'CHECK_OUT', record: AttendanceRecord): Promise<{ success: boolean; isUnconfigured?: boolean; message: string }> {
+    // 1. Send to Application Server API first (persists on server for all devices and forwards to Google Apps Script)
+    if (typeof window !== 'undefined') {
+      try {
+        const serverRes = await fetch('/api/attendance', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(record),
+        });
+
+        if (serverRes.ok) {
+          const json = await serverRes.json();
+          if (json && json.status === 'success') {
+            if (json.sheetSynced) {
+              const cfg = this.getGoogleSheetConfig();
+              cfg.lastSync = new Date().toISOString();
+              cfg.connected = true;
+              this.saveGoogleSheetConfig(cfg, false);
+              return {
+                success: true,
+                message: 'Presensi berhasil dicatat di Server Aplikasi & tersinkronisasi ke Google Spreadsheet!',
+              };
+            } else {
+              const cfg = this.getGoogleSheetConfig();
+              return {
+                success: true,
+                isUnconfigured: !cfg.scriptUrl,
+                message: cfg.scriptUrl 
+                  ? 'Presensi tersimpan di Server Aplikasi (Multi-Perangkat). Meneruskan ke Spreadsheet...'
+                  : 'Presensi berhasil dicatat di Server Aplikasi (Tersedia untuk Guru di semua perangkat)!',
+              };
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('Server POST /api/attendance failed, falling back to direct client sync:', err);
+      }
+    }
+
     const config = this.getGoogleSheetConfig();
     if (!config.scriptUrl || !config.scriptUrl.startsWith('http')) {
       return {
@@ -802,7 +851,7 @@ export const StorageService = {
       mapsUrlPulang: record.mapsUrlPulang || '-',
     };
 
-    // 1. Try standard POST fetch
+    // Try standard POST fetch
     try {
       const response = await fetch(config.scriptUrl, {
         method: 'POST',
@@ -824,7 +873,7 @@ export const StorageService = {
       throw new Error(`HTTP ${response.status}`);
     } catch (err: any) {
       console.warn('Standard fetch to Google Apps Script failed, trying no-cors fallback:', err);
-      // 2. Fallback to mode: 'no-cors' so browser still pushes the data to Google Apps Script
+      // Fallback to mode: 'no-cors' so browser still pushes the data to Google Apps Script
       try {
         await fetch(config.scriptUrl, {
           method: 'POST',
@@ -952,7 +1001,7 @@ export const StorageService = {
     this.saveTahunAjaranConfig(config);
   },
 
-  resetTotalData(mode: 'all' | 'attendance' | 'students' = 'all'): { success: boolean; message: string; deletedUsers: number; deletedAttendance: number } {
+  async resetTotalData(mode: 'all' | 'attendance' | 'students' = 'all'): Promise<{ success: boolean; message: string; deletedUsers: number; deletedAttendance: number }> {
     let deletedUsers = 0;
     let deletedAttendance = 0;
 
@@ -969,13 +1018,26 @@ export const StorageService = {
       this.saveAttendance([]);
     }
 
+    // Call server API to reset server database permanently so data never resurrects
+    if (typeof window !== 'undefined') {
+      try {
+        await fetch('/api/attendance/reset', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mode }),
+        });
+      } catch (e) {
+        console.warn('Server reset API call warning:', e);
+      }
+    }
+
     let message = '';
     if (mode === 'all') {
-      message = `Reset total berhasil! Dihapus ${deletedUsers} data siswa dan ${deletedAttendance} catatan presensi. Database dalam keadaan kosong untuk tahun ajaran baru (Akun Pembimbing Sekolah admin123 tetap aman).`;
+      message = `Reset total berhasil! Dihapus ${deletedUsers} data siswa dan ${deletedAttendance} catatan presensi dari perangkat dan server aplikasi. Database kini bersih untuk registrasi siswa baru.`;
     } else if (mode === 'attendance') {
-      message = `Reset data presensi berhasil! Dihapus ${deletedAttendance} catatan presensi. Data akun siswa tetap tersimpan.`;
+      message = `Reset data presensi berhasil! Dihapus ${deletedAttendance} catatan presensi dari perangkat dan server. Data akun siswa tetap tersimpan.`;
     } else if (mode === 'students') {
-      message = `Reset data siswa berhasil! Dihapus ${deletedUsers} profil siswa dan ${deletedAttendance} catatan presensi.`;
+      message = `Reset data siswa berhasil! Dihapus ${deletedUsers} profil siswa dan seluruh riwayat presensinya dari perangkat dan server.`;
     }
 
     return { success: true, message, deletedUsers, deletedAttendance };
@@ -1044,3 +1106,10 @@ export const StorageService = {
     return seed;
   },
 };
+
+// Auto-sync with application server upon app initialization
+if (typeof window !== 'undefined') {
+  setTimeout(() => {
+    StorageService.initServerSync().catch(err => console.warn('Auto server sync init warning:', err));
+  }, 50);
+}

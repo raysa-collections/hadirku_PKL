@@ -1,1 +1,118 @@
 @import "tailwindcss";
+
+/* ==========================================================================
+   OFFICIAL A4 PRINT STYLES FOR SMKN 1 TEGALSARI PKL REPORTS
+   Ensures authentic paper printouts (A4), crisp borders, zero black backgrounds
+   ========================================================================== */
+
+@media print {
+  /* Set A4 landscape page format with 8-10mm margins */
+  @page {
+    size: A4 landscape;
+    margin: 8mm 10mm 8mm 10mm;
+  }
+
+  /* Force 100% pure white background across ALL DOM elements & Tailwind classes */
+  *,
+  *::before,
+  *::after,
+  html,
+  body,
+  #root,
+  #root *,
+  div,
+  main,
+  section,
+  [class*="bg-"] {
+    background: #ffffff !important;
+    background-color: #ffffff !important;
+    color: #000000 !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+  }
+
+  /* Hide all UI elements outside the printable document */
+  header,
+  nav,
+  aside,
+  footer,
+  button,
+  input,
+  select,
+  textarea,
+  .print\:hidden,
+  .pwa-banner,
+  #role-selection,
+  .no-print {
+    display: none !important;
+  }
+
+  /* Printable container takes full width cleanly on pure white page */
+  #printable-a4-document,
+  #printable-a4-document * {
+    background-color: #ffffff !important;
+    color: #000000 !important;
+  }
+
+  #printable-a4-document {
+    display: block !important;
+    position: relative !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
+    border-radius: 0 !important;
+  }
+
+  /* Official Kop Surat double border */
+  .kop-surat-border {
+    border-bottom: 3px double #000000 !important;
+    padding-bottom: 8px !important;
+    margin-bottom: 12px !important;
+  }
+
+  /* Official A4 Document Table with crisp 1px black borders */
+  .a4-print-table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    margin-top: 8px !important;
+    margin-bottom: 12px !important;
+    font-size: 8.5pt !important;
+    color: #000000 !important;
+  }
+
+  .a4-print-table th,
+  .a4-print-table td {
+    border: 1px solid #000000 !important;
+    padding: 4px 5px !important;
+    color: #000000 !important;
+    background: #ffffff !important;
+    vertical-align: middle !important;
+  }
+
+  .a4-print-table th {
+    background-color: #f1f5f9 !important;
+    font-weight: bold !important;
+    text-align: center !important;
+    text-transform: uppercase !important;
+    font-size: 8pt !important;
+  }
+
+  /* Prevent row breaking across pages */
+  .a4-print-table tr {
+    page-break-inside: avoid !important;
+  }
+
+  .a4-print-table thead {
+    display: table-header-group !important;
+  }
+
+  /* Signature block styling */
+  .a4-signature-block {
+    page-break-inside: avoid !important;
+    margin-top: 20px !important;
+    color: #000000 !important;
+  }
+}

@@ -42,20 +42,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigateTab, o
   const studentShareUrl = StorageService.getStudentShareUrl();
 
   const handleCloudSync = async (notify = true) => {
-    if (!StorageService.isGoogleSheetConnected()) {
-      if (notify) alert('Hubungkan Google Spreadsheet terlebih dahulu.');
-      return;
-    }
     setIsSyncing(true);
     try {
-      const attRes = await StorageService.pullAttendanceFromCloud();
-      await StorageService.pullStudentsFromCloud();
-      setAllAttendance(StorageService.getAttendance());
-      setAllUsers(StorageService.getUsers().filter(u => u.role === 'siswa'));
-      if (notify) {
-        setSyncToast(attRes.message || 'Sinkronisasi berhasil!');
-        confetti({ particleCount: 40, spread: 60 });
-        setTimeout(() => setSyncToast(null), 4000);
+      // 1. Fetch latest from Application Server
+      const serverRecords = await StorageService.fetchAttendanceFromServer();
+      const serverStudents = await StorageService.fetchStudentsFromServer();
+      setAllAttendance(serverRecords);
+      setAllUsers(serverStudents.filter(u => u.role === 'siswa'));
+
+      // 2. If Google Spreadsheet is connected, also pull from cloud
+      if (StorageService.isGoogleSheetConnected()) {
+        const attRes = await StorageService.pullAttendanceFromCloud();
+        await StorageService.pullStudentsFromCloud();
+        setAllAttendance(StorageService.getAttendance());
+        setAllUsers(StorageService.getUsers().filter(u => u.role === 'siswa'));
+        if (notify) {
+          setSyncToast(attRes.message || 'Sinkronisasi berhasil!');
+          confetti({ particleCount: 40, spread: 60 });
+          setTimeout(() => setSyncToast(null), 4000);
+        }
+      } else if (notify) {
+        setSyncToast(`Data diperbarui dari Server Aplikasi. Total: ${serverRecords.length} presensi.`);
+        setTimeout(() => setSyncToast(null), 3000);
       }
     } catch (e: any) {
       if (notify) alert('Gagal sinkron: ' + e.message);
@@ -65,9 +73,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigateTab, o
   };
 
   useEffect(() => {
-    if (StorageService.isGoogleSheetConnected()) {
-      handleCloudSync(false);
-    }
+    // 1. Immediate fetch from server
+    handleCloudSync(false);
+
+    // 2. Real-time background polling every 8 seconds:
+    // Captures attendance submitted by students from different phones automatically
+    const interval = setInterval(() => {
+      StorageService.fetchAttendanceFromServer().then(recs => setAllAttendance(recs));
+      StorageService.fetchStudentsFromServer().then(users => setAllUsers(users.filter(u => u.role === 'siswa')));
+    }, 8000);
+
+    return () => clearInterval(interval);
   }, []);
 
   const handleCopyWhatsAppText = () => {

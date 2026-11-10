@@ -27,7 +27,7 @@ export const RegisterModal: React.FC<RegisterModalProps> = ({ onSuccess, onBackT
 
   const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
@@ -55,13 +55,20 @@ export const RegisterModal: React.FC<RegisterModalProps> = ({ onSuccess, onBackT
       return;
     }
 
-    const existingUsers = StorageService.getUsers();
-    if (existingUsers.some(u => u.username.toLowerCase() === cleanUsername)) {
+    // Fetch fresh user list from server to ensure reset status is 100% accurate
+    let existingUsers: User[] = [];
+    try {
+      existingUsers = await StorageService.fetchStudentsFromServer();
+    } catch {
+      existingUsers = StorageService.getUsers();
+    }
+
+    if (existingUsers.some(u => u.username && u.username.toLowerCase() === cleanUsername)) {
       setError(`Username "${cleanUsername}" sudah digunakan akun lain. Silakan pilih username lain.`);
       return;
     }
 
-    if (existingUsers.some(u => u.nis.toLowerCase() === cleanNis.toLowerCase())) {
+    if (existingUsers.some(u => u.nis && u.nis.toLowerCase() === cleanNis.toLowerCase())) {
       setError(`NIS "${cleanNis}" sudah terdaftar dalam sistem.`);
       return;
     }

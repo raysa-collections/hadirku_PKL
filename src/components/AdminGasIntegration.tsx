@@ -393,16 +393,16 @@ export const AdminGasIntegration: React.FC = () => {
           </div>
 
           <p className="text-[11px] text-slate-300 leading-relaxed">
-            Agar hasil presensi seluruh siswa di HP masing-masing <strong>langsung terdata di aplikasi dan masuk ke Google Spreadsheet sekolah Anda</strong>, gunakan salah satu cara berikut:
+            Sistem kini dilengkapi <strong>Server API Multi-Perangkat</strong>. Seluruh presensi yang dilakukan siswa dari berbagai HP berbeda akan <strong>otomatis ditangkap oleh Server Aplikasi</strong>, tersimpan secara terpusat, dan diteruskan langsung ke Google Spreadsheet sekolah Anda!
           </p>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
             {/* OPSI 1: LINK WHATSAPP AUTO CONNECT */}
             <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 space-y-2 flex flex-col justify-between">
               <div>
-                <span className="font-bold text-emerald-400 block text-xs">Cara 1: Kirim Tautan Otomatis ke Grup WA Siswa</span>
+                <span className="font-bold text-emerald-400 block text-xs">1. Sinkronisasi Otomatis Server & Link WhatsApp</span>
                 <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">
-                  Tautan ini berisi kode penyambung otomatis. Ketika siswa membukanya di HP mereka, HP mereka akan langsung terhubung ke Google Spreadsheet Anda tanpa perlu setting apa pun.
+                  Saat Anda menyimpan URL di sini, server aplikasi otomatis menyimpannya untuk semua HP. Siswa dapat langsung membuka aplikasi atau melalui link WhatsApp di bawah ini:
                 </p>
               </div>
 

@@ -72,16 +72,20 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onNavi
       setDigitalTime(getJakartaTime());
     }, 1000);
 
-    // If Google Sheet is connected, pull from cloud so today's status is preserved across devices
-    if (StorageService.isGoogleSheetConnected()) {
-      setIsCloudSyncing(true);
-      StorageService.pullAttendanceFromCloud()
-        .then(() => {
-          refreshAttendance();
-        })
-        .catch(err => console.warn('Background pull error:', err))
-        .finally(() => setIsCloudSyncing(false));
-    }
+    // Fetch from application server so today's status is preserved across devices
+    setIsCloudSyncing(true);
+    StorageService.fetchAttendanceFromServer()
+      .then(() => {
+        refreshAttendance();
+        if (StorageService.isGoogleSheetConnected()) {
+          return StorageService.pullAttendanceFromCloud();
+        }
+      })
+      .then(() => {
+        refreshAttendance();
+      })
+      .catch(err => console.warn('Background pull error:', err))
+      .finally(() => setIsCloudSyncing(false));
 
     return () => clearInterval(timer);
   }, [user.nis]);

@@ -1,0 +1,64 @@
+{
+  "users": [
+    {
+      "id": "USR-ADMIN-1",
+      "username": "admin123",
+      "password": "admin123",
+      "role": "admin",
+      "nama": "Drs. Bambang Sutrisno, M.Pd",
+      "nis": "197805122005011003",
+      "nip": "197805122005011003",
+      "jabatan": "Koordinator BKK & Hubin PKL",
+      "jenisKelamin": "Laki-laki",
+      "asalSekolah": "SMKN 1 Tegalsari",
+      "jurusan": "Koordinator PKL Sekolah",
+      "kelas": "Guru/Koordinator",
+      "noHp": "081234567890",
+      "tempatPkl": "Kantor BKK & Hubin Sekolah",
+      "namaPembimbing": "Kepala Sekolah SMKN 1 Tegalsari",
+      "createdAt": "2026-01-01"
+    }
+  ],
+  "attendance": [],
+  "config": {
+    "googleSheet": {
+      "scriptUrl": "",
+      "sheetName": "Data_Absensi_PKL",
+      "connected": false,
+      "autoSync": true,
+      "lastSync": "2026-11-09T21:32:14.840Z"
+    },
+    "appTheme": {
+      "appTitle": "Absensi Siswa PKL",
+      "appSubtitle": "SMK Negeri 1 Tegalsari • Jurusan Teknik Kendaraan Ringan (TKR)",
+      "logoPreset": "school",
+      "headerColor": "cyan",
+      "borderStyle": "subtle"
+    },
+    "reportConfig": {
+      "kopBaris1": "PEMERINTAH PROVINSI JAWA TIMUR • DINAS PENDIDIKAN",
+      "kopBaris2": "SMK NEGERI 1 TEGALSARI — KELOMPOK TEKNOLOGI & REKAYASA",
+      "kopBaris3": "Bidang Kerja Khusus (BKK) & Hubungan Industri • Program Praktik Kerja Lapangan (PKL)",
+      "kopAlamat": "Jl. KH. Syafa'at No. 01 Blokagung, Tegalsari, Banyuwangi - Telp. (0333) 845678",
+      "ttdKiriLabel": "Mengetahui,\nPembimbing Tempat PKL",
+      "ttdKiriNama": "( ............................................ )",
+      "ttdKiriJabatan": "Mentor / Pimpinan DU/DI",
+      "ttdKananKota": "Tegalsari",
+      "ttdKananLabel": "Koordinator PKL & Hubin",
+      "ttdKananNama": "Drs. Bambang Sutrisno, M.Pd",
+      "ttdKananNip": "NIP. 197805122005011003",
+      "showKop": true,
+      "showTtd": true
+    },
+    "tahunAjaran": {
+      "tahunAktif": "2025/2026",
+      "daftarTahun": [
+        "2024/2025",
+        "2025/2026",
+        "2026/2027",
+        "2027/2028"
+      ]
+    }
+  },
+  "lastModified": "2026-11-10T05:35:39.729Z"
+}

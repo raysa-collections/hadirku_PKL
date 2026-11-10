@@ -86,11 +86,20 @@ export interface AppThemeConfig {
   borderStyle: HeaderBorderStyle;
 }
 
+export type PaperSize = 'A4' | 'F4' | 'Legal' | 'Letter' | 'A3';
+export type PaperOrientation = 'landscape' | 'portrait';
+export type PaperMargin = 'compact' | 'normal' | 'spacious';
+export type TableFontSize = 'compact' | 'normal' | 'large';
+
 export interface ReportPrintConfig {
   kopBaris1: string;
   kopBaris2: string;
   kopBaris3: string;
   kopAlamat: string;
+  logoKiriUrl?: string;
+  logoKananUrl?: string;
+  showLogoKiri?: boolean;
+  showLogoKanan?: boolean;
   ttdKiriLabel: string;
   ttdKiriNama: string;
   ttdKiriJabatan: string;
@@ -100,4 +109,8 @@ export interface ReportPrintConfig {
   ttdKananNip: string;
   showKop: boolean;
   showTtd: boolean;
+  paperSize?: PaperSize;
+  paperOrientation?: PaperOrientation;
+  paperMargin?: PaperMargin;
+  tableFontSize?: TableFontSize;
 }

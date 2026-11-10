@@ -53,15 +53,18 @@ export const AdminAttendanceManagement: React.FC = () => {
   };
 
   const handleCloudPull = async () => {
-    if (!StorageService.isGoogleSheetConnected()) {
-      showToast('Hubungkan Google Spreadsheet terlebih dahulu di menu Sinkronisasi Spreadsheet.');
-      return;
-    }
     setIsSyncing(true);
     try {
-      const res = await StorageService.pullAttendanceFromCloud();
-      reloadData();
-      showToast(res.message);
+      const serverRecords = await StorageService.fetchAttendanceFromServer();
+      setRecords(serverRecords);
+
+      if (StorageService.isGoogleSheetConnected()) {
+        const res = await StorageService.pullAttendanceFromCloud();
+        reloadData();
+        showToast(res.message);
+      } else {
+        showToast(`Sinkronisasi server selesai. Total: ${serverRecords.length} data.`);
+      }
     } catch (e: any) {
       showToast('Gagal menarik data: ' + e.message);
     } finally {
@@ -69,11 +72,15 @@ export const AdminAttendanceManagement: React.FC = () => {
     }
   };
 
-  // Auto-sync on mount
+  // Auto-sync on mount and poll server every 8s for live attendance from student mobile phones
   React.useEffect(() => {
-    if (StorageService.isGoogleSheetConnected()) {
-      StorageService.pullAttendanceFromCloud().then(reloadData).catch(() => {});
-    }
+    handleCloudPull();
+
+    const interval = setInterval(() => {
+      StorageService.fetchAttendanceFromServer().then(recs => setRecords(recs));
+    }, 8000);
+
+    return () => clearInterval(interval);
   }, []);
 
   const handleEditClick = (record: AttendanceRecord) => {

@@ -26,13 +26,17 @@ export const StudentHistory: React.FC<StudentHistoryProps> = ({ user, onBackToDa
   };
 
   React.useEffect(() => {
-    if (StorageService.isGoogleSheetConnected()) {
-      setIsRefreshing(true);
-      StorageService.pullAttendanceFromCloud()
-        .then(reloadData)
-        .catch(err => console.warn('History pull error:', err))
-        .finally(() => setIsRefreshing(false));
-    }
+    setIsRefreshing(true);
+    StorageService.fetchAttendanceFromServer()
+      .then(() => {
+        reloadData();
+        if (StorageService.isGoogleSheetConnected()) {
+          return StorageService.pullAttendanceFromCloud();
+        }
+      })
+      .then(reloadData)
+      .catch(err => console.warn('History pull error:', err))
+      .finally(() => setIsRefreshing(false));
   }, [user.nis]);
 
   // Filter records

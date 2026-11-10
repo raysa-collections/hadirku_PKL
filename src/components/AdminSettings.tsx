@@ -46,6 +46,7 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ onThemeUpdated }) 
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isRestoring, setIsRestoring] = useState(false);
   const [showVercelModal, setShowVercelModal] = useState(false);
+  const [dataRevision, setDataRevision] = useState(0);
   
   // Reset Modal state
   const [showResetModal, setShowResetModal] = useState<'all' | 'attendance' | 'students' | null>(null);
@@ -260,6 +261,7 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ onThemeUpdated }) 
           setTheme(newTheme);
           onThemeUpdated(newTheme);
           reloadTahunConfig();
+          setDataRevision(prev => prev + 1);
         } else {
           alert('Gagal restore: ' + result.message);
         }
@@ -282,7 +284,7 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ onThemeUpdated }) 
     setConfirmInputText('');
   };
 
-  const handleExecuteReset = () => {
+  const handleExecuteReset = async () => {
     if (!showResetModal) return;
 
     if (showResetModal === 'all' && confirmInputText.trim().toUpperCase() !== 'RESET') {
@@ -290,7 +292,8 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ onThemeUpdated }) 
       return;
     }
 
-    const res = StorageService.resetTotalData(showResetModal);
+    const res = await StorageService.resetTotalData(showResetModal);
+    setDataRevision(prev => prev + 1);
     confetti({ particleCount: 40, spread: 60 });
     showToast(res.message);
     setShowResetModal(null);
