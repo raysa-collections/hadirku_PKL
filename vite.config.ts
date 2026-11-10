@@ -14,9 +14,9 @@ export default defineConfig(() => {
         includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'icon.svg'],
         manifest: {
           id: '/',
-          name: 'Android App Studio & Simulator',
-          short_name: 'AndroidApp',
-          description: 'Panduan interaktif dan pembuat aplikasi Android dengan PWA & ekspor APK Capacitor, simulator perangkat, dan uji fitur native HP.',
+          name: 'HADIRKU PKL TKR - SMKN 1 Tegalsari',
+          short_name: 'HADIRKU PKL',
+          description: 'Aplikasi Kehadiran Siswa PKL TKR Semakasari - SMKN 1 Tegalsari dengan Presensi Real-time GPS & Rekap Laporan PDF.',
           theme_color: '#0f172a',
           background_color: '#0f172a',
           display: 'standalone',
