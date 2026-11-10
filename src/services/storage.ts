@@ -937,11 +937,28 @@ export const StorageService = {
   },
 
   saveAppThemeConfig(config: AppThemeConfig) {
-    localStorage.setItem(THEME_KEY, JSON.stringify(config));
+    try {
+      localStorage.setItem(THEME_KEY, JSON.stringify(config));
+    } catch (err) {
+      console.warn('LocalStorage save failed for AppThemeConfig, using sessionStorage:', err);
+      try {
+        sessionStorage.setItem(THEME_KEY, JSON.stringify(config));
+      } catch {}
+    }
+    if (typeof window !== 'undefined') {
+      fetch('/api/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ appTheme: config }),
+      }).catch(err => console.warn('Sync appTheme error:', err));
+    }
   },
 
   getReportPrintConfig(): ReportPrintConfig {
-    const raw = localStorage.getItem(REPORT_CONFIG_KEY);
+    let raw = localStorage.getItem(REPORT_CONFIG_KEY);
+    if (!raw && typeof sessionStorage !== 'undefined') {
+      raw = sessionStorage.getItem(REPORT_CONFIG_KEY);
+    }
     if (!raw) return DEFAULT_REPORT_CONFIG;
     try {
       return { ...DEFAULT_REPORT_CONFIG, ...JSON.parse(raw) };
@@ -950,8 +967,32 @@ export const StorageService = {
     }
   },
 
-  saveReportPrintConfig(config: ReportPrintConfig) {
-    localStorage.setItem(REPORT_CONFIG_KEY, JSON.stringify(config));
+  saveReportPrintConfig(config: ReportPrintConfig, syncServer: boolean = true): boolean {
+    let saved = false;
+    try {
+      localStorage.setItem(REPORT_CONFIG_KEY, JSON.stringify(config));
+      saved = true;
+    } catch (err) {
+      console.warn('LocalStorage save failed for ReportPrintConfig (quota exceeded), using sessionStorage fallback:', err);
+      try {
+        if (typeof sessionStorage !== 'undefined') {
+          sessionStorage.setItem(REPORT_CONFIG_KEY, JSON.stringify(config));
+          saved = true;
+        }
+      } catch (sessionErr) {
+        console.error('SessionStorage also failed:', sessionErr);
+      }
+    }
+
+    if (syncServer && typeof window !== 'undefined') {
+      fetch('/api/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reportConfig: config }),
+      }).catch(err => console.warn('Sync report config to server error:', err));
+    }
+
+    return saved;
   },
 
   getTahunAjaranConfig(): TahunAjaranConfig {

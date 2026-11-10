@@ -30,9 +30,13 @@ import {
   Layout,
   Maximize2,
   Layers,
-  Sparkles
+  Sparkles,
+  Loader2,
+  Trash2,
+  AlertCircle
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
+import { optimizeLogoImage, KOP_LOGO_PRESETS } from '../utils/imageOptimizer';
 
 // Paper size options & specifications
 interface PaperOptionDetail {
@@ -242,49 +246,102 @@ export const AdminReports: React.FC = () => {
     `;
   }, [paperSize, paperOrientation, paperMargin, tableFontSize]);
 
+  // Keep kopConfig and print layout synchronized with latest saved configurations
+  useEffect(() => {
+    const saved = StorageService.getReportPrintConfig();
+    if (saved) {
+      setKopConfig(saved);
+      if (saved.paperSize) setPaperSize(saved.paperSize);
+      if (saved.paperOrientation) setPaperOrientation(saved.paperOrientation);
+      if (saved.paperMargin) setPaperMargin(saved.paperMargin);
+      if (saved.tableFontSize) setTableFontSize(saved.tableFontSize);
+    }
+  }, []);
+
   const fileInputKiriRef = useRef<HTMLInputElement>(null);
   const fileInputKananRef = useRef<HTMLInputElement>(null);
 
-  const handleUploadLogoKiri = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const [isUploadingLogoKiri, setIsUploadingLogoKiri] = useState(false);
+  const [isUploadingLogoKanan, setIsUploadingLogoKanan] = useState(false);
+  const [isSavingKop, setIsSavingKop] = useState(false);
+
+  const handleUploadLogoKiri = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (evt) => {
-      const base64 = evt.target?.result as string;
-      setTempKopConfig(prev => ({ ...prev, logoKiriUrl: base64, showLogoKiri: true }));
-    };
-    reader.readAsDataURL(file);
-    if (fileInputKiriRef.current) fileInputKiriRef.current.value = '';
+    try {
+      setIsUploadingLogoKiri(true);
+      const optimizedBase64 = await optimizeLogoImage(file, 240);
+      if (optimizedBase64) {
+        setTempKopConfig(prev => ({ ...prev, logoKiriUrl: optimizedBase64, showLogoKiri: true }));
+        showToast('Logo kiri berhasil diunggah & dioptimalkan!');
+      }
+    } catch (err: any) {
+      console.error('Error upload logo kiri:', err);
+      alert(err.message || 'Gagal memproses file gambar logo kiri.');
+    } finally {
+      setIsUploadingLogoKiri(false);
+      if (fileInputKiriRef.current) fileInputKiriRef.current.value = '';
+    }
   };
 
-  const handleUploadLogoKanan = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleUploadLogoKanan = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (evt) => {
-      const base64 = evt.target?.result as string;
-      setTempKopConfig(prev => ({ ...prev, logoKananUrl: base64, showLogoKanan: true }));
-    };
-    reader.readAsDataURL(file);
-    if (fileInputKananRef.current) fileInputKananRef.current.value = '';
+    try {
+      setIsUploadingLogoKanan(true);
+      const optimizedBase64 = await optimizeLogoImage(file, 240);
+      if (optimizedBase64) {
+        setTempKopConfig(prev => ({ ...prev, logoKananUrl: optimizedBase64, showLogoKanan: true }));
+        showToast('Logo kanan berhasil diunggah & dioptimalkan!');
+      }
+    } catch (err: any) {
+      console.error('Error upload logo kanan:', err);
+      alert(err.message || 'Gagal memproses file gambar logo kanan.');
+    } finally {
+      setIsUploadingLogoKanan(false);
+      if (fileInputKananRef.current) fileInputKananRef.current.value = '';
+    }
   };
 
   const showToast = (msg: string) => {
     setToastMsg(msg);
-    setTimeout(() => setToastMsg(null), 3000);
+    setTimeout(() => setToastMsg(null), 3500);
   };
 
-  const handleSaveKopConfig = (e: React.FormEvent) => {
-    e.preventDefault();
-    StorageService.saveReportPrintConfig(tempKopConfig);
-    setKopConfig(tempKopConfig);
-    if (tempKopConfig.paperSize) setPaperSize(tempKopConfig.paperSize);
-    if (tempKopConfig.paperOrientation) setPaperOrientation(tempKopConfig.paperOrientation);
-    if (tempKopConfig.paperMargin) setPaperMargin(tempKopConfig.paperMargin);
-    if (tempKopConfig.tableFontSize) setTableFontSize(tempKopConfig.tableFontSize);
-    setShowKopModal(false);
-    confetti({ particleCount: 35, spread: 60 });
-    showToast('Teks kop laporan & nama penandatangan berhasil diperbarui!');
+  const handleSaveKopConfig = (e?: React.FormEvent | React.MouseEvent) => {
+    if (e && typeof e.preventDefault === 'function') {
+      e.preventDefault();
+    }
+    try {
+      setIsSavingKop(true);
+
+      // 1. Immediately apply to active React state so screen updates instantly
+      const updatedConfig: ReportPrintConfig = { ...tempKopConfig };
+      setKopConfig(updatedConfig);
+      if (updatedConfig.paperSize) setPaperSize(updatedConfig.paperSize);
+      if (updatedConfig.paperOrientation) setPaperOrientation(updatedConfig.paperOrientation);
+      if (updatedConfig.paperMargin) setPaperMargin(updatedConfig.paperMargin);
+      if (updatedConfig.tableFontSize) setTableFontSize(updatedConfig.tableFontSize);
+
+      // 2. Immediately close the modal so screen returns to the report page
+      setShowKopModal(false);
+
+      // 3. Persist to storage & backend asynchronously
+      StorageService.saveReportPrintConfig(updatedConfig, true);
+
+      // 4. Success feedback
+      showToast('Pengaturan kop laporan, logo & penandatangan berhasil disimpan!');
+      try {
+        confetti({ particleCount: 35, spread: 60 });
+      } catch {}
+    } catch (err: any) {
+      console.error('Error saat menyimpan kop config:', err);
+      // Fallback: still close modal and apply in-memory
+      setShowKopModal(false);
+      showToast('Pengaturan diterapkan di tampilan layar.');
+    } finally {
+      setIsSavingKop(false);
+    }
   };
 
   const handleResetKopDefault = () => {
@@ -505,6 +562,8 @@ export const AdminReports: React.FC = () => {
           .font-mono { font-family: monospace; }
           .w-20 { width: 75px; }
           .h-20 { height: 75px; }
+          .max-w-full { max-width: 100%; }
+          .max-h-full { max-height: 100%; }
           .object-contain { object-fit: contain; }
           .shrink-0 { flex-shrink: 0; }
           .flex-1 { flex: 1; }
@@ -557,8 +616,10 @@ export const AdminReports: React.FC = () => {
         <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
           {/* Custom Kop & TTD Button */}
           <button
+            type="button"
             onClick={() => {
-              setTempKopConfig(kopConfig);
+              const current = StorageService.getReportPrintConfig();
+              setTempKopConfig({ ...DEFAULT_REPORT_CONFIG, ...current, ...kopConfig });
               setShowKopModal(true);
             }}
             className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-cyan-300 hover:text-white border border-slate-700 font-semibold rounded-xl text-xs flex items-center gap-2 transition cursor-pointer shadow-sm"
@@ -1017,7 +1078,7 @@ export const AdminReports: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={handleSaveKopConfig} className="space-y-4 text-xs overflow-y-auto flex-1 pr-1">
+            <form noValidate onSubmit={handleSaveKopConfig} className="space-y-4 text-xs overflow-y-auto flex-1 pr-1">
               
               {/* Seksi Kop Surat */}
               <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-3">
@@ -1086,17 +1147,22 @@ export const AdminReports: React.FC = () => {
 
               {/* Seksi Logo Kop Surat (Pojok Kiri & Pojok Kanan) */}
               <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-3">
-                <span className="font-bold text-cyan-300 text-xs flex items-center gap-1.5">
-                  <ImageIcon className="w-4 h-4 text-cyan-400" />
-                  Logo Kop Surat (Pojok Kiri & Pojok Kanan)
-                </span>
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-cyan-300 text-xs flex items-center gap-1.5">
+                    <ImageIcon className="w-4 h-4 text-cyan-400" />
+                    Logo Kop Surat (Pojok Kiri & Pojok Kanan)
+                  </span>
+                  <span className="text-[10px] text-emerald-400 bg-emerald-950/60 border border-emerald-500/30 px-2 py-0.5 rounded-full font-semibold">
+                    Kompresi Canvas ~25KB (Aman Vercel)
+                  </span>
+                </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-1">
                   
                   {/* LOGO POJOK KIRI */}
-                  <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 space-y-2.5">
+                  <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 space-y-2.5">
                     <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-bold text-slate-300">Logo Pojok Kiri</span>
+                      <span className="text-[11px] font-bold text-slate-200">Logo Pojok Kiri</span>
                       <label className="flex items-center gap-1 cursor-pointer text-[10px] text-slate-400">
                         <input
                           type="checkbox"
@@ -1108,42 +1174,101 @@ export const AdminReports: React.FC = () => {
                       </label>
                     </div>
 
-                    {tempKopConfig.logoKiriUrl ? (
-                      <div className="flex items-center gap-3 bg-slate-950 p-2 rounded-lg border border-slate-800">
-                        <img src={tempKopConfig.logoKiriUrl} alt="Logo Kiri" className="w-12 h-12 object-contain bg-white rounded p-1" />
-                        <div className="flex-1 space-y-1">
-                          <span className="text-[10px] text-emerald-400 block font-semibold">Logo Kiri Terpasang</span>
-                          <button
-                            type="button"
-                            onClick={() => setTempKopConfig({ ...tempKopConfig, logoKiriUrl: '' })}
-                            className="text-[10px] text-rose-400 hover:underline flex items-center gap-1"
-                          >
-                            Hapus Logo Kiri
-                          </button>
+                    {/* Unconditionally mounted hidden file input so ref is never null */}
+                    <input
+                      type="file"
+                      ref={fileInputKiriRef}
+                      accept="image/*"
+                      onChange={handleUploadLogoKiri}
+                      className="hidden"
+                    />
+
+                    {isUploadingLogoKiri ? (
+                      <div className="p-4 rounded-xl bg-slate-950 border border-cyan-500/30 flex flex-col items-center justify-center gap-2 text-cyan-300">
+                        <Loader2 className="w-6 h-6 animate-spin text-cyan-400" />
+                        <span className="text-[11px] font-medium">Mengompres & memproses logo...</span>
+                      </div>
+                    ) : tempKopConfig.logoKiriUrl ? (
+                      <div className="space-y-2.5">
+                        <div className="flex items-center gap-3 bg-slate-950 p-2.5 rounded-xl border border-slate-800">
+                          <div className="w-14 h-14 bg-white rounded-lg p-1.5 flex items-center justify-center shrink-0 border border-slate-700 shadow-inner">
+                            <img src={tempKopConfig.logoKiriUrl} alt="Logo Kiri" className="max-w-full max-h-full object-contain" />
+                          </div>
+                          <div className="flex-1 min-w-0 space-y-1">
+                            <span className="text-[11px] text-emerald-400 block font-bold truncate">Logo Kiri Terpasang</span>
+                            <span className="text-[10px] text-slate-400 block">Tersimpan optimal untuk cetak</span>
+                            <div className="flex items-center gap-2 pt-0.5">
+                              <button
+                                type="button"
+                                onClick={() => fileInputKiriRef.current?.click()}
+                                className="text-[10px] text-cyan-400 hover:text-cyan-300 hover:underline font-semibold cursor-pointer"
+                              >
+                                Ganti Gambar
+                              </button>
+                              <span className="text-slate-600">•</span>
+                              <button
+                                type="button"
+                                onClick={() => setTempKopConfig({ ...tempKopConfig, logoKiriUrl: '' })}
+                                className="text-[10px] text-rose-400 hover:text-rose-300 hover:underline font-semibold flex items-center gap-0.5 cursor-pointer"
+                              >
+                                <Trash2 className="w-3 h-3" /> Hapus
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Presets and URL input */}
+                        <div className="pt-0.5">
+                          <span className="text-[10px] text-slate-400 block mb-1">Ganti dengan Preset Logo Resmi:</span>
+                          <div className="flex flex-wrap gap-1">
+                            {KOP_LOGO_PRESETS.map((p) => (
+                              <button
+                                key={p.id}
+                                type="button"
+                                onClick={() => setTempKopConfig({ ...tempKopConfig, logoKiriUrl: p.svg, showLogoKiri: true })}
+                                className="px-2 py-0.5 rounded-md bg-slate-950 hover:bg-slate-800 text-[10px] text-cyan-300 border border-slate-700 transition cursor-pointer"
+                                title={p.name}
+                              >
+                                {p.shortName}
+                              </button>
+                            ))}
+                          </div>
                         </div>
                       </div>
                     ) : (
                       <div className="space-y-2">
-                        <input
-                          type="file"
-                          ref={fileInputKiriRef}
-                          accept="image/*"
-                          onChange={handleUploadLogoKiri}
-                          className="hidden"
-                        />
                         <button
                           type="button"
                           onClick={() => fileInputKiriRef.current?.click()}
-                          className="w-full py-2 bg-slate-950 hover:bg-slate-800 text-cyan-300 border border-slate-700 rounded-lg text-[11px] font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer"
+                          className="w-full py-2.5 bg-cyan-950/70 hover:bg-cyan-900/80 text-cyan-300 border border-cyan-500/40 rounded-xl text-[11px] font-bold flex items-center justify-center gap-2 transition cursor-pointer shadow-sm"
                         >
-                          <Upload className="w-3.5 h-3.5 text-cyan-400" />
-                          Upload Logo Kiri (PNG/JPG)
+                          <Upload className="w-4 h-4 text-cyan-400" />
+                          Pilih / Upload Logo Kiri (PNG/JPG)
                         </button>
+
+                        {/* Presets */}
+                        <div className="pt-1">
+                          <span className="text-[10px] text-slate-400 block mb-1">Gunakan Preset Logo Resmi:</span>
+                          <div className="flex flex-wrap gap-1">
+                            {KOP_LOGO_PRESETS.map((p) => (
+                              <button
+                                key={p.id}
+                                type="button"
+                                onClick={() => setTempKopConfig({ ...tempKopConfig, logoKiriUrl: p.svg, showLogoKiri: true })}
+                                className="px-2 py-0.5 rounded-md bg-slate-950 hover:bg-slate-800 text-[10px] text-cyan-300 border border-slate-700 transition cursor-pointer"
+                                title={p.name}
+                              >
+                                {p.shortName}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
                         <input
                           type="text"
                           value={tempKopConfig.logoKiriUrl || ''}
                           onChange={(e) => setTempKopConfig({ ...tempKopConfig, logoKiriUrl: e.target.value })}
-                          placeholder="Atau masukan URL logo..."
+                          placeholder="Atau tempel URL gambar logo..."
                           className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-white text-[10px] focus:outline-none focus:border-cyan-500"
                         />
                       </div>
@@ -1151,9 +1276,9 @@ export const AdminReports: React.FC = () => {
                   </div>
 
                   {/* LOGO POJOK KANAN */}
-                  <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 space-y-2.5">
+                  <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 space-y-2.5">
                     <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-bold text-slate-300">Logo Pojok Kanan</span>
+                      <span className="text-[11px] font-bold text-slate-200">Logo Pojok Kanan</span>
                       <label className="flex items-center gap-1 cursor-pointer text-[10px] text-slate-400">
                         <input
                           type="checkbox"
@@ -1165,48 +1290,115 @@ export const AdminReports: React.FC = () => {
                       </label>
                     </div>
 
-                    {tempKopConfig.logoKananUrl ? (
-                      <div className="flex items-center gap-3 bg-slate-950 p-2 rounded-lg border border-slate-800">
-                        <img src={tempKopConfig.logoKananUrl} alt="Logo Kanan" className="w-12 h-12 object-contain bg-white rounded p-1" />
-                        <div className="flex-1 space-y-1">
-                          <span className="text-[10px] text-emerald-400 block font-semibold">Logo Kanan Terpasang</span>
-                          <button
-                            type="button"
-                            onClick={() => setTempKopConfig({ ...tempKopConfig, logoKananUrl: '' })}
-                            className="text-[10px] text-rose-400 hover:underline flex items-center gap-1"
-                          >
-                            Hapus Logo Kanan
-                          </button>
+                    {/* Unconditionally mounted hidden file input so ref is never null */}
+                    <input
+                      type="file"
+                      ref={fileInputKananRef}
+                      accept="image/*"
+                      onChange={handleUploadLogoKanan}
+                      className="hidden"
+                    />
+
+                    {isUploadingLogoKanan ? (
+                      <div className="p-4 rounded-xl bg-slate-950 border border-cyan-500/30 flex flex-col items-center justify-center gap-2 text-cyan-300">
+                        <Loader2 className="w-6 h-6 animate-spin text-cyan-400" />
+                        <span className="text-[11px] font-medium">Mengompres & memproses logo...</span>
+                      </div>
+                    ) : tempKopConfig.logoKananUrl ? (
+                      <div className="space-y-2.5">
+                        <div className="flex items-center gap-3 bg-slate-950 p-2.5 rounded-xl border border-slate-800">
+                          <div className="w-14 h-14 bg-white rounded-lg p-1.5 flex items-center justify-center shrink-0 border border-slate-700 shadow-inner">
+                            <img src={tempKopConfig.logoKananUrl} alt="Logo Kanan" className="max-w-full max-h-full object-contain" />
+                          </div>
+                          <div className="flex-1 min-w-0 space-y-1">
+                            <span className="text-[11px] text-emerald-400 block font-bold truncate">Logo Kanan Terpasang</span>
+                            <span className="text-[10px] text-slate-400 block">Tersimpan optimal untuk cetak</span>
+                            <div className="flex items-center gap-2 pt-0.5">
+                              <button
+                                type="button"
+                                onClick={() => fileInputKananRef.current?.click()}
+                                className="text-[10px] text-cyan-400 hover:text-cyan-300 hover:underline font-semibold cursor-pointer"
+                              >
+                                Ganti Gambar
+                              </button>
+                              <span className="text-slate-600">•</span>
+                              <button
+                                type="button"
+                                onClick={() => setTempKopConfig({ ...tempKopConfig, logoKananUrl: '' })}
+                                className="text-[10px] text-rose-400 hover:text-rose-300 hover:underline font-semibold flex items-center gap-0.5 cursor-pointer"
+                              >
+                                <Trash2 className="w-3 h-3" /> Hapus
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Presets and URL input */}
+                        <div className="pt-0.5">
+                          <span className="text-[10px] text-slate-400 block mb-1">Ganti dengan Preset Logo Resmi:</span>
+                          <div className="flex flex-wrap gap-1">
+                            {KOP_LOGO_PRESETS.map((p) => (
+                              <button
+                                key={p.id}
+                                type="button"
+                                onClick={() => setTempKopConfig({ ...tempKopConfig, logoKananUrl: p.svg, showLogoKanan: true })}
+                                className="px-2 py-0.5 rounded-md bg-slate-950 hover:bg-slate-800 text-[10px] text-cyan-300 border border-slate-700 transition cursor-pointer"
+                                title={p.name}
+                              >
+                                {p.shortName}
+                              </button>
+                            ))}
+                          </div>
                         </div>
                       </div>
                     ) : (
                       <div className="space-y-2">
-                        <input
-                          type="file"
-                          ref={fileInputKananRef}
-                          accept="image/*"
-                          onChange={handleUploadLogoKanan}
-                          className="hidden"
-                        />
                         <button
                           type="button"
                           onClick={() => fileInputKananRef.current?.click()}
-                          className="w-full py-2 bg-slate-950 hover:bg-slate-800 text-cyan-300 border border-slate-700 rounded-lg text-[11px] font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer"
+                          className="w-full py-2.5 bg-cyan-950/70 hover:bg-cyan-900/80 text-cyan-300 border border-cyan-500/40 rounded-xl text-[11px] font-bold flex items-center justify-center gap-2 transition cursor-pointer shadow-sm"
                         >
-                          <Upload className="w-3.5 h-3.5 text-cyan-400" />
-                          Upload Logo Kanan (PNG/JPG)
+                          <Upload className="w-4 h-4 text-cyan-400" />
+                          Pilih / Upload Logo Kanan (PNG/JPG)
                         </button>
+
+                        {/* Presets */}
+                        <div className="pt-1">
+                          <span className="text-[10px] text-slate-400 block mb-1">Gunakan Preset Logo Resmi:</span>
+                          <div className="flex flex-wrap gap-1">
+                            {KOP_LOGO_PRESETS.map((p) => (
+                              <button
+                                key={p.id}
+                                type="button"
+                                onClick={() => setTempKopConfig({ ...tempKopConfig, logoKananUrl: p.svg, showLogoKanan: true })}
+                                className="px-2 py-0.5 rounded-md bg-slate-950 hover:bg-slate-800 text-[10px] text-cyan-300 border border-slate-700 transition cursor-pointer"
+                                title={p.name}
+                              >
+                                {p.shortName}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
                         <input
                           type="text"
                           value={tempKopConfig.logoKananUrl || ''}
                           onChange={(e) => setTempKopConfig({ ...tempKopConfig, logoKananUrl: e.target.value })}
-                          placeholder="Atau masukan URL logo..."
+                          placeholder="Atau tempel URL gambar logo..."
                           className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-white text-[10px] focus:outline-none focus:border-cyan-500"
                         />
                       </div>
                     )}
                   </div>
 
+                </div>
+
+                {/* Helpful Optimization Notice */}
+                <div className="p-2.5 rounded-xl bg-slate-900/80 border border-slate-800 text-[11px] text-slate-400 flex items-start gap-2">
+                  <Sparkles className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
+                  <span>
+                    Setiap gambar logo yang diunggah otomatis dikompres ke resolusi optimal (~25 KB) dengan ketajaman tinggi, sehingga tidak akan membebani kuota penyimpanan browser dan tidak akan stag/macet saat disimpan di Vercel.
+                  </span>
                 </div>
               </div>
 
@@ -1378,11 +1570,22 @@ export const AdminReports: React.FC = () => {
                     Batal
                   </button>
                   <button
-                    type="submit"
-                    className="px-5 py-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-md cursor-pointer"
+                    type="button"
+                    onClick={handleSaveKopConfig}
+                    disabled={isSavingKop}
+                    className="px-5 py-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 disabled:opacity-60 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-md cursor-pointer transition"
                   >
-                    <Check className="w-4 h-4" />
-                    Simpan Pengaturan Kop
+                    {isSavingKop ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin text-white" />
+                        <span>Menyimpan...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Check className="w-4 h-4" />
+                        <span>Simpan Pengaturan Kop</span>
+                      </>
+                    )}
                   </button>
                 </div>
               </div>

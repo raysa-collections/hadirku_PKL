@@ -34,6 +34,7 @@ import {
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { VercelDeployModal } from './VercelDeployModal';
+import { optimizeLogoImage } from '../utils/imageOptimizer';
 
 interface AdminSettingsProps {
   onThemeUpdated: (newTheme: AppThemeConfig) => void;
@@ -84,8 +85,8 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ onThemeUpdated }) 
     }
   };
 
-  // Handle Custom Logo Upload
-  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Handle Custom Logo Upload with Automatic Canvas Downscaling
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -94,14 +95,8 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ onThemeUpdated }) 
       return;
     }
 
-    if (file.size > 2 * 1024 * 1024) {
-      alert('Ukuran file logo terlalu besar. Maksimal 2 MB.');
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onload = (evt) => {
-      const dataUrl = evt.target?.result as string;
+    try {
+      const dataUrl = await optimizeLogoImage(file, 300);
       const updated: AppThemeConfig = {
         ...theme,
         logoUrl: dataUrl,
@@ -109,10 +104,12 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ onThemeUpdated }) 
       setTheme(updated);
       StorageService.saveAppThemeConfig(updated);
       onThemeUpdated(updated);
-      showToast('Logo kustom berhasil diunggah!');
-    };
-    reader.readAsDataURL(file);
-    if (logoFileInputRef.current) logoFileInputRef.current.value = '';
+      showToast('Logo kustom berhasil diunggah & dioptimalkan!');
+    } catch (err: any) {
+      alert(err.message || 'Gagal memproses file logo.');
+    } finally {
+      if (logoFileInputRef.current) logoFileInputRef.current.value = '';
+    }
   };
 
   const handleRemoveCustomLogo = () => {
