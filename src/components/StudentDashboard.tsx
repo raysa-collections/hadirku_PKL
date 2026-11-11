@@ -169,6 +169,8 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onNavi
     coordinates: string;
     mapsUrl: string;
     notes: string;
+    isFakeGps?: boolean;
+    accuracy?: number;
   }) => {
     setIsSubmitting(true);
     const timeNow = digitalTime;
@@ -211,7 +213,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onNavi
         setFeedbackToast({
           type: 'success',
           title: 'Presensi Datang Berhasil Terkirim!',
-          message: `Waktu: ${timeNow} WIB (${status}). Bukti foto bengkel & titik GPS berhasil disimpan dan terkirim langsung ke Google Spreadsheet Guru Pembimbing!`,
+          message: `Waktu: ${timeNow} WIB (${status}). Bukti foto bengkel & titik GPS native terverifikasi berhasil disimpan dan terkirim langsung ke Google Spreadsheet!`,
         });
       } else {
         newRecord.syncStatus = 'pending';

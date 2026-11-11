@@ -111,7 +111,7 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({ onBack
             Jika masih terkendala, silakan hubungi koordinator pembimbing PKL sekolah di ruang Hubin SMKN 1 Tegalsari atau via WhatsApp di nomor:
           </p>
           <div className="font-mono text-cyan-400 font-bold bg-slate-900 px-2.5 py-1 rounded-lg inline-block">
-            WA: 0812-3456-7890 (Pak Bambang)
+            WA: 0812-3456-7890 (Layanan BKK & Hubin PKL)
           </div>
         </div>
 

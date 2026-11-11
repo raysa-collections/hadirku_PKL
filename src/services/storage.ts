@@ -52,7 +52,7 @@ export const INITIAL_USERS: User[] = [
     username: 'admin123',
     password: 'admin123',
     role: 'admin',
-    nama: 'Drs. Bambang Sutrisno, M.Pd',
+    nama: 'Administrator PKL TKR',
     nis: '197805122005011003',
     nip: '197805122005011003',
     jabatan: 'Koordinator BKK & Hubin PKL',

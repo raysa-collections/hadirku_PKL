@@ -198,7 +198,7 @@ export default function App() {
                     ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30' 
                     : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
                 }`}>
-                  {currentUser.role === 'admin' ? 'Guru / Pembimbing' : 'Siswa PKL'}
+                  {currentUser.role === 'admin' ? 'Administrator PKL TKR' : 'Siswa PKL'}
                 </span>
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30 font-mono">
                   TA: {StorageService.getActiveTahunAjaran()}
@@ -206,10 +206,7 @@ export default function App() {
               </div>
               <p className="text-[11px] text-slate-300 mt-0.5 truncate max-w-sm font-medium flex items-center gap-1">
                 {currentUser.role === 'admin' ? (
-                  <>
-                    <span className="text-cyan-400 font-bold">Pembimbing:</span>
-                    <span className="text-white font-semibold">{currentUser.nama}</span>
-                  </>
+                  <span className="text-cyan-400 font-semibold">Administrator PKL TKR</span>
                 ) : (
                   <>
                     <span className="text-emerald-400 font-bold">Siswa:</span>
