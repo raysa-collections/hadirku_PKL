@@ -43,52 +43,58 @@ export const LoginModal: React.FC<LoginModalProps> = ({
     setErrorMessage(null);
 
     const cleanId = identifier.trim().toLowerCase();
+    const cleanIdNoSpace = cleanId.replace(/\s+/g, '');
     const cleanPass = password.trim();
+    const cleanPassNoSpace = cleanPass.replace(/\s+/g, '');
 
     if (!cleanId || !cleanPass) {
-      setErrorMessage(isSiswa ? 'Harap masukkan Username Siswa dan Password.' : 'Harap masukkan Username dan Password.');
+      setErrorMessage(isSiswa ? 'Harap masukkan Username Siswa / NIS dan Password.' : 'Harap masukkan Username dan Password.');
       return;
     }
 
     let users = StorageService.getUsers();
-    // Match based on role and credentials
     const targetRole = isSiswa ? 'siswa' : 'admin';
-    let user = users.find(u => {
+
+    // Helper to match credentials strictly for targetRole
+    const matchUserCredentials = (u: User) => {
       if (u.role !== targetRole) return false;
 
-      // For student: matches username (and NIS as fallback)
+      const uUser = (u.username || '').toLowerCase();
+      const uUserNoSpace = uUser.replace(/\s+/g, '');
+      const uNis = (u.nis || '').toLowerCase();
+      const uNisNoSpace = uNis.replace(/\s+/g, '');
+      const uNip = (u.nip || '').toLowerCase();
+
       const idMatch = isSiswa
-        ? (u.username.toLowerCase() === cleanId || u.nis.toLowerCase() === cleanId)
-        : (u.username.toLowerCase() === cleanId || 
-           (!isSiswa && (cleanId === 'admin123' || cleanId === 'admin') && (u.username.toLowerCase() === 'admin123' || u.username.toLowerCase() === 'admin')) ||
-           (u.nip && u.nip.toLowerCase() === cleanId));
+        ? (uUser === cleanId || uUserNoSpace === cleanIdNoSpace || uNis === cleanId || uNisNoSpace === cleanIdNoSpace)
+        : (uUser === cleanId || uUserNoSpace === cleanIdNoSpace ||
+           ((cleanId === 'admin123' || cleanId === 'admin') && (uUser === 'admin123' || uUser === 'admin')) ||
+           (uNip && uNip === cleanId));
 
       if (!idMatch) return false;
 
-      if (u.password === cleanPass) return true;
+      const uPass = (u.password || '').trim();
+      const uPassNoSpace = uPass.replace(/\s+/g, '');
 
-      // For guru / pembimbing: tolerate spacing in "admin 123" vs "admin123"
-      if (!isSiswa) {
-        const normPass = cleanPass.replace(/\s+/g, '');
-        const normUserPass = u.password.replace(/\s+/g, '');
-        if (normPass === normUserPass || normPass === 'admin123') {
-          return true;
-        }
-      }
+      return (
+        uPass === cleanPass ||
+        uPass.toLowerCase() === cleanPass.toLowerCase() ||
+        uPassNoSpace === cleanPassNoSpace ||
+        (!isSiswa && (cleanPassNoSpace === 'admin123' || cleanPass === 'admin123'))
+      );
+    };
 
-      return false;
-    });
+    let user = users.find(matchUserCredentials);
 
-    // If not found locally and cloud is connected, try pull from Google Sheet
-    if (!user && isSiswa && StorageService.isGoogleSheetConnected()) {
+    // If not found locally and cloud is connected, try pull from server/cloud
+    if (!user && isSiswa) {
       try {
-        await StorageService.pullStudentsFromCloud();
+        await StorageService.fetchStudentsFromServer();
+        if (StorageService.isGoogleSheetConnected()) {
+          await StorageService.pullStudentsFromCloud();
+        }
         users = StorageService.getUsers();
-        user = users.find(u => 
-          u.role === 'siswa' && 
-          (u.username.toLowerCase() === cleanId || u.nis.toLowerCase() === cleanId) && 
-          u.password === cleanPass
-        );
+        user = users.find(matchUserCredentials);
       } catch (cloudErr) {
         console.warn('Cloud login lookup error:', cloudErr);
       }
@@ -99,24 +105,61 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       confetti({ particleCount: 40, spread: 60 });
       onLoginSuccess(user);
     } else {
-      // Check if user exists in the other role to provide clear guidance
-      const otherRoleUser = users.find(u => 
-        (u.username.toLowerCase() === cleanId || u.nis.toLowerCase() === cleanId || (u.nip && u.nip.toLowerCase() === cleanId))
-      );
+      // 1. Check if user exists in the TARGET ROLE (matching username/nis) but password failed
+      const sameRoleUser = users.find(u => {
+        if (u.role !== targetRole) return false;
+        const uUser = (u.username || '').toLowerCase();
+        const uUserNoSpace = uUser.replace(/\s+/g, '');
+        const uNis = (u.nis || '').toLowerCase();
+        const uNisNoSpace = uNis.replace(/\s+/g, '');
+        const uNip = (u.nip || '').toLowerCase();
+
+        return isSiswa
+          ? (uUser === cleanId || uUserNoSpace === cleanIdNoSpace || uNis === cleanId || uNisNoSpace === cleanIdNoSpace)
+          : (uUser === cleanId || uUserNoSpace === cleanIdNoSpace || uNip === cleanId);
+      });
+
+      if (sameRoleUser) {
+        setErrorMessage(
+          isSiswa
+            ? `Password untuk akun siswa "${sameRoleUser.nama}" (${sameRoleUser.username}) tidak cocok. Silakan periksa kembali password Anda.`
+            : `Password untuk akun Administrator (${sameRoleUser.username}) salah.`
+        );
+        return;
+      }
+
+      // 2. Check if user exists in the OTHER ROLE only
+      const otherRoleUser = users.find(u => {
+        if (u.role === targetRole) return false; // Must be different role
+        const uUser = (u.username || '').toLowerCase();
+        const uUserNoSpace = uUser.replace(/\s+/g, '');
+        const uNis = (u.nis || '').toLowerCase();
+        const uNisNoSpace = uNis.replace(/\s+/g, '');
+        const uNip = (u.nip || '').toLowerCase();
+
+        return (
+          uUser === cleanId ||
+          uUserNoSpace === cleanIdNoSpace ||
+          (uNis && (uNis === cleanId || uNisNoSpace === cleanIdNoSpace)) ||
+          (uNip && uNip === cleanId)
+        );
+      });
 
       if (otherRoleUser) {
         setErrorMessage(
-          isSiswa 
-            ? 'Akun ini terdaftar sebagai Guru/Pembimbing. Silakan kembali dan pilih "Sebagai Guru / Pembimbing".' 
-            : 'Akun ini terdaftar sebagai Siswa PKL. Silakan kembali dan pilih "Sebagai Siswa PKL".'
-        );
-      } else {
-        setErrorMessage(
           isSiswa
-            ? 'Username atau Password salah. Silakan periksa kembali atau lakukan registrasi jika belum memiliki akun.'
-            : 'Username atau Password salah. Silakan periksa kembali kredensial Anda.'
+            ? `Akun "${identifier}" terdaftar sebagai Portal Guru / Administrator. Silakan ganti pilihan ke "Sebagai Guru / Pembimbing".`
+            : `Akun "${identifier}" terdaftar sebagai Siswa PKL. Silakan ganti pilihan ke "Sebagai Siswa PKL".`
         );
+        return;
       }
+
+      // 3. User does not exist at all
+      setErrorMessage(
+        isSiswa
+          ? `Username / NIS "${identifier}" belum terdaftar. Silakan klik "Registrasi Siswa" di bawah untuk mendaftar.`
+          : `Username "${identifier}" tidak terdaftar dalam sistem.`
+      );
     }
   };
 

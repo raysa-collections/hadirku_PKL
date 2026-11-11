@@ -219,11 +219,21 @@ export const StorageService = {
 
   addUser(user: User): boolean {
     const users = this.getUsers();
-    if (users.some(u => u.username.toLowerCase() === user.username.toLowerCase() || u.nis === user.nis)) {
+    if (users.some(u => (u.username && u.username.toLowerCase() === user.username.toLowerCase()) || (u.nis && u.nis === user.nis))) {
       return false; // NIS or username already exists
     }
     users.push(user);
     this.saveUsers(users);
+
+    // Sync to application server database immediately
+    if (typeof window !== 'undefined' && user.role === 'siswa') {
+      fetch('/api/students', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(user),
+      }).catch(err => console.warn('Server student save warning:', err));
+    }
+
     if (user.role === 'siswa') {
       this.syncStudentToGoogleSheet(user).catch(err => console.warn('Sync student warning:', err));
     }
@@ -418,10 +428,30 @@ export const StorageService = {
         if (json && json.status === 'success' && Array.isArray(json.data)) {
           const localUsers = this.getUsers();
           const admins = localUsers.filter(u => u.role === 'admin');
+          const localStudents = localUsers.filter(u => u.role === 'siswa');
           const remoteStudents: User[] = json.data;
 
-          // Rebuild users strictly with official admins and server students (never resurrect deleted students)
-          const finalUsers = [...admins, ...remoteStudents];
+          // Merge server students with local students so no newly registered local student is lost!
+          const studentMap = new Map<string, User>();
+          remoteStudents.forEach(s => {
+            const key = (s.nis || s.username || s.id).toLowerCase();
+            studentMap.set(key, s);
+          });
+          localStudents.forEach(s => {
+            const key = (s.nis || s.username || s.id).toLowerCase();
+            if (!studentMap.has(key)) {
+              studentMap.set(key, s);
+              // Also sync missing student back to server API
+              fetch('/api/students', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(s),
+              }).catch(() => {});
+            }
+          });
+
+          const mergedStudents = Array.from(studentMap.values());
+          const finalUsers = [...admins, ...mergedStudents];
           this.saveUsers(finalUsers);
           return finalUsers;
         }
