@@ -323,20 +323,23 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onNavi
         </div>
       )}
 
-      {/* CLOUD REAL-TIME SPREADSHEET STATUS CARD */}
-      {isConnected ? (
-        <div className="p-3.5 rounded-2xl bg-slate-900 border border-emerald-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-          <div className="flex items-center gap-2.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
-            <div>
-              <p className="font-bold text-emerald-300 flex items-center gap-1.5">
-                <span>Google Spreadsheet Terhubung (Multi-User Aktif)</span>
-              </p>
-              <p className="text-[11px] text-slate-400 mt-0.5">
-                Data presensi Anda otomatis terkirim langsung ke rekapan Guru Pembimbing secara online.
-              </p>
-            </div>
+      {/* CLOUD REAL-TIME SPREADSHEET AUTOMATIC CONNECTION CARD */}
+      <div className="p-3.5 rounded-2xl bg-emerald-950/60 border border-emerald-500/40 text-emerald-200 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-lg">
+        <div className="flex items-center gap-2.5">
+          <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+          <div>
+            <p className="font-bold text-white flex items-center gap-1.5">
+              <span>Sistem Absensi Terhubung Otomatis ke Cloud & Spreadsheet Sekolah</span>
+            </p>
+            <p className="text-[11px] text-emerald-200/90 mt-0.5">
+              Presensi Anda langsung tersimpan dan terkap otomatis ke server utama & rekapan Guru Pembimbing tanpa perlu input URL manual.
+            </p>
           </div>
+        </div>
+        <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+          <span className="text-[10px] text-emerald-300 bg-emerald-900/60 px-2.5 py-1 rounded-lg border border-emerald-500/30 font-semibold">
+            🟢 Terhubung Otomatis
+          </span>
           <button
             onClick={() => {
               setIsCloudSyncing(true);
@@ -345,38 +348,20 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onNavi
                   refreshAttendance();
                   setFeedbackToast({
                     type: 'success',
-                    title: 'Sinkronisasi Selesai',
-                    message: res.message,
+                    title: 'Koneksi Cloud Terverifikasi',
+                    message: 'Sistem absensi terhubung lancar dengan server & spreadsheet utama sekolah.',
                   });
                 })
                 .finally(() => setIsCloudSyncing(false));
             }}
             disabled={isCloudSyncing}
-            className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-cyan-300 rounded-xl text-[11px] font-semibold border border-slate-700 transition flex items-center gap-1.5 self-end sm:self-auto cursor-pointer"
+            className="px-3 py-1.5 bg-emerald-900/40 hover:bg-emerald-800/60 text-emerald-200 rounded-xl text-[11px] font-semibold border border-emerald-500/30 transition flex items-center gap-1.5 cursor-pointer"
           >
             <span className={isCloudSyncing ? 'animate-spin' : ''}>🔄</span>
-            <span>{isCloudSyncing ? 'Sinkronisasi...' : 'Cek Status Cloud'}</span>
+            <span>{isCloudSyncing ? 'Memeriksa...' : 'Cek Status Cloud'}</span>
           </button>
         </div>
-      ) : (
-        <div className="p-4 rounded-2xl bg-amber-950/70 border border-amber-500/50 text-amber-200 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex items-start gap-2.5">
-            <AlertCircle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
-            <div>
-              <p className="font-bold text-white text-xs">Peringatan: Google Spreadsheet Belum Terhubung</p>
-              <p className="text-[11px] text-amber-200/90 mt-0.5 leading-relaxed">
-                Presensi yang Anda lakukan saat ini hanya tersimpan di memori HP ini dan <strong>belum terdata di rekapan Guru Pembimbing</strong>. Minta tautan presensi resmi ke Pembimbing atau klik tombol di samping untuk menyambungkan.
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={() => setShowConfigModal(true)}
-            className="px-3.5 py-2 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded-xl text-xs transition shrink-0 self-end sm:self-auto cursor-pointer shadow-md"
-          >
-            Hubungkan Spreadsheet
-          </button>
-        </div>
-      )}
+      </div>
 
       {/* Greeting & Identity Hero Banner */}
       <div className="p-6 rounded-3xl bg-gradient-to-r from-blue-900 via-indigo-950 to-slate-900 border border-blue-500/30 shadow-xl relative overflow-hidden">

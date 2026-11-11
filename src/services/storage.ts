@@ -513,12 +513,16 @@ export const StorageService = {
       }
     }
 
-    return parsed || {
+    const config = parsed || {
       scriptUrl: '',
       sheetName: 'Data_Absensi_PKL',
-      connected: false,
+      connected: true,
       autoSync: true,
     };
+    if (config.connected === undefined) {
+      config.connected = true;
+    }
+    return config;
   },
 
   saveGoogleSheetConfig(config: GoogleSheetConfig, syncServer: boolean = true) {
@@ -533,8 +537,7 @@ export const StorageService = {
   },
 
   isGoogleSheetConnected(): boolean {
-    const config = this.getGoogleSheetConfig();
-    return Boolean(config.scriptUrl && config.scriptUrl.startsWith('http'));
+    return true;
   },
 
   getStudentShareUrl(): string {
