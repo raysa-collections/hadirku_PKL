@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { User, AttendanceRecord } from '../types/pkl';
-import { StorageService, getJakartaDate, formatIndonesianDate } from '../services/storage';
+import { StorageService, getJakartaDate, formatIndonesianDate, getAttendanceSplitStatus } from '../services/storage';
 import { 
   Users, 
   UserCheck, 
@@ -284,14 +284,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigateTab, o
           </div>
         ) : (
           <div className="space-y-2.5">
-            {todayRecords.map((item) => (
+            {todayRecords.map((item) => {
+              const { statusDatang, statusPulang } = getAttendanceSplitStatus(item);
+              return (
               <div 
                 key={item.id}
                 className="p-3.5 rounded-xl bg-slate-950 border border-slate-800/80 hover:border-slate-700 flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition"
               >
                 <div className="flex items-center gap-3">
                   <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-xs font-bold text-white shrink-0 ${
-                    item.status === 'Hadir' ? 'bg-emerald-600' : 'bg-amber-600'
+                    statusDatang === 'Hadir' ? 'bg-emerald-600' : 'bg-amber-600'
                   }`}>
                     {item.namaSiswa.slice(0, 2).toUpperCase()}
                   </div>
@@ -309,7 +311,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigateTab, o
                   </div>
                 </div>
 
-                <div className="flex items-center gap-3 shrink-0 self-end sm:self-auto text-xs">
+                <div className="flex flex-wrap items-center gap-3 shrink-0 self-end sm:self-auto text-xs">
                   <div className="text-right">
                     <span className="text-[10px] text-slate-500 block">Jam Masuk</span>
                     <span className="font-mono font-bold text-emerald-400">{item.jamDatang} WIB</span>
@@ -322,16 +324,29 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigateTab, o
                     </span>
                   </div>
 
-                  <span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
-                    item.status === 'Hadir' 
-                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' 
-                      : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
-                  }`}>
-                    {item.status}
-                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
+                      statusDatang === 'Hadir' 
+                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' 
+                        : statusDatang === 'Terlambat'
+                        ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                        : 'bg-red-500/20 text-red-300 border border-red-500/30'
+                    }`}>
+                      Datang: {statusDatang}
+                    </span>
+
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
+                      statusPulang === 'Sudah Pulang'
+                        ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'
+                        : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                    }`}>
+                      Pulang: {statusPulang}
+                    </span>
+                  </div>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

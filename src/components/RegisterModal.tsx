@@ -40,22 +40,24 @@ export const RegisterModal: React.FC<RegisterModalProps> = ({ onSuccess, onBackT
       return;
     }
 
+    const cleanPassword = formData.password.trim();
+
     if (cleanUsername.length < 3) {
       setError('Username minimal 3 karakter untuk login.');
       return;
     }
 
-    if (formData.password.length < 5) {
+    if (cleanPassword.length < 5) {
       setError('Password minimal 5 karakter untuk keamanan.');
       return;
     }
 
-    if (formData.password !== formData.confirmPassword) {
+    if (cleanPassword !== formData.confirmPassword.trim()) {
       setError('Konfirmasi password tidak cocok.');
       return;
     }
 
-    // Fetch fresh user list from server to ensure reset status is 100% accurate
+    // Fetch fresh user list from server to ensure status is 100% accurate
     let existingUsers: User[] = [];
     try {
       existingUsers = await StorageService.fetchStudentsFromServer();
@@ -63,20 +65,27 @@ export const RegisterModal: React.FC<RegisterModalProps> = ({ onSuccess, onBackT
       existingUsers = StorageService.getUsers();
     }
 
-    if (existingUsers.some(u => u.username && u.username.toLowerCase() === cleanUsername)) {
+    const existingWithSameUsername = existingUsers.find(
+      u => u.username && u.username.toLowerCase() === cleanUsername
+    );
+    const existingWithSameNis = existingUsers.find(
+      u => u.nis && u.nis.toLowerCase() === cleanNis.toLowerCase()
+    );
+
+    if (existingWithSameUsername && existingWithSameUsername.nis !== cleanNis) {
       setError(`Username "${cleanUsername}" sudah digunakan akun lain. Silakan pilih username lain.`);
       return;
     }
 
-    if (existingUsers.some(u => u.nis && u.nis.toLowerCase() === cleanNis.toLowerCase())) {
-      setError(`NIS "${cleanNis}" sudah terdaftar dalam sistem.`);
+    if (existingWithSameNis && existingWithSameNis.password && existingWithSameNis.password !== 'siswa123' && existingWithSameNis.username !== cleanUsername) {
+      setError(`NIS "${cleanNis}" sudah terdaftar dengan username "${existingWithSameNis.username}". Silakan masuk menggunakan password Anda.`);
       return;
     }
 
     const newUser: User = {
-      id: `USR-SISWA-${Date.now()}`,
+      id: existingWithSameNis?.id || `USR-SISWA-${Date.now()}`,
       username: cleanUsername,
-      password: formData.password,
+      password: cleanPassword,
       role: 'siswa',
       nama: cleanNama,
       nis: cleanNis,

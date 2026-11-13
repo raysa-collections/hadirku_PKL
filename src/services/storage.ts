@@ -184,6 +184,46 @@ export function generateSeedAttendance(): AttendanceRecord[] {
   return [];
 }
 
+/**
+ * Membedakan status presensi datang dan status presensi pulang
+ * sehingga administrator dapat memantau keduanya secara terpisah.
+ */
+export function getAttendanceSplitStatus(record: AttendanceRecord): {
+  statusDatang: string;
+  statusPulang: string;
+} {
+  if (record.status === 'Izin' || record.status === 'Sakit' || record.status === 'Alpha') {
+    return {
+      statusDatang: record.statusDatang || record.status,
+      statusPulang: record.statusPulang || record.status,
+    };
+  }
+
+  let statusDatang = record.statusDatang;
+  if (!statusDatang) {
+    if (!record.jamDatang || record.jamDatang === '-') {
+      statusDatang = 'Belum Datang';
+    } else if (record.status === 'Terlambat') {
+      statusDatang = 'Terlambat';
+    } else if (record.status === 'Tidak Disiplin') {
+      statusDatang = 'Tidak Disiplin';
+    } else {
+      statusDatang = 'Hadir';
+    }
+  }
+
+  let statusPulang = record.statusPulang;
+  if (!statusPulang) {
+    if (record.jamPulang && record.jamPulang !== '-') {
+      statusPulang = 'Sudah Pulang';
+    } else {
+      statusPulang = 'Belum Pulang';
+    }
+  }
+
+  return { statusDatang, statusPulang };
+}
+
 // Storage Manager
 export const StorageService = {
   getUsers(): User[] {
@@ -219,11 +259,29 @@ export const StorageService = {
 
   addUser(user: User): boolean {
     const users = this.getUsers();
-    if (users.some(u => (u.username && u.username.toLowerCase() === user.username.toLowerCase()) || (u.nis && u.nis === user.nis))) {
-      return false; // NIS or username already exists
+    const existingIdx = users.findIndex(u => 
+      (u.username && user.username && u.username.toLowerCase() === user.username.toLowerCase()) || 
+      (u.nis && user.nis && u.nis.toLowerCase() === user.nis.toLowerCase())
+    );
+
+    if (existingIdx >= 0) {
+      // Preserve existing user's custom password if user parameter doesn't provide a new non-default password
+      const existingPass = users[existingIdx].password;
+      const incomingPass = user.password;
+      const finalPass = (incomingPass && incomingPass !== 'siswa123') 
+        ? incomingPass 
+        : (existingPass || incomingPass || 'siswa123');
+
+      users[existingIdx] = {
+        ...users[existingIdx],
+        ...user,
+        password: finalPass,
+      };
+      this.saveUsers(users);
+    } else {
+      users.push(user);
+      this.saveUsers(users);
     }
-    users.push(user);
-    this.saveUsers(users);
 
     // Sync to application server database immediately
     if (typeof window !== 'undefined' && user.role === 'siswa') {
@@ -250,9 +308,17 @@ export const StorageService = {
         u => u.nis === nu.nis || (u.username && nu.username && u.username.toLowerCase() === nu.username.toLowerCase())
       );
       if (existingIndex >= 0) {
+        // PRESERVE existing user custom password if nu has default or missing password
+        const existingPass = users[existingIndex].password;
+        const incomingPass = nu.password;
+        const finalPass = (existingPass && existingPass !== 'siswa123')
+          ? existingPass
+          : (incomingPass || 'siswa123');
+
         users[existingIndex] = {
           ...users[existingIndex],
           ...nu,
+          password: finalPass,
           id: users[existingIndex].id, // keep original ID
         };
         updatedCount++;
@@ -439,7 +505,18 @@ export const StorageService = {
           });
           localStudents.forEach(s => {
             const key = (s.nis || s.username || s.id).toLowerCase();
-            if (!studentMap.has(key)) {
+            const existingRemote = studentMap.get(key);
+            if (existingRemote) {
+              // Merge: preserve local custom password if s has a custom password!
+              const effectivePass = (s.password && s.password !== 'siswa123')
+                ? s.password
+                : (existingRemote.password || s.password || 'siswa123');
+              studentMap.set(key, {
+                ...existingRemote,
+                ...s,
+                password: effectivePass,
+              });
+            } else {
               studentMap.set(key, s);
               // Also sync missing student back to server API
               fetch('/api/students', {

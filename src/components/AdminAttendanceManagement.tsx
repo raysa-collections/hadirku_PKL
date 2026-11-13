@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { AttendanceRecord, AttendanceStatus } from '../types/pkl';
-import { StorageService, formatIndonesianDate, getJakartaDate } from '../services/storage';
+import { StorageService, formatIndonesianDate, getJakartaDate, getAttendanceSplitStatus } from '../services/storage';
 import { 
   Search, 
   Filter, 
@@ -118,7 +118,12 @@ export const AdminAttendanceManagement: React.FC = () => {
       r.nis.toLowerCase().includes(searchQuery.toLowerCase()) ||
       r.tempatPkl.toLowerCase().includes(searchQuery.toLowerCase());
 
-    const matchesStatus = selectedStatus === 'all' || r.status === selectedStatus;
+    const { statusDatang, statusPulang } = getAttendanceSplitStatus(r);
+    const matchesStatus =
+      selectedStatus === 'all' ||
+      r.status === selectedStatus ||
+      statusDatang === selectedStatus ||
+      statusPulang === selectedStatus;
     const matchesDate = !selectedDate || r.tanggal === selectedDate;
     const matchesTahun = selectedTahun === 'all' || (r.tahunAjaran || tahunConfig.tahunAktif) === selectedTahun;
 
@@ -216,9 +221,12 @@ export const AdminAttendanceManagement: React.FC = () => {
             className="bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1.5 text-white focus:outline-none focus:border-cyan-500"
           >
             <option value="all">Semua Status</option>
-            <option value="Hadir">Hadir (Tepat Waktu)</option>
-            <option value="Terlambat">Terlambat</option>
-            <option value="Tidak Disiplin">Tidak Disiplin</option>
+            <option value="Hadir">Datang: Hadir (Tepat Waktu)</option>
+            <option value="Terlambat">Datang: Terlambat</option>
+            <option value="Tidak Disiplin">Datang: Tidak Disiplin</option>
+            <option value="Belum Datang">Datang: Belum Datang</option>
+            <option value="Sudah Pulang">Pulang: Sudah Pulang</option>
+            <option value="Belum Pulang">Pulang: Belum Pulang</option>
             <option value="Alpha">Alpha (Tanpa Keterangan)</option>
             <option value="Izin">Izin</option>
             <option value="Sakit">Sakit</option>
@@ -235,8 +243,9 @@ export const AdminAttendanceManagement: React.FC = () => {
               <th className="p-3.5 font-semibold">Siswa / NIS</th>
               <th className="p-3.5 font-semibold">Tempat PKL & Jurusan</th>
               <th className="p-3.5 font-semibold">Jam Datang & Peta</th>
+              <th className="p-3.5 font-semibold">Status Datang</th>
               <th className="p-3.5 font-semibold">Jam Pulang & Peta</th>
-              <th className="p-3.5 font-semibold">Status</th>
+              <th className="p-3.5 font-semibold">Status Pulang</th>
               <th className="p-3.5 font-semibold">Keterangan</th>
               <th className="p-3.5 font-semibold text-right">Koreksi Data</th>
             </tr>
@@ -244,12 +253,14 @@ export const AdminAttendanceManagement: React.FC = () => {
           <tbody className="divide-y divide-slate-800/80 text-slate-300">
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={8} className="p-8 text-center text-slate-500">
+                <td colSpan={9} className="p-8 text-center text-slate-500">
                   Tidak ada catatan presensi yang cocok dengan filter yang dipilih.
                 </td>
               </tr>
             ) : (
-              filtered.map((r) => (
+              filtered.map((r) => {
+                const { statusDatang, statusPulang } = getAttendanceSplitStatus(r);
+                return (
                 <tr key={r.id} className="hover:bg-slate-800/30 transition">
                   <td className="p-3.5 whitespace-nowrap">
                     <span className="font-medium text-white">{r.tanggal}</span>
@@ -306,6 +317,23 @@ export const AdminAttendanceManagement: React.FC = () => {
                     )}
                   </td>
 
+                  {/* Status Datang */}
+                  <td className="p-3.5 whitespace-nowrap">
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
+                      statusDatang === 'Hadir' 
+                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' 
+                        : statusDatang === 'Terlambat' 
+                        ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' 
+                        : statusDatang === 'Tidak Disiplin' || statusDatang === 'Belum Datang'
+                        ? 'bg-red-500/20 text-red-300 border border-red-500/30'
+                        : statusDatang === 'Alpha'
+                        ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                        : 'bg-blue-500/20 text-cyan-300 border border-blue-500/30'
+                    }`}>
+                      {statusDatang}
+                    </span>
+                  </td>
+
                   {/* Jam Pulang + Koordinat Map */}
                   <td className="p-3.5 whitespace-nowrap">
                     <span className="font-mono text-cyan-400 font-bold block">
@@ -347,19 +375,18 @@ export const AdminAttendanceManagement: React.FC = () => {
                     )}
                   </td>
 
+                  {/* Status Pulang */}
                   <td className="p-3.5 whitespace-nowrap">
                     <span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
-                      r.status === 'Hadir' 
-                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' 
-                        : r.status === 'Terlambat' 
-                        ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' 
-                        : r.status === 'Tidak Disiplin'
-                        ? 'bg-red-500/20 text-red-300 border border-red-500/30'
-                        : r.status === 'Alpha'
+                      statusPulang === 'Sudah Pulang'
+                        ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'
+                        : statusPulang === 'Belum Pulang'
+                        ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                        : statusPulang === 'Alpha'
                         ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
                         : 'bg-blue-500/20 text-cyan-300 border border-blue-500/30'
                     }`}>
-                      {r.status}
+                      {statusPulang}
                     </span>
                   </td>
 
@@ -377,7 +404,8 @@ export const AdminAttendanceManagement: React.FC = () => {
                     </button>
                   </td>
                 </tr>
-              ))
+                );
+              })
             )}
           </tbody>
         </table>
@@ -638,20 +666,46 @@ export const AdminAttendanceManagement: React.FC = () => {
                 </div>
               </div>
 
-              <div>
-                <label className="block text-slate-300 font-medium mb-1">Status Kehadiran</label>
-                <select
-                  value={editingRecord.status}
-                  onChange={(e) => setEditingRecord({ ...editingRecord, status: e.target.value as AttendanceStatus })}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-cyan-500"
-                >
-                  <option value="Hadir">Hadir (Tepat Waktu)</option>
-                  <option value="Terlambat">Terlambat</option>
-                  <option value="Tidak Disiplin">Tidak Disiplin</option>
-                  <option value="Alpha">Alpha (Tanpa Keterangan)</option>
-                  <option value="Izin">Izin</option>
-                  <option value="Sakit">Sakit</option>
-                </select>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-300 font-medium mb-1">Status Absen Datang</label>
+                  <select
+                    value={editingRecord.status}
+                    onChange={(e) => {
+                      const val = e.target.value as AttendanceStatus;
+                      setEditingRecord({
+                        ...editingRecord,
+                        status: val,
+                        statusDatang: val,
+                        ...(val === 'Izin' || val === 'Sakit' || val === 'Alpha' ? { statusPulang: val } : {}),
+                      });
+                    }}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-cyan-500"
+                  >
+                    <option value="Hadir">Hadir (Tepat Waktu)</option>
+                    <option value="Terlambat">Terlambat</option>
+                    <option value="Tidak Disiplin">Tidak Disiplin</option>
+                    <option value="Alpha">Alpha (Tanpa Keterangan)</option>
+                    <option value="Izin">Izin</option>
+                    <option value="Sakit">Sakit</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-slate-300 font-medium mb-1">Status Absen Pulang</label>
+                  <select
+                    value={getAttendanceSplitStatus(editingRecord).statusPulang}
+                    onChange={(e) => setEditingRecord({ ...editingRecord, statusPulang: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-cyan-500"
+                  >
+                    <option value="Sudah Pulang">Sudah Pulang</option>
+                    <option value="Belum Pulang">Belum Pulang</option>
+                    <option value="Pulang Awal">Pulang Awal</option>
+                    <option value="Izin">Izin</option>
+                    <option value="Sakit">Sakit</option>
+                    <option value="Alpha">Alpha</option>
+                  </select>
+                </div>
               </div>
 
               <div>

@@ -216,7 +216,17 @@ class ServerStore {
 
     let savedUser = { ...user };
     if (existingIdx >= 0) {
-      savedUser = { ...data.users[existingIdx], ...user };
+      const existingPass = data.users[existingIdx].password;
+      const incomingPass = user.password;
+      const finalPass = (incomingPass && incomingPass !== 'siswa123')
+        ? incomingPass
+        : (existingPass || incomingPass || 'siswa123');
+
+      savedUser = { 
+        ...data.users[existingIdx], 
+        ...user, 
+        password: finalPass 
+      };
       data.users[existingIdx] = savedUser;
     } else {
       data.users.push(savedUser);
@@ -321,6 +331,7 @@ class ServerStore {
       noHp: student.noHp || '-',
       tempatPkl: student.tempatPkl || '-',
       namaPembimbing: student.namaPembimbing || '-',
+      password: student.password || 'siswa123',
     };
 
     const res = await fetch(scriptUrl, {

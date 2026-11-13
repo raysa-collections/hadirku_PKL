@@ -34,6 +34,8 @@ export interface AttendanceRecord {
   jamDatang: string; // HH:mm:ss
   jamPulang: string; // HH:mm:ss or '-'
   status: AttendanceStatus;
+  statusDatang?: string;
+  statusPulang?: string;
   keterangan: string;
   tempatPkl: string;
   koordinatGps?: string; // e.g. "-8.3752, 114.1294"

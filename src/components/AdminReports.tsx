@@ -7,7 +7,7 @@ import {
   PaperMargin, 
   TableFontSize 
 } from '../types/pkl';
-import { StorageService, formatIndonesianDate, getJakartaDate, DEFAULT_REPORT_CONFIG } from '../services/storage';
+import { StorageService, formatIndonesianDate, getJakartaDate, DEFAULT_REPORT_CONFIG, getAttendanceSplitStatus } from '../services/storage';
 import * as XLSX from 'xlsx';
 import { 
   FileSpreadsheet, 
@@ -178,8 +178,24 @@ export const AdminReports: React.FC = () => {
   const allRecords = StorageService.getAttendance();
   const allStudents = StorageService.getUsers().filter(u => u.role === 'siswa');
 
+  const getOffsetDate = (baseDateStr: string, offsetDays: number): string => {
+    try {
+      const [y, m, d] = baseDateStr.split('-').map(Number);
+      const dt = new Date(y, m - 1, d);
+      dt.setDate(dt.getDate() + offsetDays);
+      const yy = dt.getFullYear();
+      const mm = String(dt.getMonth() + 1).padStart(2, '0');
+      const dd = String(dt.getDate()).padStart(2, '0');
+      return `${yy}-${mm}-${dd}`;
+    } catch {
+      return baseDateStr;
+    }
+  };
+
   const [reportType, setReportType] = useState<'harian' | 'mingguan' | 'bulanan' | 'siswa' | 'sekolah'>('bulanan');
   const [selectedDate, setSelectedDate] = useState<string>(getJakartaDate());
+  const [weekStartDate, setWeekStartDate] = useState<string>(() => getOffsetDate(getJakartaDate(), -6));
+  const [weekEndDate, setWeekEndDate] = useState<string>(() => getJakartaDate());
   const [selectedMonth, setSelectedMonth] = useState<string>('all');
   const [selectedYear, setSelectedYear] = useState<string>('all');
   const [selectedTahun, setSelectedTahun] = useState<string>('all');
@@ -241,6 +257,20 @@ export const AdminReports: React.FC = () => {
         }
         .a4-print-table th, .a4-print-table td {
           padding: ${fontConfig.tablePaddingIframe} !important;
+        }
+        .a4-signature-block {
+          page-break-inside: avoid !important;
+          break-inside: avoid !important;
+          display: flex !important;
+          justify-content: space-between !important;
+          align-items: flex-start !important;
+        }
+        .ttd-signature-space {
+          height: 90px !important;
+          min-height: 90px !important;
+          line-height: 90px !important;
+          display: block !important;
+          width: 100% !important;
         }
       }
     `;
@@ -357,11 +387,9 @@ export const AdminReports: React.FC = () => {
       return r.tanggal === selectedDate;
     }
     if (reportType === 'mingguan') {
-      // Last 7 days from selectedDate
-      const targetTime = new Date(selectedDate).getTime();
-      const recTime = new Date(r.tanggal).getTime();
-      const diffDays = (targetTime - recTime) / (1000 * 3600 * 24);
-      return diffDays >= 0 && diffDays <= 7;
+      const start = weekStartDate <= weekEndDate ? weekStartDate : weekEndDate;
+      const end = weekStartDate <= weekEndDate ? weekEndDate : weekStartDate;
+      return r.tanggal >= start && r.tanggal <= end;
     }
     if (reportType === 'bulanan') {
       const parts = r.tanggal.split('-');
@@ -390,6 +418,7 @@ export const AdminReports: React.FC = () => {
 
     const excelRows = filteredData.map((r, index) => {
       const student = allStudents.find(s => s.nis === r.nis);
+      const { statusDatang, statusPulang } = getAttendanceSplitStatus(r);
       return {
         'No': index + 1,
         'ID Absensi': r.id,
@@ -397,13 +426,13 @@ export const AdminReports: React.FC = () => {
         'NIS/NISN': r.nis,
         'Nama Siswa': r.namaSiswa,
         'Kelas': r.kelas || student?.kelas || 'XII TKR 1',
-        'Guru Pembimbing Sekolah': r.namaPembimbing || student?.namaPembimbing || '-',
         'Asal Sekolah': r.asalSekolah,
         'Jurusan': r.jurusan,
         'Tempat PKL / Bengkel': r.tempatPkl,
         'Jam Datang': r.jamDatang,
+        'Status Datang': statusDatang,
         'Jam Pulang': r.jamPulang || '-',
-        'Status Kehadiran': r.status,
+        'Status Pulang': statusPulang,
         'Titik Koordinat GPS': r.koordinatGps || r.koordinatPulang || '-',
         'Link Map Google': r.mapsUrl || r.mapsUrlPulang || '-',
         'Keterangan / Aktivitas': r.keterangan || '-',
@@ -423,19 +452,22 @@ export const AdminReports: React.FC = () => {
       { wch: 12 }, // NIS
       { wch: max_width + 4 }, // Nama
       { wch: 14 }, // Kelas
-      { wch: 30 }, // Guru Pembimbing Sekolah
       { wch: 18 }, // Sekolah
       { wch: 25 }, // Jurusan
       { wch: 25 }, // Tempat PKL
-      { wch: 12 }, // Datang
-      { wch: 12 }, // Pulang
-      { wch: 16 }, // Status
+      { wch: 12 }, // Jam Datang
+      { wch: 16 }, // Status Datang
+      { wch: 12 }, // Jam Pulang
+      { wch: 16 }, // Status Pulang
       { wch: 22 }, // GPS
       { wch: 30 }, // Link Map
       { wch: 35 }, // Keterangan
     ];
 
-    const fileName = `Laporan_Absensi_PKL_${reportType.toUpperCase()}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+    const periodeSuffix = reportType === 'mingguan'
+      ? `${weekStartDate <= weekEndDate ? weekStartDate : weekEndDate}_sd_${weekStartDate <= weekEndDate ? weekEndDate : weekStartDate}`
+      : new Date().toISOString().slice(0, 10);
+    const fileName = `Laporan_Absensi_PKL_${reportType.toUpperCase()}_${periodeSuffix}.xlsx`;
     XLSX.writeFile(workbook, fileName);
     confetti({ particleCount: 50, spread: 70 });
   };
@@ -487,88 +519,141 @@ export const AdminReports: React.FC = () => {
     const marginCss = getPaperMarginCss(targetMargin);
     const fontConfig = getTableFontCss(targetFont);
 
+    // Collect active page CSS rules (compiled Tailwind + index.css) so print layout matches screen preview identically
+    let collectedCss = '';
+    const externalLinks: string[] = [];
+    try {
+      Array.from(document.styleSheets).forEach((sheet) => {
+        const ownerNode = sheet.ownerNode as HTMLElement | null;
+        if (ownerNode && ownerNode.id === 'dynamic-print-paper-css') return;
+        try {
+          const rules = sheet.cssRules;
+          if (rules && rules.length > 0) {
+            collectedCss += Array.from(rules).map((r) => r.cssText).join('\n') + '\n';
+          }
+        } catch {
+          if (sheet.href) {
+            externalLinks.push(`<link rel="stylesheet" href="${sheet.href}">`);
+          }
+        }
+      });
+    } catch (e) {
+      console.warn('Could not serialize stylesheets for print:', e);
+    }
+
     const docHtml = `
       <!DOCTYPE html>
       <html lang="id">
       <head>
         <meta charset="UTF-8">
         <title>Laporan_Presensi_PKL_${targetSize}_${targetOrientation.toUpperCase()}_SMKN1_Tegalsari</title>
+        ${externalLinks.join('\n')}
+        <style>
+          ${collectedCss}
+        </style>
         <style>
           @page {
             size: ${cssSize} !important;
             margin: ${marginCss} !important;
           }
-          *, *::before, *::after {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
+          html, body {
             background: #ffffff !important;
             background-color: #ffffff !important;
             color: #000000 !important;
-            box-shadow: none !important;
-            border-radius: 0 !important;
+            font-family: Arial, Helvetica, sans-serif;
+            margin: 0 !important;
+            padding: 0 !important;
+            width: 100% !important;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
           }
-          html, body {
+          #printable-a4-document {
+            width: 100% !important;
+            max-width: 100% !important;
+            margin: 0 !important;
+            padding: 4px 6px !important;
+            border: none !important;
+            border-radius: 0 !important;
+            box-shadow: none !important;
+            background: #ffffff !important;
             background-color: #ffffff !important;
             color: #000000 !important;
-            font-family: Arial, Helvetica, sans-serif;
-            font-size: ${fontConfig.bodyFont};
-            padding: 4px;
-            width: 100%;
+          }
+          #printable-a4-document * {
+            box-shadow: none !important;
+            color: #000000 !important;
           }
           .kop-surat-border {
-            border-bottom: 3px double #000000;
-            padding-bottom: 8px;
-            margin-bottom: 12px;
+            border-bottom: 3px double #000000 !important;
+            padding-bottom: 10px !important;
+            margin-bottom: 14px !important;
           }
           .a4-print-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 8px;
-            margin-bottom: 12px;
+            width: 100% !important;
+            border-collapse: collapse !important;
+            margin-top: 8px !important;
+            margin-bottom: 14px !important;
             font-size: ${fontConfig.bodyFont} !important;
           }
           .a4-print-table th, .a4-print-table td {
             border: 1px solid #000000 !important;
             padding: ${fontConfig.tablePaddingIframe} !important;
-            text-align: left;
-            vertical-align: middle;
+            vertical-align: middle !important;
             color: #000000 !important;
             background-color: #ffffff !important;
           }
           .a4-print-table th {
             background-color: #f1f5f9 !important;
-            font-weight: bold;
-            text-align: center;
-            text-transform: uppercase;
-            font-size: calc(${fontConfig.bodyFont} - 0.5pt);
+            font-weight: bold !important;
+            text-align: center !important;
+            text-transform: uppercase !important;
+          }
+          .a4-print-table tr {
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+          }
+          .a4-print-table thead {
+            display: table-header-group !important;
           }
           .a4-signature-block {
-            margin-top: 20px;
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            font-size: calc(${fontConfig.bodyFont} + 0.5pt);
+            margin-top: 24px !important;
+            padding-top: 18px !important;
+            border-top: 2px solid #000000 !important;
+            display: flex !important;
+            justify-content: space-between !important;
+            align-items: flex-start !important;
+            font-size: calc(${fontConfig.bodyFont} + 0.5pt) !important;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
           }
-          .text-center { text-align: center; }
-          .flex { display: flex; }
-          .justify-between { justify-content: space-between; }
-          .items-center { align-items: center; }
-          .font-bold { font-weight: bold; }
-          .font-black { font-weight: 900; }
-          .uppercase { text-transform: uppercase; }
-          .underline { text-decoration: underline; }
-          .italic { font-style: italic; }
-          .font-mono { font-family: monospace; }
-          .w-20 { width: 75px; }
-          .h-20 { height: 75px; }
-          .max-w-full { max-width: 100%; }
-          .max-h-full { max-height: 100%; }
-          .object-contain { object-fit: contain; }
-          .shrink-0 { flex-shrink: 0; }
-          .flex-1 { flex: 1; }
-          .space-y-0.5 > * + * { margin-top: 2px; }
-          .border-t-2 { border-top: 2px solid #000000; }
+          .ttd-col {
+            text-align: center !important;
+            min-width: 240px !important;
+            padding: 0 12px !important;
+          }
+          .ttd-label {
+            white-space: pre-line !important;
+            line-height: 1.5 !important;
+            font-weight: 600 !important;
+          }
+          .ttd-signature-space {
+            display: block !important;
+            height: 90px !important;
+            min-height: 90px !important;
+            line-height: 90px !important;
+            width: 100% !important;
+          }
+          .ttd-name {
+            font-weight: bold !important;
+            text-decoration: underline !important;
+            font-size: calc(${fontConfig.bodyFont} + 1.5pt) !important;
+          }
+          .ttd-nip {
+            font-family: monospace !important;
+            font-size: calc(${fontConfig.bodyFont} - 0.5pt) !important;
+            font-weight: 500 !important;
+            margin-top: 2px !important;
+          }
         </style>
       </head>
       <body>
@@ -577,17 +662,27 @@ export const AdminReports: React.FC = () => {
       </html>
     `;
 
+    let hasTriggeredPrint = false;
+    const triggerIframePrint = () => {
+      if (hasTriggeredPrint) return;
+      hasTriggeredPrint = true;
+      setTimeout(() => {
+        iframe.contentWindow?.focus();
+        iframe.contentWindow?.print();
+        setTimeout(() => {
+          try { document.body.removeChild(iframe); } catch {}
+        }, 1500);
+      }, 150);
+    };
+
+    iframe.onload = triggerIframePrint;
+
     doc.open();
     doc.write(docHtml);
     doc.close();
 
-    setTimeout(() => {
-      iframe.contentWindow?.focus();
-      iframe.contentWindow?.print();
-      setTimeout(() => {
-        try { document.body.removeChild(iframe); } catch {}
-      }, 1000);
-    }, 250);
+    // Fallback in case onload does not fire in certain environments
+    setTimeout(triggerIframePrint, 500);
   };
 
   // Distinct schools
@@ -770,7 +865,7 @@ export const AdminReports: React.FC = () => {
             </>
           )}
 
-          {(reportType === 'harian' || reportType === 'mingguan') && (
+          {(reportType === 'harian') && (
             <div className="flex items-center gap-2">
               <label className="text-slate-400">Pilih Tanggal:</label>
               <input
@@ -779,6 +874,64 @@ export const AdminReports: React.FC = () => {
                 onChange={(e) => setSelectedDate(e.target.value)}
                 className="bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1.5 text-white font-mono focus:outline-none focus:border-cyan-500"
               />
+            </div>
+          )}
+
+          {(reportType === 'mingguan') && (
+            <div className="flex flex-wrap items-center gap-2.5">
+              <div className="flex items-center gap-2">
+                <label className="text-slate-400 flex items-center gap-1">
+                  <Calendar className="w-3.5 h-3.5 text-cyan-400" />
+                  Periode Tanggal:
+                </label>
+                <input
+                  type="date"
+                  value={weekStartDate}
+                  onChange={(e) => setWeekStartDate(e.target.value)}
+                  className="bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1.5 text-white font-mono focus:outline-none focus:border-cyan-500"
+                  title="Tanggal awal periode mingguan"
+                />
+              </div>
+              <span className="text-slate-400 font-semibold">s/d</span>
+              <div className="flex items-center gap-2">
+                <input
+                  type="date"
+                  value={weekEndDate}
+                  onChange={(e) => setWeekEndDate(e.target.value)}
+                  className="bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1.5 text-white font-mono focus:outline-none focus:border-cyan-500"
+                  title="Tanggal akhir periode mingguan"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  const today = getJakartaDate();
+                  setWeekStartDate(getOffsetDate(today, -6));
+                  setWeekEndDate(today);
+                }}
+                className="px-2.5 py-1.5 rounded-xl bg-slate-950 hover:bg-slate-800 border border-slate-800 text-cyan-300 text-[11px] font-semibold transition cursor-pointer"
+                title="Setel otomatis 7 hari terakhir hingga hari ini"
+              >
+                7 Hari Terakhir
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const today = getJakartaDate();
+                  const [y, m, d] = today.split('-').map(Number);
+                  const dt = new Date(y, m - 1, d);
+                  const dayOfWeek = dt.getDay(); // 0=Sun, 1=Mon...
+                  const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+                  const monday = getOffsetDate(today, diffToMonday);
+                  const saturday = getOffsetDate(monday, 5);
+                  setWeekStartDate(monday);
+                  setWeekEndDate(saturday);
+                }}
+                className="px-2.5 py-1.5 rounded-xl bg-slate-950 hover:bg-slate-800 border border-slate-800 text-cyan-300 text-[11px] font-semibold transition cursor-pointer"
+                title="Setel otomatis Senin sampai Sabtu minggu ini"
+              >
+                Minggu Ini (Sen–Sab)
+              </button>
             </div>
           )}
 
@@ -946,7 +1099,15 @@ export const AdminReports: React.FC = () => {
                     REKAPITULASI LAPORAN PRESENSI SISWA PRAKTIK KERJA LAPANGAN (PKL)
                   </h4>
                   <p className="text-[11px] text-slate-800 font-semibold">
-                    Kompetensi Keahlian: Teknik Kendaraan Ringan (TKR) • Periode: {reportType.toUpperCase()} ({selectedTahun === 'all' ? 'Semua Tahun' : selectedTahun}) • Format Kertas: {paperSize} {paperOrientation.toUpperCase()}
+                    Kompetensi Keahlian: Teknik Kendaraan Ringan (TKR) • Periode:{' '}
+                    {reportType === 'mingguan'
+                      ? `MINGGUAN (${formatIndonesianDate(weekStartDate <= weekEndDate ? weekStartDate : weekEndDate)} s/d ${formatIndonesianDate(weekStartDate <= weekEndDate ? weekEndDate : weekStartDate)})`
+                      : reportType === 'harian'
+                      ? `HARIAN (${formatIndonesianDate(selectedDate)})`
+                      : reportType === 'bulanan'
+                      ? `BULANAN (${selectedMonth === 'all' ? 'Semua Bulan' : getMonthName(selectedMonth)} ${selectedYear === 'all' ? '' : selectedYear})`
+                      : reportType.toUpperCase()}{' '}
+                    ({selectedTahun === 'all' ? 'Semua Tahun Ajaran' : `TA ${selectedTahun}`}) • Format Kertas: {paperSize} {paperOrientation.toUpperCase()}
                   </p>
                 </div>
               </div>
@@ -972,11 +1133,11 @@ export const AdminReports: React.FC = () => {
                   <th className={`${getTableFontCss(tableFontSize).cellPadding} font-bold text-center border border-slate-950`}>NIS</th>
                   <th className={`${getTableFontCss(tableFontSize).cellPadding} font-bold border border-slate-950`}>Nama Siswa</th>
                   <th className={`${getTableFontCss(tableFontSize).cellPadding} font-bold text-center border border-slate-950`}>Kelas</th>
-                  <th className={`${getTableFontCss(tableFontSize).cellPadding} font-bold border border-slate-950`}>Guru Pembimbing</th>
                   <th className={`${getTableFontCss(tableFontSize).cellPadding} font-bold border border-slate-950`}>Tempat PKL / Bengkel</th>
-                  <th className={`${getTableFontCss(tableFontSize).cellPadding} font-bold text-center border border-slate-950`}>Datang</th>
-                  <th className={`${getTableFontCss(tableFontSize).cellPadding} font-bold text-center border border-slate-950`}>Pulang</th>
-                  <th className={`${getTableFontCss(tableFontSize).cellPadding} font-bold text-center border border-slate-950`}>Status</th>
+                  <th className={`${getTableFontCss(tableFontSize).cellPadding} font-bold text-center border border-slate-950`}>Jam Datang</th>
+                  <th className={`${getTableFontCss(tableFontSize).cellPadding} font-bold text-center border border-slate-950`}>Status Datang</th>
+                  <th className={`${getTableFontCss(tableFontSize).cellPadding} font-bold text-center border border-slate-950`}>Jam Pulang</th>
+                  <th className={`${getTableFontCss(tableFontSize).cellPadding} font-bold text-center border border-slate-950`}>Status Pulang</th>
                   <th className={`${getTableFontCss(tableFontSize).cellPadding} font-bold text-center border border-slate-950`}>Titik GPS</th>
                   <th className={`${getTableFontCss(tableFontSize).cellPadding} font-bold border border-slate-950`}>Catatan / Aktivitas PKL</th>
                 </tr>
@@ -989,34 +1150,39 @@ export const AdminReports: React.FC = () => {
                     </td>
                   </tr>
                 ) : (
-                  filteredData.map((row, idx) => (
-                    <tr key={row.id} className="hover:bg-slate-50 print:hover:bg-transparent border border-slate-950">
-                      <td className={`${getTableFontCss(tableFontSize).cellPadding} text-center font-mono text-slate-700 border border-slate-950`}>{idx + 1}</td>
-                      <td className={`${getTableFontCss(tableFontSize).cellPadding} text-center whitespace-nowrap font-mono border border-slate-950`}>{row.tanggal}</td>
-                      <td className={`${getTableFontCss(tableFontSize).cellPadding} text-center font-mono text-slate-900 font-semibold border border-slate-950`}>{row.nis}</td>
-                      <td className={`${getTableFontCss(tableFontSize).cellPadding} font-bold text-slate-950 border border-slate-950`}>{row.namaSiswa}</td>
-                      <td className={`${getTableFontCss(tableFontSize).cellPadding} text-center font-semibold text-slate-900 border border-slate-950`}>
-                        {row.kelas || allStudents.find(s => s.nis === row.nis)?.kelas || 'XII TKR'}
-                      </td>
-                      <td className={`${getTableFontCss(tableFontSize).cellPadding} text-slate-900 font-medium border border-slate-950`}>
-                        {row.namaPembimbing || allStudents.find(s => s.nis === row.nis)?.namaPembimbing || '-'}
-                      </td>
-                      <td className={`${getTableFontCss(tableFontSize).cellPadding} text-slate-900 font-medium border border-slate-950`}>{row.tempatPkl}</td>
-                      <td className={`${getTableFontCss(tableFontSize).cellPadding} font-mono text-slate-950 font-bold text-center border border-slate-950`}>{row.jamDatang}</td>
-                      <td className={`${getTableFontCss(tableFontSize).cellPadding} font-mono text-slate-950 font-bold text-center border border-slate-950`}>{row.jamPulang || '-'}</td>
-                      <td className={`${getTableFontCss(tableFontSize).cellPadding} text-center border border-slate-950`}>
-                        <span className="font-semibold text-slate-950">
-                          {row.status}
-                        </span>
-                      </td>
-                      <td className={`${getTableFontCss(tableFontSize).cellPadding} font-mono text-slate-800 text-center whitespace-nowrap border border-slate-950`}>
-                        {row.koordinatGps ? row.koordinatGps.split(',')[0].trim().slice(0, 8) + '...' : '-'}
-                      </td>
-                      <td className={`${getTableFontCss(tableFontSize).cellPadding} text-slate-900 border border-slate-950`} title={row.keterangan}>
-                        {row.keterangan || '-'}
-                      </td>
-                    </tr>
-                  ))
+                  filteredData.map((row, idx) => {
+                    const { statusDatang, statusPulang } = getAttendanceSplitStatus(row);
+                    return (
+                      <tr key={row.id} className="hover:bg-slate-50 print:hover:bg-transparent border border-slate-950">
+                        <td className={`${getTableFontCss(tableFontSize).cellPadding} text-center font-mono text-slate-700 border border-slate-950`}>{idx + 1}</td>
+                        <td className={`${getTableFontCss(tableFontSize).cellPadding} text-center whitespace-nowrap font-mono border border-slate-950`}>{row.tanggal}</td>
+                        <td className={`${getTableFontCss(tableFontSize).cellPadding} text-center font-mono text-slate-900 font-semibold border border-slate-950`}>{row.nis}</td>
+                        <td className={`${getTableFontCss(tableFontSize).cellPadding} font-bold text-slate-950 border border-slate-950`}>{row.namaSiswa}</td>
+                        <td className={`${getTableFontCss(tableFontSize).cellPadding} text-center font-semibold text-slate-900 border border-slate-950`}>
+                          {row.kelas || allStudents.find(s => s.nis === row.nis)?.kelas || 'XII TKR'}
+                        </td>
+                        <td className={`${getTableFontCss(tableFontSize).cellPadding} text-slate-900 font-medium border border-slate-950`}>{row.tempatPkl}</td>
+                        <td className={`${getTableFontCss(tableFontSize).cellPadding} font-mono text-slate-950 font-bold text-center border border-slate-950`}>{row.jamDatang}</td>
+                        <td className={`${getTableFontCss(tableFontSize).cellPadding} text-center border border-slate-950`}>
+                          <span className="font-semibold text-slate-950">
+                            {statusDatang}
+                          </span>
+                        </td>
+                        <td className={`${getTableFontCss(tableFontSize).cellPadding} font-mono text-slate-950 font-bold text-center border border-slate-950`}>{row.jamPulang || '-'}</td>
+                        <td className={`${getTableFontCss(tableFontSize).cellPadding} text-center border border-slate-950`}>
+                          <span className="font-semibold text-slate-950">
+                            {statusPulang}
+                          </span>
+                        </td>
+                        <td className={`${getTableFontCss(tableFontSize).cellPadding} font-mono text-slate-800 text-center whitespace-nowrap border border-slate-950`}>
+                          {row.koordinatGps ? row.koordinatGps.split(',')[0].trim().slice(0, 8) + '...' : '-'}
+                        </td>
+                        <td className={`${getTableFontCss(tableFontSize).cellPadding} text-slate-900 border border-slate-950`} title={row.keterangan}>
+                          {row.keterangan || '-'}
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
@@ -1026,27 +1192,31 @@ export const AdminReports: React.FC = () => {
           {kopConfig.showTtd && (
             <div className="a4-signature-block pt-6 border-t-2 border-slate-950 flex justify-between items-start text-xs text-slate-950">
               {/* Tanda Tangan Kiri: Sekretaris Jurusan TKR */}
-              <div className="text-center min-w-[240px]">
-                <p className="text-slate-900 whitespace-pre-line leading-relaxed font-semibold">
+              <div className="ttd-col text-center min-w-[240px]">
+                <p className="ttd-label text-slate-900 whitespace-pre-line leading-relaxed font-semibold">
                   {kopConfig.ttdKiriLabel}
                 </p>
-                <div className="h-16 print:h-20" /> {/* Area Tanda Tangan Fisik */}
+                <div className="ttd-signature-space h-24 print:h-24 select-none" aria-hidden="true">
+                  &nbsp;
+                </div>
                 <div>
-                  <p className="font-bold underline text-slate-950 text-sm">{kopConfig.ttdKiriNama}</p>
-                  <p className="text-[11px] text-slate-800 font-mono font-medium">{kopConfig.ttdKiriJabatan}</p>
+                  <p className="ttd-name font-bold underline text-slate-950 text-sm">{kopConfig.ttdKiriNama}</p>
+                  <p className="ttd-nip text-[11px] text-slate-800 font-mono font-medium">{kopConfig.ttdKiriJabatan}</p>
                 </div>
               </div>
 
               {/* Tanda Tangan Kanan: Kepala Program Keahlian TKR */}
-              <div className="text-center min-w-[240px]">
-                <p className="text-slate-900 leading-relaxed font-semibold">
+              <div className="ttd-col text-center min-w-[240px]">
+                <p className="ttd-label text-slate-900 leading-relaxed font-semibold">
                   {kopConfig.ttdKananKota}, {formatIndonesianDate(getJakartaDate())}<br />
                   {kopConfig.ttdKananLabel}
                 </p>
-                <div className="h-16 print:h-20" /> {/* Area Tanda Tangan Fisik */}
+                <div className="ttd-signature-space h-24 print:h-24 select-none" aria-hidden="true">
+                  &nbsp;
+                </div>
                 <div>
-                  <p className="font-bold underline text-slate-950 text-sm">{kopConfig.ttdKananNama}</p>
-                  <p className="text-[11px] text-slate-800 font-mono font-medium">{kopConfig.ttdKananNip}</p>
+                  <p className="ttd-name font-bold underline text-slate-950 text-sm">{kopConfig.ttdKananNama}</p>
+                  <p className="ttd-nip text-[11px] text-slate-800 font-mono font-medium">{kopConfig.ttdKananNip}</p>
                 </div>
               </div>
             </div>
