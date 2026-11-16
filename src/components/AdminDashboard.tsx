@@ -29,7 +29,6 @@ interface AdminDashboardProps {
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigateTab, onOpenGoogleSheetConfig }) => {
-  const currentUser = StorageService.getCurrentUser();
   const [allUsers, setAllUsers] = useState<User[]>(() => StorageService.getUsers().filter(u => u.role === 'siswa'));
   const [allAttendance, setAllAttendance] = useState<AttendanceRecord[]>(() => StorageService.getAttendance());
   const [isSyncing, setIsSyncing] = useState(false);
@@ -107,36 +106,37 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigateTab, o
       
       {/* Toast Alert */}
       {syncToast && (
-        <div className="p-3.5 rounded-2xl bg-emerald-950/90 border border-emerald-500/40 text-emerald-200 text-xs flex items-center justify-between shadow-xl animate-in fade-in">
+        <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs flex items-center justify-between shadow-sm animate-in fade-in">
           <div className="flex items-center gap-2.5">
-            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-            <span>{syncToast}</span>
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span className="font-medium">{syncToast}</span>
           </div>
-          <button onClick={() => setSyncToast(null)} className="text-slate-400 hover:text-white text-xs">✕</button>
+          <button onClick={() => setSyncToast(null)} className="text-slate-500 hover:text-slate-900 text-xs px-1.5 py-0.5 rounded cursor-pointer">✕</button>
         </div>
       )}
 
       {/* Header Info Banner */}
-      <div className="p-6 rounded-3xl bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 border border-blue-500/30 flex flex-col lg:flex-row lg:items-center justify-between gap-5 shadow-xl">
-        <div className="space-y-1.5">
+      <div className="p-6 rounded-3xl bg-white border border-slate-200 flex flex-col lg:flex-row lg:items-center justify-between gap-5 shadow-sm relative overflow-hidden">
+        <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-red-600 via-amber-500 via-blue-600 to-emerald-600" />
+        <div className="space-y-1.5 pt-1">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-500/20 text-cyan-300 border border-blue-500/30">
+            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
               Panel Pengawas & Koordinator PKL
             </span>
-            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 flex items-center gap-1">
-              <UserCheck className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-              <span>Pembimbing: <strong className="text-white">{currentUser?.nama || 'Drs. Bambang Sutrisno, M.Pd'}</strong></span>
+            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-50 text-amber-800 border border-amber-200 flex items-center gap-1">
+              <ShieldCheck className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+              <span>Administrator PKL TKR</span>
             </span>
-            <span className="text-xs text-slate-400 font-mono">
+            <span className="text-xs text-slate-600 font-mono font-medium">
               {formatIndonesianDate(todayDate)}
             </span>
           </div>
 
-          <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight">
+          <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
             Monitoring Kehadiran Siswa PKL Hari Ini (Real-Time Cloud)
           </h2>
 
-          <p className="text-xs text-slate-300 max-w-2xl leading-relaxed">
+          <p className="text-xs text-slate-600 max-w-2xl leading-relaxed">
             Data presensi dari seluruh siswa di berbagai bengkel & instansi PKL disinkronisasikan otomatis via Google Spreadsheet.
           </p>
         </div>
@@ -145,7 +145,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigateTab, o
           <button
             onClick={() => handleCloudSync(true)}
             disabled={isSyncing}
-            className="px-3.5 py-2.5 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold rounded-xl text-xs flex items-center gap-2 shadow-lg transition cursor-pointer disabled:opacity-50"
+            className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs flex items-center gap-2 shadow-sm transition cursor-pointer disabled:opacity-50"
             title="Tarik data presensi terbaru yang baru saja dikirim siswa dari HP mereka"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
@@ -156,38 +156,38 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigateTab, o
             onClick={onOpenGoogleSheetConfig}
             className={`px-3.5 py-2.5 rounded-xl text-xs font-semibold flex items-center gap-2 border transition cursor-pointer ${
               sheetConfig.connected || sheetConfig.scriptUrl
-                ? 'bg-emerald-950/60 border-emerald-500/40 text-emerald-300 hover:bg-emerald-900/60'
-                : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700'
+                ? 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100'
+                : 'bg-slate-50 border-slate-300 text-slate-700 hover:bg-slate-100'
             }`}
           >
-            <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
+            <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
             <span>Google Spreadsheet</span>
-            <span className={`w-2 h-2 rounded-full ${sheetConfig.connected ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
+            <span className={`w-2 h-2 rounded-full ${sheetConfig.connected ? 'bg-emerald-500' : 'bg-amber-500'}`} />
           </button>
         </div>
       </div>
 
       {/* WHATSAPP SHARE CARD FOR STUDENTS (AUTO-CONNECT MULTI-USER) */}
-      <div className="p-4 sm:p-5 rounded-3xl bg-slate-900 border border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="p-4 sm:p-5 rounded-3xl bg-white border border-emerald-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="space-y-1">
           <div className="flex items-center gap-2">
-            <span className="w-7 h-7 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold text-xs">
+            <span className="w-7 h-7 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-600 flex items-center justify-center font-bold text-xs">
               <Share2 className="w-4 h-4" />
             </span>
-            <h3 className="text-xs sm:text-sm font-bold text-white">
+            <h3 className="text-xs sm:text-sm font-bold text-slate-900">
               Tautan Presensi Siswa (Sudah Otomatis Terhubung Google Spreadsheet)
             </h3>
           </div>
-          <p className="text-[11px] text-slate-400 max-w-2xl leading-relaxed">
-            Kirimkan tautan ini ke grup WhatsApp siswa PKL. Siswa yang membuka tautan ini di HP mereka akan <strong>langsung terhubung ke Google Spreadsheet sekolah tanpa perlu pengaturan apa pun</strong>.
+          <p className="text-[11px] text-slate-600 max-w-2xl leading-relaxed">
+            Kirimkan tautan ini ke grup WhatsApp siswa PKL. Siswa yang membuka tautan ini di HP mereka akan <strong className="text-slate-900">langsung terhubung ke Google Spreadsheet sekolah tanpa perlu pengaturan apa pun</strong>.
           </p>
         </div>
 
         <button
           onClick={handleCopyWhatsAppText}
-          className="px-4 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-950/50 transition cursor-pointer shrink-0"
+          className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-2 shadow-sm transition cursor-pointer shrink-0"
         >
-          {copiedLink ? <Check className="w-4 h-4 text-emerald-200" /> : <Copy className="w-4 h-4" />}
+          {copiedLink ? <Check className="w-4 h-4 text-emerald-100" /> : <Copy className="w-4 h-4" />}
           <span>{copiedLink ? 'Tersalin untuk WhatsApp!' : 'Salin Pesan & Link WhatsApp'}</span>
         </button>
       </div>
@@ -195,61 +195,61 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigateTab, o
       {/* 5 Main Stat Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5">
         
-        <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 space-y-2">
+        <div className="p-4 rounded-2xl bg-white border border-blue-200 shadow-sm space-y-2">
           <div className="flex items-center justify-between">
-            <span className="text-xs text-slate-400 font-medium">Total Siswa PKL</span>
-            <div className="w-8 h-8 rounded-xl bg-blue-500/10 text-cyan-400 flex items-center justify-center">
+            <span className="text-xs text-slate-600 font-medium">Total Siswa PKL</span>
+            <div className="w-8 h-8 rounded-xl bg-blue-50 border border-blue-200 text-blue-600 flex items-center justify-center">
               <Users className="w-4 h-4" />
             </div>
           </div>
-          <div className="text-2xl font-bold font-mono text-white">{totalStudents}</div>
+          <div className="text-2xl font-bold font-mono tabular-nums text-slate-900">{totalStudents}</div>
           <p className="text-[10px] text-slate-500">Terdaftar di database</p>
         </div>
 
-        <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 space-y-2">
+        <div className="p-4 rounded-2xl bg-white border border-emerald-200 shadow-sm space-y-2">
           <div className="flex items-center justify-between">
-            <span className="text-xs text-slate-400 font-medium">Sudah Hadir</span>
-            <div className="w-8 h-8 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center">
+            <span className="text-xs text-slate-600 font-medium">Sudah Hadir</span>
+            <div className="w-8 h-8 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-600 flex items-center justify-center">
               <UserCheck className="w-4 h-4" />
             </div>
           </div>
-          <div className="text-2xl font-bold font-mono text-emerald-400">{hadirHariIni}</div>
-          <p className="text-[10px] text-emerald-500/90 font-medium">Tercatat datang hari ini</p>
+          <div className="text-2xl font-bold font-mono tabular-nums text-emerald-700">{hadirHariIni}</div>
+          <p className="text-[10px] text-emerald-700 font-medium">Tercatat datang hari ini</p>
         </div>
 
-        <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 space-y-2">
+        <div className="p-4 rounded-2xl bg-white border border-amber-200 shadow-sm space-y-2">
           <div className="flex items-center justify-between">
-            <span className="text-xs text-slate-400 font-medium">Belum Presensi</span>
-            <div className="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center">
+            <span className="text-xs text-slate-600 font-medium">Belum Presensi</span>
+            <div className="w-8 h-8 rounded-xl bg-amber-50 border border-amber-200 text-amber-600 flex items-center justify-center">
               <UserX className="w-4 h-4" />
             </div>
           </div>
-          <div className="text-2xl font-bold font-mono text-amber-400">{belumPresensi}</div>
-          <p className="text-[10px] text-amber-500/90 font-medium">Menunggu presensi datang</p>
+          <div className="text-2xl font-bold font-mono tabular-nums text-amber-600">{belumPresensi}</div>
+          <p className="text-[10px] text-amber-700 font-medium">Menunggu presensi datang</p>
         </div>
 
-        <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 space-y-2">
+        <div className="p-4 rounded-2xl bg-white border border-red-200 shadow-sm space-y-2">
           <div className="flex items-center justify-between">
-            <span className="text-xs text-slate-400 font-medium">Sudah Pulang</span>
-            <div className="w-8 h-8 rounded-xl bg-purple-500/10 text-purple-400 flex items-center justify-center">
+            <span className="text-xs text-slate-600 font-medium">Sudah Pulang</span>
+            <div className="w-8 h-8 rounded-xl bg-red-50 border border-red-200 text-red-600 flex items-center justify-center">
               <LogOut className="w-4 h-4" />
             </div>
           </div>
-          <div className="text-2xl font-bold font-mono text-purple-400">{sudahPulang}</div>
-          <p className="text-[10px] text-purple-500/90 font-medium">Presensi pulang selesai</p>
+          <div className="text-2xl font-bold font-mono tabular-nums text-red-600">{sudahPulang}</div>
+          <p className="text-[10px] text-red-700 font-medium">Presensi pulang selesai</p>
         </div>
 
-        <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 space-y-2 col-span-2 sm:col-span-1">
+        <div className="p-4 rounded-2xl bg-white border border-blue-200 shadow-sm space-y-2 col-span-2 sm:col-span-1">
           <div className="flex items-center justify-between">
-            <span className="text-xs text-slate-400 font-medium">Tingkat Kehadiran</span>
-            <div className="w-8 h-8 rounded-xl bg-cyan-500/10 text-cyan-400 flex items-center justify-center">
+            <span className="text-xs text-slate-600 font-medium">Tingkat Kehadiran</span>
+            <div className="w-8 h-8 rounded-xl bg-blue-50 border border-blue-200 text-blue-600 flex items-center justify-center">
               <Percent className="w-4 h-4" />
             </div>
           </div>
-          <div className="text-2xl font-bold font-mono text-cyan-400">{persentaseKehadiran}%</div>
-          <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
+          <div className="text-2xl font-bold font-mono tabular-nums text-blue-700">{persentaseKehadiran}%</div>
+          <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden border border-slate-200">
             <div 
-              className="bg-cyan-400 h-full rounded-full transition-all" 
+              className="bg-gradient-to-r from-blue-600 to-emerald-500 h-full rounded-full transition-all" 
               style={{ width: `${persentaseKehadiran}%` }} 
             />
           </div>
@@ -258,28 +258,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigateTab, o
       </div>
 
       {/* Real-time Today Attendance Activity Feed */}
-      <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-4">
-        <div className="flex items-center justify-between">
+      <div className="p-5 rounded-2xl bg-white border border-slate-200 shadow-sm space-y-4">
+        <div className="flex items-center justify-between gap-2">
           <div>
-            <h3 className="text-sm font-bold text-white flex items-center gap-2">
-              <Clock className="w-4 h-4 text-cyan-400" />
+            <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+              <Clock className="w-4 h-4 text-blue-600" />
               Presensi Siswa Hari Ini ({todayRecords.length} Catatan)
             </h3>
-            <p className="text-xs text-slate-400 mt-0.5">
+            <p className="text-xs text-slate-500 mt-0.5">
               Urutan presensi terbaru yang tercatat di instansi/perusahaan tempat PKL
             </p>
           </div>
 
           <button
             onClick={() => onNavigateTab('attendance')}
-            className="text-xs text-cyan-400 hover:text-cyan-300 font-semibold flex items-center gap-1 transition"
+            className="text-xs text-blue-700 hover:text-blue-800 font-semibold flex items-center gap-1 transition cursor-pointer shrink-0"
           >
             Semua Data Absensi &rarr;
           </button>
         </div>
 
         {todayRecords.length === 0 ? (
-          <div className="p-8 text-center rounded-xl bg-slate-950 border border-slate-800/80 text-slate-500 text-xs">
+          <div className="p-8 text-center rounded-xl bg-slate-50 border border-slate-200 text-slate-500 text-xs">
             Belum ada siswa yang melakukan presensi hari ini.
           </div>
         ) : (
@@ -289,24 +289,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigateTab, o
               return (
               <div 
                 key={item.id}
-                className="p-3.5 rounded-xl bg-slate-950 border border-slate-800/80 hover:border-slate-700 flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition"
+                className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 hover:border-blue-300 flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition"
               >
                 <div className="flex items-center gap-3">
                   <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-xs font-bold text-white shrink-0 ${
-                    statusDatang === 'Hadir' ? 'bg-emerald-600' : 'bg-amber-600'
+                    statusDatang === 'Hadir' ? 'bg-emerald-600' : statusDatang === 'Terlambat' ? 'bg-amber-500' : 'bg-red-600'
                   }`}>
                     {item.namaSiswa.slice(0, 2).toUpperCase()}
                   </div>
                   <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="font-bold text-white text-xs truncate">{item.namaSiswa}</p>
-                      <span className="text-[10px] font-mono text-slate-400">({item.nis})</span>
-                      <span className="text-[10px] px-1.5 py-0.2 rounded font-semibold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-bold text-slate-900 text-xs truncate">{item.namaSiswa}</p>
+                      <span className="text-[10px] font-mono text-slate-500">({item.nis})</span>
+                      <span className="text-[10px] px-1.5 py-0.2 rounded font-semibold bg-blue-50 text-blue-700 border border-blue-200">
                         {item.kelas || 'XII TKR 1'}
                       </span>
                     </div>
-                    <p className="text-[11px] text-slate-400 truncate mt-0.5">
-                      {item.jurusan} • <span className="text-slate-300 font-medium">{item.tempatPkl}</span>
+                    <p className="text-[11px] text-slate-600 truncate mt-0.5">
+                      {item.jurusan} • <span className="text-slate-800 font-medium">{item.tempatPkl}</span>
                     </p>
                   </div>
                 </div>
@@ -314,31 +314,31 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigateTab, o
                 <div className="flex flex-wrap items-center gap-3 shrink-0 self-end sm:self-auto text-xs">
                   <div className="text-right">
                     <span className="text-[10px] text-slate-500 block">Jam Masuk</span>
-                    <span className="font-mono font-bold text-emerald-400">{item.jamDatang} WIB</span>
+                    <span className="font-mono tabular-nums font-bold text-emerald-700">{item.jamDatang} WIB</span>
                   </div>
 
                   <div className="text-right">
                     <span className="text-[10px] text-slate-500 block">Jam Pulang</span>
-                    <span className="font-mono font-bold text-cyan-400">
+                    <span className="font-mono tabular-nums font-bold text-blue-700">
                       {item.jamPulang && item.jamPulang !== '-' ? `${item.jamPulang} WIB` : '-'}
                     </span>
                   </div>
 
-                  <div className="flex items-center gap-1.5">
-                    <span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className={`px-2 py-0.5 rounded-lg text-[10px] font-semibold border ${
                       statusDatang === 'Hadir' 
-                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' 
+                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
                         : statusDatang === 'Terlambat'
-                        ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
-                        : 'bg-red-500/20 text-red-300 border border-red-500/30'
+                        ? 'bg-amber-50 text-amber-800 border-amber-200'
+                        : 'bg-red-50 text-red-700 border-red-200'
                     }`}>
                       Datang: {statusDatang}
                     </span>
 
-                    <span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
+                    <span className={`px-2 py-0.5 rounded-lg text-[10px] font-semibold border ${
                       statusPulang === 'Sudah Pulang'
-                        ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'
-                        : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                        ? 'bg-blue-50 text-blue-700 border-blue-200'
+                        : 'bg-amber-50 text-amber-800 border-amber-200'
                     }`}>
                       Pulang: {statusPulang}
                     </span>

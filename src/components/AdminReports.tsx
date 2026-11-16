@@ -693,17 +693,17 @@ export const AdminReports: React.FC = () => {
       
       {/* Toast Alert */}
       {toastMsg && (
-        <div className="p-3.5 rounded-xl bg-emerald-950/90 border border-emerald-500/40 text-emerald-200 text-xs flex items-center gap-2 animate-in fade-in print:hidden">
-          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+        <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-medium flex items-center gap-2 shadow-sm print:hidden">
+          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
           <span>{toastMsg}</span>
         </div>
       )}
 
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-4 print:hidden">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 pb-4 print:hidden">
         <div>
-          <h2 className="text-lg font-bold text-white">Laporan & Rekapitulasi Presensi PKL</h2>
-          <p className="text-xs text-slate-400">
+          <h2 className="text-lg font-bold text-slate-900">Laporan & Rekapitulasi Presensi PKL</h2>
+          <p className="text-xs text-slate-600">
             Ekspor rekap kehadiran siswa dalam format Excel (.xlsx) atau Cetak / Simpan PDF
           </p>
         </div>
@@ -717,16 +717,16 @@ export const AdminReports: React.FC = () => {
               setTempKopConfig({ ...DEFAULT_REPORT_CONFIG, ...current, ...kopConfig });
               setShowKopModal(true);
             }}
-            className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-cyan-300 hover:text-white border border-slate-700 font-semibold rounded-xl text-xs flex items-center gap-2 transition cursor-pointer shadow-sm"
+            className="px-3.5 py-2 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 font-bold rounded-xl text-xs flex items-center gap-2 transition cursor-pointer shadow-sm"
             title="Ubah teks kop surat laporan dan nama penandatangan"
           >
-            <Settings2 className="w-4 h-4 text-cyan-400" />
+            <Settings2 className="w-4 h-4 text-amber-600" />
             <span>Atur Kop & TTD</span>
           </button>
 
           <button
             onClick={handleExportExcel}
-            className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs flex items-center gap-2 shadow-lg shadow-emerald-600/20 transition cursor-pointer"
+            className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs flex items-center gap-2 shadow-sm transition cursor-pointer"
           >
             <FileSpreadsheet className="w-4 h-4" />
             Download Excel (.xlsx)
@@ -734,7 +734,7 @@ export const AdminReports: React.FC = () => {
 
           <button
             onClick={() => setShowPrintModal(true)}
-            className="px-3.5 py-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold rounded-xl text-xs flex items-center gap-2 shadow-lg shadow-cyan-600/20 transition cursor-pointer"
+            className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs flex items-center gap-2 shadow-sm transition cursor-pointer"
             title="Buka menu pengaturan ukuran kertas & cetak dokumen PDF"
           >
             <Printer className="w-4 h-4" />
@@ -744,64 +744,65 @@ export const AdminReports: React.FC = () => {
       </div>
 
       {/* Report Type Selector Tabs (Hidden on Print) */}
-      <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 space-y-3 print:hidden">
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-            <Filter className="w-4 h-4 text-cyan-400" />
+      <div className="p-4 sm:p-5 rounded-2xl bg-white border border-slate-200 shadow-sm space-y-3 print:hidden relative overflow-hidden">
+        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-red-600 via-amber-500 via-blue-600 to-emerald-600" />
+        <div className="flex items-center justify-between pt-0.5">
+          <span className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+            <Filter className="w-4 h-4 text-blue-600" />
             Pilih Tipe Laporan:
           </span>
-          <span className="text-xs text-slate-400">
-            Ditemukan <strong className="text-white">{filteredData.length}</strong> catatan
+          <span className="text-xs text-slate-600">
+            Ditemukan <strong className="text-slate-900 font-bold">{filteredData.length}</strong> catatan
           </span>
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
           <button
             onClick={() => setReportType('bulanan')}
-            className={`py-2 px-3 rounded-xl font-semibold transition ${
+            className={`py-2 px-3 rounded-xl font-bold transition cursor-pointer ${
               reportType === 'bulanan'
-                ? 'bg-blue-600 text-white shadow-md'
-                : 'bg-slate-950 text-slate-400 hover:text-white border border-slate-800'
+                ? 'bg-blue-600 text-white shadow-sm'
+                : 'bg-slate-50 text-slate-700 hover:bg-slate-100 hover:text-slate-900 border border-slate-200'
             }`}
           >
             Laporan Bulanan
           </button>
           <button
             onClick={() => setReportType('harian')}
-            className={`py-2 px-3 rounded-xl font-semibold transition ${
+            className={`py-2 px-3 rounded-xl font-bold transition cursor-pointer ${
               reportType === 'harian'
-                ? 'bg-blue-600 text-white shadow-md'
-                : 'bg-slate-950 text-slate-400 hover:text-white border border-slate-800'
+                ? 'bg-emerald-600 text-white shadow-sm'
+                : 'bg-slate-50 text-slate-700 hover:bg-slate-100 hover:text-slate-900 border border-slate-200'
             }`}
           >
             Laporan Harian
           </button>
           <button
             onClick={() => setReportType('mingguan')}
-            className={`py-2 px-3 rounded-xl font-semibold transition ${
+            className={`py-2 px-3 rounded-xl font-bold transition cursor-pointer ${
               reportType === 'mingguan'
-                ? 'bg-blue-600 text-white shadow-md'
-                : 'bg-slate-950 text-slate-400 hover:text-white border border-slate-800'
+                ? 'bg-amber-500 text-white shadow-sm'
+                : 'bg-slate-50 text-slate-700 hover:bg-slate-100 hover:text-slate-900 border border-slate-200'
             }`}
           >
             Laporan Mingguan
           </button>
           <button
             onClick={() => setReportType('siswa')}
-            className={`py-2 px-3 rounded-xl font-semibold transition ${
+            className={`py-2 px-3 rounded-xl font-bold transition cursor-pointer ${
               reportType === 'siswa'
-                ? 'bg-blue-600 text-white shadow-md'
-                : 'bg-slate-950 text-slate-400 hover:text-white border border-slate-800'
+                ? 'bg-blue-600 text-white shadow-sm'
+                : 'bg-slate-50 text-slate-700 hover:bg-slate-100 hover:text-slate-900 border border-slate-200'
             }`}
           >
             Per Siswa
           </button>
           <button
             onClick={() => setReportType('sekolah')}
-            className={`py-2 px-3 rounded-xl font-semibold transition col-span-2 sm:col-span-1 ${
+            className={`py-2 px-3 rounded-xl font-bold transition col-span-2 sm:col-span-1 cursor-pointer ${
               reportType === 'sekolah'
-                ? 'bg-blue-600 text-white shadow-md'
-                : 'bg-slate-950 text-slate-400 hover:text-white border border-slate-800'
+                ? 'bg-red-600 text-white shadow-sm'
+                : 'bg-slate-50 text-slate-700 hover:bg-slate-100 hover:text-slate-900 border border-slate-200'
             }`}
           >
             Per Sekolah
@@ -809,17 +810,17 @@ export const AdminReports: React.FC = () => {
         </div>
 
         {/* Dynamic Context Filter Bar */}
-        <div className="pt-2 flex flex-wrap items-center gap-3 text-xs border-t border-slate-800/80">
+        <div className="pt-3 flex flex-wrap items-center gap-3 text-xs border-t border-slate-200">
           <div className="flex items-center gap-2">
-            <label className="text-slate-400">Tahun Ajaran:</label>
+            <label className="text-slate-600 font-semibold">Tahun Ajaran:</label>
             <select
               value={selectedTahun}
               onChange={(e) => setSelectedTahun(e.target.value)}
-              className="bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1.5 text-white font-mono focus:outline-none focus:border-cyan-500"
+              className="bg-white border border-slate-300 rounded-xl px-2.5 py-1.5 text-slate-900 font-mono focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20"
             >
-              <option value="all">Semua Periode</option>
+              <option value="all" className="bg-white text-slate-900">Semua Periode</option>
               {tahunConfig.daftarTahun.map((t) => (
-                <option key={t} value={t}>
+                <option key={t} value={t} className="bg-white text-slate-900">
                   {t} {t === tahunConfig.tahunAktif ? '(Aktif)' : ''}
                 </option>
               ))}
@@ -829,37 +830,37 @@ export const AdminReports: React.FC = () => {
           {(reportType === 'bulanan') && (
             <>
               <div className="flex items-center gap-2">
-                <label className="text-slate-400">Bulan:</label>
+                <label className="text-slate-600 font-semibold">Bulan:</label>
                 <select
                   value={selectedMonth}
                   onChange={(e) => setSelectedMonth(e.target.value)}
-                  className="bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1.5 text-white focus:outline-none focus:border-cyan-500"
+                  className="bg-white border border-slate-300 rounded-xl px-2.5 py-1.5 text-slate-900 focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20"
                 >
-                  <option value="all">Semua Bulan</option>
-                  <option value="01">Januari</option>
-                  <option value="02">Februari</option>
-                  <option value="03">Maret</option>
-                  <option value="04">April</option>
-                  <option value="05">Mei</option>
-                  <option value="06">Juni</option>
-                  <option value="07">Juli</option>
-                  <option value="08">Agustus</option>
-                  <option value="09">September</option>
-                  <option value="10">Oktober</option>
-                  <option value="11">November</option>
-                  <option value="12">Desember</option>
+                  <option value="all" className="bg-white text-slate-900">Semua Bulan</option>
+                  <option value="01" className="bg-white text-slate-900">Januari</option>
+                  <option value="02" className="bg-white text-slate-900">Februari</option>
+                  <option value="03" className="bg-white text-slate-900">Maret</option>
+                  <option value="04" className="bg-white text-slate-900">April</option>
+                  <option value="05" className="bg-white text-slate-900">Mei</option>
+                  <option value="06" className="bg-white text-slate-900">Juni</option>
+                  <option value="07" className="bg-white text-slate-900">Juli</option>
+                  <option value="08" className="bg-white text-slate-900">Agustus</option>
+                  <option value="09" className="bg-white text-slate-900">September</option>
+                  <option value="10" className="bg-white text-slate-900">Oktober</option>
+                  <option value="11" className="bg-white text-slate-900">November</option>
+                  <option value="12" className="bg-white text-slate-900">Desember</option>
                 </select>
               </div>
 
               <div className="flex items-center gap-2">
-                <label className="text-slate-400">Tahun:</label>
+                <label className="text-slate-600 font-semibold">Tahun:</label>
                 <select
                   value={selectedYear}
                   onChange={(e) => setSelectedYear(e.target.value)}
-                  className="bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1.5 text-white font-mono focus:outline-none focus:border-cyan-500"
+                  className="bg-white border border-slate-300 rounded-xl px-2.5 py-1.5 text-slate-900 font-mono focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20"
                 >
-                  <option value="2026">2026</option>
-                  <option value="2025">2025</option>
+                  <option value="2026" className="bg-white text-slate-900">2026</option>
+                  <option value="2025" className="bg-white text-slate-900">2025</option>
                 </select>
               </div>
             </>
@@ -867,12 +868,12 @@ export const AdminReports: React.FC = () => {
 
           {(reportType === 'harian') && (
             <div className="flex items-center gap-2">
-              <label className="text-slate-400">Pilih Tanggal:</label>
+              <label className="text-slate-600 font-semibold">Pilih Tanggal:</label>
               <input
                 type="date"
                 value={selectedDate}
                 onChange={(e) => setSelectedDate(e.target.value)}
-                className="bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1.5 text-white font-mono focus:outline-none focus:border-cyan-500"
+                className="bg-white border border-slate-300 rounded-xl px-2.5 py-1.5 text-slate-900 font-mono focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20"
               />
             </div>
           )}
@@ -880,25 +881,25 @@ export const AdminReports: React.FC = () => {
           {(reportType === 'mingguan') && (
             <div className="flex flex-wrap items-center gap-2.5">
               <div className="flex items-center gap-2">
-                <label className="text-slate-400 flex items-center gap-1">
-                  <Calendar className="w-3.5 h-3.5 text-cyan-400" />
+                <label className="text-slate-700 font-semibold flex items-center gap-1">
+                  <Calendar className="w-3.5 h-3.5 text-amber-600" />
                   Periode Tanggal:
                 </label>
                 <input
                   type="date"
                   value={weekStartDate}
                   onChange={(e) => setWeekStartDate(e.target.value)}
-                  className="bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1.5 text-white font-mono focus:outline-none focus:border-cyan-500"
+                  className="bg-white border border-slate-300 rounded-xl px-2.5 py-1.5 text-slate-900 font-mono focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20"
                   title="Tanggal awal periode mingguan"
                 />
               </div>
-              <span className="text-slate-400 font-semibold">s/d</span>
+              <span className="text-slate-600 font-bold">s/d</span>
               <div className="flex items-center gap-2">
                 <input
                   type="date"
                   value={weekEndDate}
                   onChange={(e) => setWeekEndDate(e.target.value)}
-                  className="bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1.5 text-white font-mono focus:outline-none focus:border-cyan-500"
+                  className="bg-white border border-slate-300 rounded-xl px-2.5 py-1.5 text-slate-900 font-mono focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20"
                   title="Tanggal akhir periode mingguan"
                 />
               </div>
@@ -909,7 +910,7 @@ export const AdminReports: React.FC = () => {
                   setWeekStartDate(getOffsetDate(today, -6));
                   setWeekEndDate(today);
                 }}
-                className="px-2.5 py-1.5 rounded-xl bg-slate-950 hover:bg-slate-800 border border-slate-800 text-cyan-300 text-[11px] font-semibold transition cursor-pointer"
+                className="px-2.5 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-700 text-[11px] font-bold transition cursor-pointer"
                 title="Setel otomatis 7 hari terakhir hingga hari ini"
               >
                 7 Hari Terakhir
@@ -927,7 +928,7 @@ export const AdminReports: React.FC = () => {
                   setWeekStartDate(monday);
                   setWeekEndDate(saturday);
                 }}
-                className="px-2.5 py-1.5 rounded-xl bg-slate-950 hover:bg-slate-800 border border-slate-800 text-cyan-300 text-[11px] font-semibold transition cursor-pointer"
+                className="px-2.5 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 text-[11px] font-bold transition cursor-pointer"
                 title="Setel otomatis Senin sampai Sabtu minggu ini"
               >
                 Minggu Ini (Sen–Sab)
@@ -937,15 +938,15 @@ export const AdminReports: React.FC = () => {
 
           {(reportType === 'siswa') && (
             <div className="flex items-center gap-2">
-              <label className="text-slate-400">Pilih Siswa:</label>
+              <label className="text-slate-600 font-semibold">Pilih Siswa:</label>
               <select
                 value={selectedStudentNis}
                 onChange={(e) => setSelectedStudentNis(e.target.value)}
-                className="bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1.5 text-white focus:outline-none focus:border-cyan-500"
+                className="bg-white border border-slate-300 rounded-xl px-2.5 py-1.5 text-slate-900 focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20"
               >
-                <option value="all">Semua Siswa PKL</option>
+                <option value="all" className="bg-white text-slate-900">Semua Siswa PKL</option>
                 {allStudents.map(s => (
-                  <option key={s.id} value={s.nis}>{s.nama} ({s.nis})</option>
+                  <option key={s.id} value={s.nis} className="bg-white text-slate-900">{s.nama} ({s.nis})</option>
                 ))}
               </select>
             </div>
@@ -953,15 +954,15 @@ export const AdminReports: React.FC = () => {
 
           {(reportType === 'sekolah') && (
             <div className="flex items-center gap-2">
-              <label className="text-slate-400">Asal Sekolah:</label>
+              <label className="text-slate-600 font-semibold">Asal Sekolah:</label>
               <select
                 value={selectedSchool}
                 onChange={(e) => setSelectedSchool(e.target.value)}
-                className="bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1.5 text-white focus:outline-none focus:border-cyan-500"
+                className="bg-white border border-slate-300 rounded-xl px-2.5 py-1.5 text-slate-900 focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20"
               >
-                <option value="all">Semua Sekolah Mitra</option>
+                <option value="all" className="bg-white text-slate-900">Semua Sekolah Mitra</option>
                 {distinctSchools.map(sch => (
-                  <option key={sch} value={sch}>{sch}</option>
+                  <option key={sch} value={sch} className="bg-white text-slate-900">{sch}</option>
                 ))}
               </select>
             </div>
@@ -970,28 +971,28 @@ export const AdminReports: React.FC = () => {
       </div>
 
       {/* QUICK PAPER CONTROL & PRINT BAR */}
-      <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 flex flex-col lg:flex-row lg:items-center justify-between gap-3 text-xs print:hidden shadow-lg">
+      <div className="p-4 rounded-2xl bg-white border border-slate-200 flex flex-col lg:flex-row lg:items-center justify-between gap-3 text-xs print:hidden shadow-sm">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-cyan-500/20 text-cyan-400 flex items-center justify-center shrink-0 border border-cyan-500/30">
+          <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 border border-blue-200">
             <Layout className="w-5 h-5" />
           </div>
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <span className="font-bold text-white text-sm">Ukuran Kertas Cetak:</span>
-              <span className="px-2.5 py-0.5 rounded-lg bg-cyan-950 text-cyan-300 font-bold border border-cyan-500/40 font-mono text-xs">
+              <span className="font-bold text-slate-900 text-sm">Ukuran Kertas Cetak:</span>
+              <span className="px-2.5 py-0.5 rounded-lg bg-blue-50 text-blue-700 font-bold border border-blue-200 font-mono text-xs">
                 {paperSize} ({PAPER_OPTIONS.find(p => p.id === paperSize)?.dimensions})
               </span>
-              <span className="px-2 py-0.5 rounded-lg bg-slate-800 text-slate-200 font-semibold text-xs capitalize">
+              <span className="px-2 py-0.5 rounded-lg bg-slate-100 text-slate-700 font-semibold text-xs capitalize border border-slate-200">
                 {paperOrientation === 'landscape' ? 'Mendatar (Landscape)' : 'Tegak (Portrait)'}
               </span>
               {paperSize === 'F4' && (
-                <span className="px-2 py-0.5 rounded-lg bg-emerald-950 text-emerald-300 font-bold border border-emerald-500/40 text-[10px]">
+                <span className="px-2 py-0.5 rounded-lg bg-emerald-50 text-emerald-700 font-bold border border-emerald-200 text-[10px]">
                   Standar Map & Ijazah SMK
                 </span>
               )}
             </div>
-            <p className="text-[11px] text-slate-400 flex items-center gap-1.5 mt-0.5">
-              <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+            <p className="text-[11px] text-slate-600 flex items-center gap-1.5 mt-0.5">
+              <span className="inline-block w-2 h-2 rounded-full bg-emerald-600"></span>
               Pratinjau layar & format cetak PDF otomatis sinkron dengan ukuran kertas terpilih.
             </p>
           </div>
@@ -999,7 +1000,7 @@ export const AdminReports: React.FC = () => {
 
         <div className="flex flex-wrap items-center gap-2">
           {/* Quick Paper Size Pills */}
-          <div className="flex items-center bg-slate-950 p-1 rounded-xl border border-slate-800 shadow-inner">
+          <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200">
             {PAPER_OPTIONS.map(opt => (
               <button
                 key={opt.id}
@@ -1007,8 +1008,8 @@ export const AdminReports: React.FC = () => {
                 onClick={() => setPaperSize(opt.id)}
                 className={`px-3 py-1.5 rounded-lg font-bold text-xs transition cursor-pointer ${
                   paperSize === opt.id
-                    ? 'bg-cyan-600 text-white shadow-md'
-                    : 'text-slate-400 hover:text-white'
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900'
                 }`}
                 title={`${opt.name} - ${opt.dimensions}`}
               >
@@ -1018,14 +1019,14 @@ export const AdminReports: React.FC = () => {
           </div>
 
           {/* Quick Orientation Toggle */}
-          <div className="flex items-center bg-slate-950 p-1 rounded-xl border border-slate-800 shadow-inner">
+          <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200">
             <button
               type="button"
               onClick={() => setPaperOrientation('landscape')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
                 paperOrientation === 'landscape'
-                  ? 'bg-blue-600 text-white shadow-md'
-                  : 'text-slate-400 hover:text-white'
+                  ? 'bg-emerald-600 text-white shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900'
               }`}
               title="Posisi Kertas Mendatar (Landscape)"
             >
@@ -1034,10 +1035,10 @@ export const AdminReports: React.FC = () => {
             <button
               type="button"
               onClick={() => setPaperOrientation('portrait')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
                 paperOrientation === 'portrait'
-                  ? 'bg-blue-600 text-white shadow-md'
-                  : 'text-slate-400 hover:text-white'
+                  ? 'bg-emerald-600 text-white shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900'
               }`}
               title="Posisi Kertas Tegak (Portrait)"
             >
@@ -1049,7 +1050,7 @@ export const AdminReports: React.FC = () => {
           <button
             type="button"
             onClick={() => setShowPrintModal(true)}
-            className="px-3.5 py-1.5 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-md transition cursor-pointer"
+            className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-sm transition cursor-pointer"
           >
             <SlidersHorizontal className="w-3.5 h-3.5" />
             Menu Ukuran & Cetak PDF
@@ -1227,22 +1228,23 @@ export const AdminReports: React.FC = () => {
 
       {/* MODAL PENGATURAN KOP LAPORAN & TANDA TANGAN */}
       {showKopModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 overflow-y-auto">
-          <div className="w-full max-w-2xl bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl relative text-slate-200 animate-in fade-in zoom-in-95 my-6 max-h-[90vh] flex flex-col">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="w-full max-w-2xl bg-white border border-slate-200 rounded-3xl p-6 shadow-2xl relative text-slate-900 my-6 max-h-[90vh] flex flex-col overflow-hidden">
+            <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-red-600 via-amber-500 via-blue-600 to-emerald-600" />
             
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-4 shrink-0">
+            <div className="flex items-center justify-between border-b border-slate-200 pb-3 mb-4 shrink-0 pt-1">
               <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-cyan-500/20 text-cyan-400 flex items-center justify-center">
+                <div className="w-9 h-9 rounded-xl bg-amber-50 border border-amber-200 text-amber-600 flex items-center justify-center">
                   <Settings2 className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-white">Atur Kop Laporan & Tanda Tangan Cetak</h3>
-                  <p className="text-xs text-slate-400">Sesuaikan kop resmi instansi dan nama penandatangan laporan PDF</p>
+                  <h3 className="text-base font-bold text-slate-900">Atur Kop Laporan & Tanda Tangan Cetak</h3>
+                  <p className="text-xs text-slate-600">Sesuaikan kop resmi instansi dan nama penandatangan laporan PDF</p>
                 </div>
               </div>
               <button
                 onClick={() => setShowKopModal(false)}
-                className="text-slate-500 hover:text-white p-1 rounded-lg"
+                className="text-slate-400 hover:text-slate-700 p-1.5 rounded-lg hover:bg-slate-100 transition cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1251,18 +1253,18 @@ export const AdminReports: React.FC = () => {
             <form noValidate onSubmit={handleSaveKopConfig} className="space-y-4 text-xs overflow-y-auto flex-1 pr-1">
               
               {/* Seksi Kop Surat */}
-              <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-3">
+              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="font-bold text-cyan-300 text-xs flex items-center gap-1.5">
-                    <School className="w-4 h-4 text-cyan-400" />
+                  <span className="font-bold text-blue-700 text-xs flex items-center gap-1.5">
+                    <School className="w-4 h-4 text-blue-600" />
                     Teks Kop Surat Instansi
                   </span>
-                  <label className="flex items-center gap-1.5 cursor-pointer text-[11px] text-slate-400">
+                  <label className="flex items-center gap-1.5 cursor-pointer text-[11px] text-slate-700 font-semibold">
                     <input
                       type="checkbox"
                       checked={tempKopConfig.showKop}
                       onChange={(e) => setTempKopConfig({ ...tempKopConfig, showKop: e.target.checked })}
-                      className="rounded bg-slate-900 border-slate-700 text-cyan-500"
+                      className="rounded border-slate-300 text-blue-600 focus:ring-blue-600"
                     />
                     Tampilkan Kop
                   </label>
@@ -1270,59 +1272,59 @@ export const AdminReports: React.FC = () => {
 
                 <div className="space-y-2.5">
                   <div>
-                    <label className="block text-[11px] text-slate-400 mb-1">Kop Baris 1 (Pemerintah / Yayasan / Dinas)</label>
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">Kop Baris 1 (Pemerintah / Yayasan / Dinas)</label>
                     <input
                       type="text"
                       value={tempKopConfig.kopBaris1}
                       onChange={(e) => setTempKopConfig({ ...tempKopConfig, kopBaris1: e.target.value })}
                       placeholder="Contoh: PEMERINTAH PROVINSI JAWA TIMUR • DINAS PENDIDIKAN"
-                      className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white text-xs font-semibold focus:outline-none focus:border-cyan-500"
+                      className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-slate-900 text-xs font-semibold focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-[11px] text-slate-400 mb-1">Kop Baris 2 (Nama Sekolah / Satuan Pendidikan)</label>
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">Kop Baris 2 (Nama Sekolah / Satuan Pendidikan)</label>
                     <input
                       type="text"
                       value={tempKopConfig.kopBaris2}
                       onChange={(e) => setTempKopConfig({ ...tempKopConfig, kopBaris2: e.target.value })}
                       placeholder="Contoh: SMK NEGERI 1 TEGALSARI — KELOMPOK TEKNOLOGI & REKAYASA"
-                      className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white text-xs font-bold text-cyan-400 focus:outline-none focus:border-cyan-500"
+                      className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-blue-700 text-xs font-bold focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-[11px] text-slate-400 mb-1">Kop Baris 3 (Unit Kerja / Program Keahlian)</label>
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">Kop Baris 3 (Unit Kerja / Program Keahlian)</label>
                     <input
                       type="text"
                       value={tempKopConfig.kopBaris3}
                       onChange={(e) => setTempKopConfig({ ...tempKopConfig, kopBaris3: e.target.value })}
                       placeholder="Contoh: Bidang Kerja Khusus (BKK) & Hubin • Program PKL Jurusan TKR"
-                      className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white text-xs focus:outline-none focus:border-cyan-500"
+                      className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-slate-900 text-xs focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-[11px] text-slate-400 mb-1">Alamat / Nomor Telepon Kop Surat</label>
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">Alamat / Nomor Telepon Kop Surat</label>
                     <input
                       type="text"
                       value={tempKopConfig.kopAlamat}
                       onChange={(e) => setTempKopConfig({ ...tempKopConfig, kopAlamat: e.target.value })}
                       placeholder="Contoh: Jl. KH. Syafa'at No. 01 Blokagung, Tegalsari, Banyuwangi"
-                      className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white text-xs focus:outline-none focus:border-cyan-500"
+                      className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-slate-900 text-xs focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20"
                     />
                   </div>
                 </div>
               </div>
 
               {/* Seksi Logo Kop Surat (Pojok Kiri & Pojok Kanan) */}
-              <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-cyan-300 text-xs flex items-center gap-1.5">
-                    <ImageIcon className="w-4 h-4 text-cyan-400" />
+              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <span className="font-bold text-blue-700 text-xs flex items-center gap-1.5">
+                    <ImageIcon className="w-4 h-4 text-blue-600" />
                     Logo Kop Surat (Pojok Kiri & Pojok Kanan)
                   </span>
-                  <span className="text-[10px] text-emerald-400 bg-emerald-950/60 border border-emerald-500/30 px-2 py-0.5 rounded-full font-semibold">
+                  <span className="text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full font-bold">
                     Kompresi Canvas ~25KB (Aman Vercel)
                   </span>
                 </div>
@@ -1330,21 +1332,20 @@ export const AdminReports: React.FC = () => {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-1">
                   
                   {/* LOGO POJOK KIRI */}
-                  <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 space-y-2.5">
+                  <div className="p-3.5 rounded-xl bg-white border border-slate-200 space-y-2.5 shadow-sm">
                     <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-bold text-slate-200">Logo Pojok Kiri</span>
-                      <label className="flex items-center gap-1 cursor-pointer text-[10px] text-slate-400">
+                      <span className="text-[11px] font-bold text-slate-900">Logo Pojok Kiri</span>
+                      <label className="flex items-center gap-1 cursor-pointer text-[10px] text-slate-600 font-semibold">
                         <input
                           type="checkbox"
                           checked={tempKopConfig.showLogoKiri !== false}
                           onChange={(e) => setTempKopConfig({ ...tempKopConfig, showLogoKiri: e.target.checked })}
-                          className="rounded bg-slate-950 border-slate-700 text-cyan-500"
+                          className="rounded border-slate-300 text-blue-600"
                         />
                         Tampilkan
                       </label>
                     </div>
 
-                    {/* Unconditionally mounted hidden file input so ref is never null */}
                     <input
                       type="file"
                       ref={fileInputKiriRef}
@@ -1354,32 +1355,32 @@ export const AdminReports: React.FC = () => {
                     />
 
                     {isUploadingLogoKiri ? (
-                      <div className="p-4 rounded-xl bg-slate-950 border border-cyan-500/30 flex flex-col items-center justify-center gap-2 text-cyan-300">
-                        <Loader2 className="w-6 h-6 animate-spin text-cyan-400" />
+                      <div className="p-4 rounded-xl bg-blue-50 border border-blue-200 flex flex-col items-center justify-center gap-2 text-blue-700">
+                        <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
                         <span className="text-[11px] font-medium">Mengompres & memproses logo...</span>
                       </div>
                     ) : tempKopConfig.logoKiriUrl ? (
                       <div className="space-y-2.5">
-                        <div className="flex items-center gap-3 bg-slate-950 p-2.5 rounded-xl border border-slate-800">
-                          <div className="w-14 h-14 bg-white rounded-lg p-1.5 flex items-center justify-center shrink-0 border border-slate-700 shadow-inner">
+                        <div className="flex items-center gap-3 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                          <div className="w-14 h-14 bg-white rounded-lg p-1.5 flex items-center justify-center shrink-0 border border-slate-200 shadow-sm">
                             <img src={tempKopConfig.logoKiriUrl} alt="Logo Kiri" className="max-w-full max-h-full object-contain" />
                           </div>
                           <div className="flex-1 min-w-0 space-y-1">
-                            <span className="text-[11px] text-emerald-400 block font-bold truncate">Logo Kiri Terpasang</span>
-                            <span className="text-[10px] text-slate-400 block">Tersimpan optimal untuk cetak</span>
+                            <span className="text-[11px] text-emerald-700 block font-bold truncate">Logo Kiri Terpasang</span>
+                            <span className="text-[10px] text-slate-500 block">Tersimpan optimal untuk cetak</span>
                             <div className="flex items-center gap-2 pt-0.5">
                               <button
                                 type="button"
                                 onClick={() => fileInputKiriRef.current?.click()}
-                                className="text-[10px] text-cyan-400 hover:text-cyan-300 hover:underline font-semibold cursor-pointer"
+                                className="text-[10px] text-blue-600 hover:text-blue-700 hover:underline font-bold cursor-pointer"
                               >
                                 Ganti Gambar
                               </button>
-                              <span className="text-slate-600">•</span>
+                              <span className="text-slate-300">•</span>
                               <button
                                 type="button"
                                 onClick={() => setTempKopConfig({ ...tempKopConfig, logoKiriUrl: '' })}
-                                className="text-[10px] text-rose-400 hover:text-rose-300 hover:underline font-semibold flex items-center gap-0.5 cursor-pointer"
+                                className="text-[10px] text-red-600 hover:text-red-700 hover:underline font-bold flex items-center gap-0.5 cursor-pointer"
                               >
                                 <Trash2 className="w-3 h-3" /> Hapus
                               </button>
@@ -1387,16 +1388,15 @@ export const AdminReports: React.FC = () => {
                           </div>
                         </div>
 
-                        {/* Presets and URL input */}
                         <div className="pt-0.5">
-                          <span className="text-[10px] text-slate-400 block mb-1">Ganti dengan Preset Logo Resmi:</span>
+                          <span className="text-[10px] text-slate-600 font-semibold block mb-1">Ganti dengan Preset Logo Resmi:</span>
                           <div className="flex flex-wrap gap-1">
                             {KOP_LOGO_PRESETS.map((p) => (
                               <button
                                 key={p.id}
                                 type="button"
                                 onClick={() => setTempKopConfig({ ...tempKopConfig, logoKiriUrl: p.svg, showLogoKiri: true })}
-                                className="px-2 py-0.5 rounded-md bg-slate-950 hover:bg-slate-800 text-[10px] text-cyan-300 border border-slate-700 transition cursor-pointer"
+                                className="px-2 py-0.5 rounded-md bg-blue-50 hover:bg-blue-100 text-[10px] text-blue-700 font-semibold border border-blue-200 transition cursor-pointer"
                                 title={p.name}
                               >
                                 {p.shortName}
@@ -1410,22 +1410,21 @@ export const AdminReports: React.FC = () => {
                         <button
                           type="button"
                           onClick={() => fileInputKiriRef.current?.click()}
-                          className="w-full py-2.5 bg-cyan-950/70 hover:bg-cyan-900/80 text-cyan-300 border border-cyan-500/40 rounded-xl text-[11px] font-bold flex items-center justify-center gap-2 transition cursor-pointer shadow-sm"
+                          className="w-full py-2.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-xl text-[11px] font-bold flex items-center justify-center gap-2 transition cursor-pointer"
                         >
-                          <Upload className="w-4 h-4 text-cyan-400" />
+                          <Upload className="w-4 h-4 text-blue-600" />
                           Pilih / Upload Logo Kiri (PNG/JPG)
                         </button>
 
-                        {/* Presets */}
                         <div className="pt-1">
-                          <span className="text-[10px] text-slate-400 block mb-1">Gunakan Preset Logo Resmi:</span>
+                          <span className="text-[10px] text-slate-600 font-semibold block mb-1">Gunakan Preset Logo Resmi:</span>
                           <div className="flex flex-wrap gap-1">
                             {KOP_LOGO_PRESETS.map((p) => (
                               <button
                                 key={p.id}
                                 type="button"
                                 onClick={() => setTempKopConfig({ ...tempKopConfig, logoKiriUrl: p.svg, showLogoKiri: true })}
-                                className="px-2 py-0.5 rounded-md bg-slate-950 hover:bg-slate-800 text-[10px] text-cyan-300 border border-slate-700 transition cursor-pointer"
+                                className="px-2 py-0.5 rounded-md bg-blue-50 hover:bg-blue-100 text-[10px] text-blue-700 font-semibold border border-blue-200 transition cursor-pointer"
                                 title={p.name}
                               >
                                 {p.shortName}
@@ -1439,28 +1438,27 @@ export const AdminReports: React.FC = () => {
                           value={tempKopConfig.logoKiriUrl || ''}
                           onChange={(e) => setTempKopConfig({ ...tempKopConfig, logoKiriUrl: e.target.value })}
                           placeholder="Atau tempel URL gambar logo..."
-                          className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-white text-[10px] focus:outline-none focus:border-cyan-500"
+                          className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-slate-900 text-[10px] focus:outline-none focus:border-blue-600"
                         />
                       </div>
                     )}
                   </div>
 
                   {/* LOGO POJOK KANAN */}
-                  <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 space-y-2.5">
+                  <div className="p-3.5 rounded-xl bg-white border border-slate-200 space-y-2.5 shadow-sm">
                     <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-bold text-slate-200">Logo Pojok Kanan</span>
-                      <label className="flex items-center gap-1 cursor-pointer text-[10px] text-slate-400">
+                      <span className="text-[11px] font-bold text-slate-900">Logo Pojok Kanan</span>
+                      <label className="flex items-center gap-1 cursor-pointer text-[10px] text-slate-600 font-semibold">
                         <input
                           type="checkbox"
                           checked={tempKopConfig.showLogoKanan !== false}
                           onChange={(e) => setTempKopConfig({ ...tempKopConfig, showLogoKanan: e.target.checked })}
-                          className="rounded bg-slate-950 border-slate-700 text-cyan-500"
+                          className="rounded border-slate-300 text-blue-600"
                         />
                         Tampilkan
                       </label>
                     </div>
 
-                    {/* Unconditionally mounted hidden file input so ref is never null */}
                     <input
                       type="file"
                       ref={fileInputKananRef}
@@ -1470,32 +1468,32 @@ export const AdminReports: React.FC = () => {
                     />
 
                     {isUploadingLogoKanan ? (
-                      <div className="p-4 rounded-xl bg-slate-950 border border-cyan-500/30 flex flex-col items-center justify-center gap-2 text-cyan-300">
-                        <Loader2 className="w-6 h-6 animate-spin text-cyan-400" />
+                      <div className="p-4 rounded-xl bg-blue-50 border border-blue-200 flex flex-col items-center justify-center gap-2 text-blue-700">
+                        <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
                         <span className="text-[11px] font-medium">Mengompres & memproses logo...</span>
                       </div>
                     ) : tempKopConfig.logoKananUrl ? (
                       <div className="space-y-2.5">
-                        <div className="flex items-center gap-3 bg-slate-950 p-2.5 rounded-xl border border-slate-800">
-                          <div className="w-14 h-14 bg-white rounded-lg p-1.5 flex items-center justify-center shrink-0 border border-slate-700 shadow-inner">
+                        <div className="flex items-center gap-3 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                          <div className="w-14 h-14 bg-white rounded-lg p-1.5 flex items-center justify-center shrink-0 border border-slate-200 shadow-sm">
                             <img src={tempKopConfig.logoKananUrl} alt="Logo Kanan" className="max-w-full max-h-full object-contain" />
                           </div>
                           <div className="flex-1 min-w-0 space-y-1">
-                            <span className="text-[11px] text-emerald-400 block font-bold truncate">Logo Kanan Terpasang</span>
-                            <span className="text-[10px] text-slate-400 block">Tersimpan optimal untuk cetak</span>
+                            <span className="text-[11px] text-emerald-700 block font-bold truncate">Logo Kanan Terpasang</span>
+                            <span className="text-[10px] text-slate-500 block">Tersimpan optimal untuk cetak</span>
                             <div className="flex items-center gap-2 pt-0.5">
                               <button
                                 type="button"
                                 onClick={() => fileInputKananRef.current?.click()}
-                                className="text-[10px] text-cyan-400 hover:text-cyan-300 hover:underline font-semibold cursor-pointer"
+                                className="text-[10px] text-blue-600 hover:text-blue-700 hover:underline font-bold cursor-pointer"
                               >
                                 Ganti Gambar
                               </button>
-                              <span className="text-slate-600">•</span>
+                              <span className="text-slate-300">•</span>
                               <button
                                 type="button"
                                 onClick={() => setTempKopConfig({ ...tempKopConfig, logoKananUrl: '' })}
-                                className="text-[10px] text-rose-400 hover:text-rose-300 hover:underline font-semibold flex items-center gap-0.5 cursor-pointer"
+                                className="text-[10px] text-red-600 hover:text-red-700 hover:underline font-bold flex items-center gap-0.5 cursor-pointer"
                               >
                                 <Trash2 className="w-3 h-3" /> Hapus
                               </button>
@@ -1503,16 +1501,15 @@ export const AdminReports: React.FC = () => {
                           </div>
                         </div>
 
-                        {/* Presets and URL input */}
                         <div className="pt-0.5">
-                          <span className="text-[10px] text-slate-400 block mb-1">Ganti dengan Preset Logo Resmi:</span>
+                          <span className="text-[10px] text-slate-600 font-semibold block mb-1">Ganti dengan Preset Logo Resmi:</span>
                           <div className="flex flex-wrap gap-1">
                             {KOP_LOGO_PRESETS.map((p) => (
                               <button
                                 key={p.id}
                                 type="button"
                                 onClick={() => setTempKopConfig({ ...tempKopConfig, logoKananUrl: p.svg, showLogoKanan: true })}
-                                className="px-2 py-0.5 rounded-md bg-slate-950 hover:bg-slate-800 text-[10px] text-cyan-300 border border-slate-700 transition cursor-pointer"
+                                className="px-2 py-0.5 rounded-md bg-blue-50 hover:bg-blue-100 text-[10px] text-blue-700 font-semibold border border-blue-200 transition cursor-pointer"
                                 title={p.name}
                               >
                                 {p.shortName}
@@ -1526,22 +1523,21 @@ export const AdminReports: React.FC = () => {
                         <button
                           type="button"
                           onClick={() => fileInputKananRef.current?.click()}
-                          className="w-full py-2.5 bg-cyan-950/70 hover:bg-cyan-900/80 text-cyan-300 border border-cyan-500/40 rounded-xl text-[11px] font-bold flex items-center justify-center gap-2 transition cursor-pointer shadow-sm"
+                          className="w-full py-2.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-xl text-[11px] font-bold flex items-center justify-center gap-2 transition cursor-pointer"
                         >
-                          <Upload className="w-4 h-4 text-cyan-400" />
+                          <Upload className="w-4 h-4 text-blue-600" />
                           Pilih / Upload Logo Kanan (PNG/JPG)
                         </button>
 
-                        {/* Presets */}
                         <div className="pt-1">
-                          <span className="text-[10px] text-slate-400 block mb-1">Gunakan Preset Logo Resmi:</span>
+                          <span className="text-[10px] text-slate-600 font-semibold block mb-1">Gunakan Preset Logo Resmi:</span>
                           <div className="flex flex-wrap gap-1">
                             {KOP_LOGO_PRESETS.map((p) => (
                               <button
                                 key={p.id}
                                 type="button"
                                 onClick={() => setTempKopConfig({ ...tempKopConfig, logoKananUrl: p.svg, showLogoKanan: true })}
-                                className="px-2 py-0.5 rounded-md bg-slate-950 hover:bg-slate-800 text-[10px] text-cyan-300 border border-slate-700 transition cursor-pointer"
+                                className="px-2 py-0.5 rounded-md bg-blue-50 hover:bg-blue-100 text-[10px] text-blue-700 font-semibold border border-blue-200 transition cursor-pointer"
                                 title={p.name}
                               >
                                 {p.shortName}
@@ -1555,7 +1551,7 @@ export const AdminReports: React.FC = () => {
                           value={tempKopConfig.logoKananUrl || ''}
                           onChange={(e) => setTempKopConfig({ ...tempKopConfig, logoKananUrl: e.target.value })}
                           placeholder="Atau tempel URL gambar logo..."
-                          className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-white text-[10px] focus:outline-none focus:border-cyan-500"
+                          className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-slate-900 text-[10px] focus:outline-none focus:border-blue-600"
                         />
                       </div>
                     )}
@@ -1564,27 +1560,27 @@ export const AdminReports: React.FC = () => {
                 </div>
 
                 {/* Helpful Optimization Notice */}
-                <div className="p-2.5 rounded-xl bg-slate-900/80 border border-slate-800 text-[11px] text-slate-400 flex items-start gap-2">
-                  <Sparkles className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
+                <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-[11px] text-amber-900 flex items-start gap-2">
+                  <Sparkles className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
                   <span>
-                    Setiap gambar logo yang diunggah otomatis dikompres ke resolusi optimal (~25 KB) dengan ketajaman tinggi, sehingga tidak akan membebani kuota penyimpanan browser dan tidak akan stag/macet saat disimpan di Vercel.
+                    Setiap gambar logo yang diunggah otomatis dikompres ke resolusi optimal (~25 KB) dengan ketajaman tinggi, sehingga tidak membebani kuota penyimpanan browser.
                   </span>
                 </div>
               </div>
 
               {/* Seksi Tanda Tangan */}
-              <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-3">
+              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="font-bold text-cyan-300 text-xs flex items-center gap-1.5">
-                    <Users className="w-4 h-4 text-cyan-400" />
+                  <span className="font-bold text-blue-700 text-xs flex items-center gap-1.5">
+                    <Users className="w-4 h-4 text-blue-600" />
                     Nama & Jabatan Penandatangan (TTD)
                   </span>
-                  <label className="flex items-center gap-1.5 cursor-pointer text-[11px] text-slate-400">
+                  <label className="flex items-center gap-1.5 cursor-pointer text-[11px] text-slate-700 font-semibold">
                     <input
                       type="checkbox"
                       checked={tempKopConfig.showTtd}
                       onChange={(e) => setTempKopConfig({ ...tempKopConfig, showTtd: e.target.checked })}
-                      className="rounded bg-slate-900 border-slate-700 text-cyan-500"
+                      className="rounded border-slate-300 text-blue-600"
                     />
                     Tampilkan TTD
                   </label>
@@ -1593,89 +1589,89 @@ export const AdminReports: React.FC = () => {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-1">
                   
                   {/* TTD Kiri (Sekretaris Jurusan TKR) */}
-                  <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 space-y-2">
-                    <span className="text-[11px] font-bold text-cyan-300 block">Tanda Tangan Kiri (Sekretaris Jurusan TKR)</span>
+                  <div className="p-3 rounded-xl bg-white border border-slate-200 space-y-2 shadow-sm">
+                    <span className="text-[11px] font-bold text-blue-700 block">Tanda Tangan Kiri (Sekretaris Jurusan TKR)</span>
                     
                     <div>
-                      <label className="block text-[10px] text-slate-400 mb-1">Label Pengesahan</label>
+                      <label className="block text-[10px] font-semibold text-slate-600 mb-1">Label Pengesahan</label>
                       <textarea
                         rows={2}
                         value={tempKopConfig.ttdKiriLabel}
                         onChange={(e) => setTempKopConfig({ ...tempKopConfig, ttdKiriLabel: e.target.value })}
                         placeholder="Mengetahui,&#10;Sekretaris Jurusan TKR"
-                        className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-white text-[11px] focus:outline-none focus:border-cyan-500 font-medium"
+                        className="w-full bg-white border border-slate-300 rounded-lg p-2 text-slate-900 text-[11px] focus:outline-none focus:border-blue-600 font-medium"
                       />
                     </div>
 
                     <div>
-                      <label className="block text-[10px] text-slate-400 mb-1">Nama Lengkap & Gelar</label>
+                      <label className="block text-[10px] font-semibold text-slate-600 mb-1">Nama Lengkap & Gelar</label>
                       <input
                         type="text"
                         value={tempKopConfig.ttdKiriNama}
                         onChange={(e) => setTempKopConfig({ ...tempKopConfig, ttdKiriNama: e.target.value })}
                         placeholder="Andrik Wiyono, S.T., M.Pd., Gr."
-                        className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-white text-[11px] focus:outline-none focus:border-cyan-500 font-bold"
+                        className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-slate-900 text-[11px] focus:outline-none focus:border-blue-600 font-bold"
                       />
                     </div>
 
                     <div>
-                      <label className="block text-[10px] text-slate-400 mb-1">NIP / NUPTK</label>
+                      <label className="block text-[10px] font-semibold text-slate-600 mb-1">NIP / NUPTK</label>
                       <input
                         type="text"
                         value={tempKopConfig.ttdKiriJabatan}
                         onChange={(e) => setTempKopConfig({ ...tempKopConfig, ttdKiriJabatan: e.target.value })}
                         placeholder="NIP. 19820415 201101 1 005"
-                        className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-white text-[11px] focus:outline-none focus:border-cyan-500 font-mono"
+                        className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-slate-900 text-[11px] focus:outline-none focus:border-blue-600 font-mono"
                       />
                     </div>
                   </div>
 
                   {/* TTD Kanan (Kepala Program Keahlian TKR) */}
-                  <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 space-y-2">
-                    <span className="text-[11px] font-bold text-cyan-300 block">Tanda Tangan Kanan (Kepala Program Keahlian TKR)</span>
+                  <div className="p-3 rounded-xl bg-white border border-slate-200 space-y-2 shadow-sm">
+                    <span className="text-[11px] font-bold text-emerald-700 block">Tanda Tangan Kanan (Kepala Program Keahlian TKR)</span>
 
                     <div className="grid grid-cols-2 gap-2">
                       <div>
-                        <label className="block text-[10px] text-slate-400 mb-1">Kota</label>
+                        <label className="block text-[10px] font-semibold text-slate-600 mb-1">Kota</label>
                         <input
                           type="text"
                           value={tempKopConfig.ttdKananKota}
                           onChange={(e) => setTempKopConfig({ ...tempKopConfig, ttdKananKota: e.target.value })}
                           placeholder="Tegalsari"
-                          className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-white text-[11px] focus:outline-none focus:border-cyan-500"
+                          className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-slate-900 text-[11px] focus:outline-none focus:border-blue-600"
                         />
                       </div>
                       <div>
-                        <label className="block text-[10px] text-slate-400 mb-1">Jabatan</label>
+                        <label className="block text-[10px] font-semibold text-slate-600 mb-1">Jabatan</label>
                         <input
                           type="text"
                           value={tempKopConfig.ttdKananLabel}
                           onChange={(e) => setTempKopConfig({ ...tempKopConfig, ttdKananLabel: e.target.value })}
                           placeholder="Kepala Program Keahlian TKR"
-                          className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-white text-[11px] focus:outline-none focus:border-cyan-500"
+                          className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-slate-900 text-[11px] focus:outline-none focus:border-blue-600"
                         />
                       </div>
                     </div>
 
                     <div>
-                      <label className="block text-[10px] text-slate-400 mb-1">Nama Lengkap & Gelar</label>
+                      <label className="block text-[10px] font-semibold text-slate-600 mb-1">Nama Lengkap & Gelar</label>
                       <input
                         type="text"
                         value={tempKopConfig.ttdKananNama}
                         onChange={(e) => setTempKopConfig({ ...tempKopConfig, ttdKananNama: e.target.value })}
                         placeholder="Achmad Mackrus, S.T."
-                        className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-white text-[11px] focus:outline-none focus:border-cyan-500 font-bold"
+                        className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-slate-900 text-[11px] focus:outline-none focus:border-blue-600 font-bold"
                       />
                     </div>
 
                     <div>
-                      <label className="block text-[10px] text-slate-400 mb-1">NIP / NUPTK</label>
+                      <label className="block text-[10px] font-semibold text-slate-600 mb-1">NIP / NUPTK</label>
                       <input
                         type="text"
                         value={tempKopConfig.ttdKananNip}
                         onChange={(e) => setTempKopConfig({ ...tempKopConfig, ttdKananNip: e.target.value })}
                         placeholder="NIP. 19790820 200801 1 012"
-                        className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-white text-[11px] focus:outline-none focus:border-cyan-500 font-mono"
+                        className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-slate-900 text-[11px] focus:outline-none focus:border-blue-600 font-mono"
                       />
                     </div>
                   </div>
@@ -1684,22 +1680,22 @@ export const AdminReports: React.FC = () => {
               </div>
 
               {/* Seksi Format Kertas Bawaan */}
-              <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-3">
-                <span className="font-bold text-cyan-300 text-xs flex items-center gap-1.5">
-                  <Layout className="w-4 h-4 text-cyan-400" />
+              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
+                <span className="font-bold text-blue-700 text-xs flex items-center gap-1.5">
+                  <Layout className="w-4 h-4 text-blue-600" />
                   Format Ukuran Kertas Bawaan Laporan
                 </span>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                   <div>
-                    <label className="block text-[10px] text-slate-400 mb-1">Ukuran Kertas Utama</label>
+                    <label className="block text-[10px] font-semibold text-slate-600 mb-1">Ukuran Kertas Utama</label>
                     <select
                       value={tempKopConfig.paperSize || 'A4'}
                       onChange={(e) => setTempKopConfig({ ...tempKopConfig, paperSize: e.target.value as PaperSize })}
-                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-white text-[11px] focus:outline-none focus:border-cyan-500"
+                      className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-slate-900 text-[11px] focus:outline-none focus:border-blue-600"
                     >
                       {PAPER_OPTIONS.map(opt => (
-                        <option key={opt.id} value={opt.id}>
+                        <option key={opt.id} value={opt.id} className="bg-white text-slate-900">
                           {opt.name} ({opt.dimensions})
                         </option>
                       ))}
@@ -1707,27 +1703,27 @@ export const AdminReports: React.FC = () => {
                   </div>
 
                   <div>
-                    <label className="block text-[10px] text-slate-400 mb-1">Orientasi Kertas</label>
+                    <label className="block text-[10px] font-semibold text-slate-600 mb-1">Orientasi Kertas</label>
                     <select
                       value={tempKopConfig.paperOrientation || 'landscape'}
                       onChange={(e) => setTempKopConfig({ ...tempKopConfig, paperOrientation: e.target.value as PaperOrientation })}
-                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-white text-[11px] focus:outline-none focus:border-cyan-500"
+                      className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-slate-900 text-[11px] focus:outline-none focus:border-blue-600"
                     >
-                      <option value="landscape">Landscape (Mendatar - Rekomendasi Presensi)</option>
-                      <option value="portrait">Portrait (Tegak)</option>
+                      <option value="landscape" className="bg-white text-slate-900">Landscape (Mendatar - Rekomendasi Presensi)</option>
+                      <option value="portrait" className="bg-white text-slate-900">Portrait (Tegak)</option>
                     </select>
                   </div>
                 </div>
               </div>
 
               {/* Action Buttons */}
-              <div className="pt-3 border-t border-slate-800 flex items-center justify-between gap-2 shrink-0">
+              <div className="pt-3 border-t border-slate-200 flex items-center justify-between gap-2 shrink-0">
                 <button
                   type="button"
                   onClick={handleResetKopDefault}
-                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition"
+                  className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer"
                 >
-                  <RotateCcw className="w-3.5 h-3.5 text-slate-400" />
+                  <RotateCcw className="w-3.5 h-3.5 text-slate-500" />
                   Gunakan Bawaan Default
                 </button>
 
@@ -1735,7 +1731,7 @@ export const AdminReports: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setShowKopModal(false)}
-                    className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl font-medium text-xs cursor-pointer"
+                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-semibold text-xs cursor-pointer transition"
                   >
                     Batal
                   </button>
@@ -1743,7 +1739,7 @@ export const AdminReports: React.FC = () => {
                     type="button"
                     onClick={handleSaveKopConfig}
                     disabled={isSavingKop}
-                    className="px-5 py-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 disabled:opacity-60 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-md cursor-pointer transition"
+                    className="px-5 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-sm cursor-pointer transition"
                   >
                     {isSavingKop ? (
                       <>
@@ -1767,30 +1763,31 @@ export const AdminReports: React.FC = () => {
 
       {/* MODAL PENGATURAN UKURAN KERTAS & CETAK DOKUMEN PDF */}
       {showPrintModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 overflow-y-auto">
-          <div className="w-full max-w-2xl bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl relative text-slate-200 animate-in fade-in zoom-in-95 my-6 max-h-[92vh] flex flex-col">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="w-full max-w-2xl bg-white border border-slate-200 rounded-3xl p-6 shadow-2xl relative text-slate-900 my-6 max-h-[92vh] flex flex-col overflow-hidden">
+            <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-red-600 via-amber-500 via-blue-600 to-emerald-600" />
             
             {/* Modal Header */}
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-4 shrink-0">
+            <div className="flex items-center justify-between border-b border-slate-200 pb-3 mb-4 shrink-0 pt-1">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-cyan-500 to-blue-600 text-white flex items-center justify-center shadow-md">
+                <div className="w-10 h-10 rounded-2xl bg-blue-600 text-white flex items-center justify-center shadow-sm">
                   <Printer className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-white flex items-center gap-2">
+                  <h3 className="text-base font-bold text-slate-900 flex items-center gap-2 flex-wrap">
                     Menu Ukuran Kertas & Cetak PDF
-                    <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-semibold border border-emerald-500/30">
+                    <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-bold border border-emerald-200">
                       Sinkron Otomatis
                     </span>
                   </h3>
-                  <p className="text-xs text-slate-400">
+                  <p className="text-xs text-slate-600">
                     Pilih ukuran lembar kertas dan tata letak untuk dokumen presensi PKL resmi
                   </p>
                 </div>
               </div>
               <button
                 onClick={() => setShowPrintModal(false)}
-                className="text-slate-400 hover:text-white p-1 rounded-lg transition"
+                className="text-slate-400 hover:text-slate-700 p-1.5 rounded-lg hover:bg-slate-100 transition cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1800,14 +1797,14 @@ export const AdminReports: React.FC = () => {
             <div className="space-y-4 text-xs overflow-y-auto flex-1 pr-1">
               
               {/* 1. Pemilihan Ukuran Kertas */}
-              <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-3">
+              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="font-bold text-cyan-300 text-xs flex items-center gap-1.5">
-                    <Layout className="w-4 h-4 text-cyan-400" />
+                  <span className="font-bold text-blue-700 text-xs flex items-center gap-1.5">
+                    <Layout className="w-4 h-4 text-blue-600" />
                     1. Pilih Ukuran Kertas (Paper Size):
                   </span>
-                  <span className="text-[11px] text-slate-400">
-                    Aktif: <strong className="text-cyan-400">{paperSize}</strong>
+                  <span className="text-[11px] text-slate-600">
+                    Aktif: <strong className="text-blue-700">{paperSize}</strong>
                   </span>
                 </div>
 
@@ -1820,35 +1817,35 @@ export const AdminReports: React.FC = () => {
                         onClick={() => setPaperSize(item.id)}
                         className={`p-3 rounded-xl border cursor-pointer transition relative flex flex-col justify-between ${
                           isSelected
-                            ? 'bg-gradient-to-br from-cyan-950/60 to-blue-950/60 border-cyan-500 text-white shadow-md'
-                            : 'bg-slate-900 hover:bg-slate-800/80 border-slate-800 text-slate-300'
+                            ? 'bg-blue-50 border-blue-600 text-slate-900 shadow-sm ring-1 ring-blue-600/30'
+                            : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-700'
                         }`}
                       >
                         <div>
                           <div className="flex items-center justify-between mb-1">
-                            <span className="font-bold text-sm text-white flex items-center gap-1.5">
+                            <span className="font-bold text-sm text-slate-900 flex items-center gap-1.5">
                               {item.name}
                             </span>
                             {item.tag && (
                               <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
                                 item.schoolStandard
-                                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                                  : 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'
+                                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                  : 'bg-blue-50 text-blue-700 border border-blue-200'
                               }`}>
                                 {item.tag}
                               </span>
                             )}
                           </div>
-                          <p className="text-[11px] font-mono text-cyan-400 font-semibold mb-1">
+                          <p className="text-[11px] font-mono text-blue-600 font-semibold mb-1">
                             Dimensi: {item.dimensions}
                           </p>
-                          <p className="text-[11px] text-slate-400 leading-relaxed">
+                          <p className="text-[11px] text-slate-600 leading-relaxed">
                             {item.desc}
                           </p>
                         </div>
 
                         {isSelected && (
-                          <div className="mt-2 pt-2 border-t border-cyan-500/30 flex items-center gap-1 text-[11px] text-cyan-300 font-bold">
+                          <div className="mt-2 pt-2 border-t border-blue-200 flex items-center gap-1 text-[11px] text-blue-700 font-bold">
                             <Check className="w-3.5 h-3.5" />
                             Ukuran Kertas Ini Dipilih
                           </div>
@@ -1860,9 +1857,9 @@ export const AdminReports: React.FC = () => {
               </div>
 
               {/* 2. Orientasi Halaman */}
-              <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-3">
-                <span className="font-bold text-cyan-300 text-xs flex items-center gap-1.5">
-                  <Maximize2 className="w-4 h-4 text-cyan-400" />
+              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
+                <span className="font-bold text-blue-700 text-xs flex items-center gap-1.5">
+                  <Maximize2 className="w-4 h-4 text-blue-600" />
                   2. Orientasi Halaman (Page Orientation):
                 </span>
 
@@ -1871,18 +1868,18 @@ export const AdminReports: React.FC = () => {
                     onClick={() => setPaperOrientation('landscape')}
                     className={`p-3 rounded-xl border cursor-pointer transition ${
                       paperOrientation === 'landscape'
-                        ? 'bg-gradient-to-br from-cyan-950/60 to-blue-950/60 border-cyan-500 text-white shadow-md'
-                        : 'bg-slate-900 hover:bg-slate-800 border-slate-800 text-slate-300'
+                        ? 'bg-blue-50 border-blue-600 text-slate-900 shadow-sm ring-1 ring-blue-600/30'
+                        : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-700'
                     }`}
                   >
                     <div className="flex items-center justify-between mb-1">
-                      <span className="font-bold text-sm">Landscape (Mendatar)</span>
-                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                      <span className="font-bold text-sm text-slate-900">Landscape (Mendatar)</span>
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
                         Disarankan untuk PKL
                       </span>
                     </div>
-                    <p className="text-[11px] text-slate-400">
-                      Ideal untuk rekap presensi karena memuat 12 kolom (Tanggal, NIS, Siswa, Bengkel, Datang, Pulang, GPS, Catatan) secara rapi & lapang.
+                    <p className="text-[11px] text-slate-600">
+                      Ideal untuk rekap presensi karena memuat kolom Tanggal, NIS, Siswa, Bengkel, Datang, Pulang, GPS, Catatan secara rapi & lapang.
                     </p>
                   </div>
 
@@ -1890,15 +1887,15 @@ export const AdminReports: React.FC = () => {
                     onClick={() => setPaperOrientation('portrait')}
                     className={`p-3 rounded-xl border cursor-pointer transition ${
                       paperOrientation === 'portrait'
-                        ? 'bg-gradient-to-br from-cyan-950/60 to-blue-950/60 border-cyan-500 text-white shadow-md'
-                        : 'bg-slate-900 hover:bg-slate-800 border-slate-800 text-slate-300'
+                        ? 'bg-blue-50 border-blue-600 text-slate-900 shadow-sm ring-1 ring-blue-600/30'
+                        : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-700'
                     }`}
                   >
                     <div className="flex items-center justify-between mb-1">
-                      <span className="font-bold text-sm">Portrait (Tegak)</span>
-                      <span className="text-[10px] text-slate-400">Format vertikal</span>
+                      <span className="font-bold text-sm text-slate-900">Portrait (Tegak)</span>
+                      <span className="text-[10px] text-slate-500 font-semibold">Format vertikal</span>
                     </div>
-                    <p className="text-[11px] text-slate-400">
+                    <p className="text-[11px] text-slate-600">
                       Tata letak tegak vertikal standar dokumen teks atau lembar pengantar.
                     </p>
                   </div>
@@ -1906,16 +1903,16 @@ export const AdminReports: React.FC = () => {
               </div>
 
               {/* 3. Margin Kertas & Skala Ukuran Teks */}
-              <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-3">
-                <span className="font-bold text-cyan-300 text-xs flex items-center gap-1.5">
-                  <Layers className="w-4 h-4 text-cyan-400" />
+              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
+                <span className="font-bold text-blue-700 text-xs flex items-center gap-1.5">
+                  <Layers className="w-4 h-4 text-blue-600" />
                   3. Batas Margin & Skala Huruf Tabel:
                 </span>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                   {/* Margin Kertas */}
                   <div>
-                    <label className="block text-[11px] font-semibold text-slate-400 mb-1.5">Batas Margin Kertas:</label>
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-1.5">Batas Margin Kertas:</label>
                     <div className="grid grid-cols-3 gap-1.5">
                       {(['compact', 'normal', 'spacious'] as PaperMargin[]).map((m) => (
                         <button
@@ -1924,8 +1921,8 @@ export const AdminReports: React.FC = () => {
                           onClick={() => setPaperMargin(m)}
                           className={`py-2 px-2 rounded-xl text-[11px] font-bold capitalize transition cursor-pointer border ${
                             paperMargin === m
-                              ? 'bg-cyan-600 border-cyan-500 text-white'
-                              : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
+                              ? 'bg-blue-600 border-blue-600 text-white shadow-sm'
+                              : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-100'
                           }`}
                         >
                           {m === 'compact' ? 'Rapat (5mm)' : m === 'normal' ? 'Normal (8mm)' : 'Lapang (15mm)'}
@@ -1936,7 +1933,7 @@ export const AdminReports: React.FC = () => {
 
                   {/* Skala Ukuran Huruf Tabel */}
                   <div>
-                    <label className="block text-[11px] font-semibold text-slate-400 mb-1.5">Ukuran Teks Isi Tabel:</label>
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-1.5">Ukuran Teks Isi Tabel:</label>
                     <div className="grid grid-cols-3 gap-1.5">
                       {(['compact', 'normal', 'large'] as TableFontSize[]).map((f) => (
                         <button
@@ -1945,8 +1942,8 @@ export const AdminReports: React.FC = () => {
                           onClick={() => setTableFontSize(f)}
                           className={`py-2 px-2 rounded-xl text-[11px] font-bold capitalize transition cursor-pointer border ${
                             tableFontSize === f
-                              ? 'bg-blue-600 border-blue-500 text-white'
-                              : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
+                              ? 'bg-emerald-600 border-emerald-600 text-white shadow-sm'
+                              : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-100'
                           }`}
                         >
                           {f === 'compact' ? 'Kecil (7.5pt)' : f === 'normal' ? 'Normal (8.5pt)' : 'Besar (9.5pt)'}
@@ -1958,14 +1955,14 @@ export const AdminReports: React.FC = () => {
               </div>
 
               {/* Status Sinkronisasi */}
-              <div className="p-3.5 rounded-xl bg-cyan-950/40 border border-cyan-500/30 flex items-start gap-3">
-                <Sparkles className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
+              <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 flex items-start gap-3">
+                <Sparkles className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
                 <div className="space-y-0.5">
-                  <p className="text-cyan-200 font-bold text-xs">
+                  <p className="text-amber-900 font-bold text-xs">
                     Format Siap Cetak: Kertas {paperSize} ({PAPER_OPTIONS.find(p => p.id === paperSize)?.dimensions}) • Posisi {paperOrientation.toUpperCase()}
                   </p>
-                  <p className="text-slate-400 text-[11px]">
-                    Output cetak PDF bebas dari frame screenshot hitam dan berlatar belakang 100% kertas putih murni dengan garis border tabel presisi.
+                  <p className="text-amber-800 text-[11px]">
+                    Output cetak PDF berlatar belakang 100% kertas putih murni dengan garis border tabel presisi dan ruang tanda tangan lengkap.
                   </p>
                 </div>
               </div>
@@ -1973,11 +1970,11 @@ export const AdminReports: React.FC = () => {
             </div>
 
             {/* Modal Actions */}
-            <div className="pt-4 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
+            <div className="pt-4 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
               <button
                 type="button"
                 onClick={() => setShowPrintModal(false)}
-                className="w-full sm:w-auto px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold transition cursor-pointer"
+                className="w-full sm:w-auto px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition cursor-pointer"
               >
                 Tutup & Terapkan di Layar Saja
               </button>
@@ -1988,7 +1985,7 @@ export const AdminReports: React.FC = () => {
                   setShowPrintModal(false);
                   handlePrintPDF(paperSize, paperOrientation, paperMargin, tableFontSize);
                 }}
-                className="w-full sm:w-auto px-6 py-2.5 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-2 shadow-lg shadow-cyan-600/25 transition cursor-pointer"
+                className="w-full sm:w-auto px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-2 shadow-sm transition cursor-pointer"
               >
                 <Printer className="w-4 h-4" />
                 Cetak / Simpan PDF Sekarang ({paperSize})

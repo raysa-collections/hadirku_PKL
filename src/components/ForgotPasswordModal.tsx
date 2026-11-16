@@ -42,82 +42,83 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({ onBack
   };
 
   return (
-    <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl relative text-slate-200">
-      <div className="flex items-center justify-between border-b border-slate-800 pb-4 mb-5">
+    <div className="w-full max-w-md bg-white border border-slate-200 rounded-3xl p-6 sm:p-8 shadow-xl relative text-slate-800 overflow-hidden">
+      <div className="h-1.5 w-full bg-gradient-to-r from-amber-500 via-red-600 to-blue-600 absolute top-0 left-0 right-0" />
+      <div className="flex items-center justify-between border-b border-slate-200 pb-4 mb-5 pt-1">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-amber-600 to-orange-600 flex items-center justify-center text-white shadow-md">
+          <div className="w-10 h-10 rounded-2xl bg-amber-500 flex items-center justify-center text-white shadow-md shadow-amber-500/20">
             <KeyRound className="w-5 h-5" />
           </div>
           <div>
-            <h2 className="text-base font-bold text-white">Bantuan Lupa Password</h2>
-            <p className="text-xs text-slate-400">Pemulihan akses akun siswa & pembimbing</p>
+            <h2 className="text-base font-extrabold text-slate-900">Bantuan Lupa Password</h2>
+            <p className="text-xs text-slate-600">Pemulihan akses akun siswa & pembimbing</p>
           </div>
         </div>
         <button
           onClick={onBackToLogin}
-          className="text-xs text-slate-400 hover:text-white flex items-center gap-1 transition"
+          className="text-xs text-slate-600 hover:text-slate-900 font-semibold flex items-center gap-1 transition cursor-pointer"
         >
           <ArrowLeft className="w-3.5 h-3.5" /> Kembali
         </button>
       </div>
 
       <div className="space-y-4 text-xs">
-        <p className="text-slate-300 leading-relaxed">
+        <p className="text-slate-600 leading-relaxed">
           Masukkan Username atau NIS Anda untuk memeriksa status akun dan petunjuk pemulihan:
         </p>
 
         <form onSubmit={handleLookup} className="space-y-3">
           <div>
-            <label className="block text-slate-300 font-medium mb-1">Username Siswa / Guru atau NIS</label>
+            <label className="block text-slate-700 font-semibold mb-1">Username Siswa / Guru atau NIS</label>
             <input
               type="text"
               required
               value={nisInput}
               onChange={(e) => setNisInput(e.target.value)}
               placeholder="Masukkan Username atau NIS..."
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-white font-mono focus:outline-none focus:border-amber-500"
+              className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2.5 text-slate-900 placeholder-slate-400 font-mono focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20"
             />
           </div>
 
           <button
             type="submit"
-            className="w-full py-2.5 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white font-bold rounded-xl transition shadow-md"
+            className="w-full py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl transition shadow-md shadow-amber-500/20 cursor-pointer"
           >
             Cek Kredensial Akun
           </button>
         </form>
 
         {resultMessage && (
-          <div className={`p-3 rounded-xl border text-xs flex items-start gap-2.5 leading-relaxed ${
+          <div className={`p-3 rounded-xl border text-xs flex items-start gap-2.5 leading-relaxed font-medium ${
             resultMessage.type === 'success'
-              ? 'bg-emerald-950/50 border-emerald-500/40 text-emerald-300'
-              : 'bg-red-950/50 border-red-500/40 text-red-300'
+              ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+              : 'bg-red-50 border-red-200 text-red-700'
           }`}>
             {resultMessage.type === 'success' ? (
-              <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400 mt-0.5" />
+              <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600 mt-0.5" />
             ) : (
-              <AlertCircle className="w-4 h-4 shrink-0 text-red-400 mt-0.5" />
+              <AlertCircle className="w-4 h-4 shrink-0 text-red-600 mt-0.5" />
             )}
             <div>{resultMessage.text}</div>
           </div>
         )}
 
-        <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 space-y-2 mt-4">
-          <div className="flex items-center gap-2 text-slate-300 font-semibold">
-            <PhoneCall className="w-4 h-4 text-cyan-400" />
+        <div className="p-3.5 rounded-2xl bg-blue-50 border border-blue-200 space-y-2 mt-4">
+          <div className="flex items-center gap-2 text-blue-900 font-bold">
+            <PhoneCall className="w-4 h-4 text-blue-600" />
             <span>Kontak Layanan BKK / Hubin PKL:</span>
           </div>
-          <p className="text-[11px] text-slate-400">
+          <p className="text-[11px] text-slate-600">
             Jika masih terkendala, silakan hubungi koordinator pembimbing PKL sekolah di ruang Hubin SMKN 1 Tegalsari atau via WhatsApp di nomor:
           </p>
-          <div className="font-mono text-cyan-400 font-bold bg-slate-900 px-2.5 py-1 rounded-lg inline-block">
+          <div className="font-mono text-blue-800 font-bold bg-white border border-blue-200 px-2.5 py-1 rounded-lg inline-block">
             WA: 0812-3456-7890 (Layanan BKK & Hubin PKL)
           </div>
         </div>
 
         <button
           onClick={onBackToLogin}
-          className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-medium transition"
+          className="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-semibold transition cursor-pointer"
         >
           Kembali ke Halaman Login
         </button>

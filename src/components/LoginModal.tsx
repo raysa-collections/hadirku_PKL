@@ -187,21 +187,24 @@ export const LoginModal: React.FC<LoginModalProps> = ({
   }
 
   return (
-    <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-[0_25px_60px_-15px_rgba(0,0,0,0.8),0_0_50px_rgba(30,58,138,0.25)] relative text-slate-200 animate-in fade-in zoom-in-95">
+    <div className="w-full max-w-md bg-white border border-slate-200 rounded-3xl p-6 sm:p-8 shadow-xl relative text-slate-800 animate-in fade-in zoom-in-95 overflow-hidden">
+      <div className={`h-1.5 w-full absolute top-0 left-0 right-0 ${
+        isSiswa ? 'bg-gradient-to-r from-emerald-500 to-amber-500' : 'bg-gradient-to-r from-blue-600 to-red-600'
+      }`} />
       
       {/* Top Switcher Button to Change Role */}
-      <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-800">
+      <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-100 pt-1">
         <button
           onClick={onBackToRoleSelect}
-          className="text-xs text-slate-400 hover:text-white flex items-center gap-1.5 transition font-medium cursor-pointer"
+          className="text-xs text-slate-600 hover:text-slate-900 flex items-center gap-1.5 transition font-semibold cursor-pointer"
         >
           <ArrowLeft className="w-3.5 h-3.5" /> Ganti Pilihan Peran
         </button>
 
-        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border ${
           isSiswa 
-            ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' 
-            : 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'
+            ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
+            : 'bg-blue-50 text-blue-700 border-blue-200'
         }`}>
           {isSiswa ? 'Portal Siswa' : 'Portal Guru'}
         </span>
@@ -209,17 +212,17 @@ export const LoginModal: React.FC<LoginModalProps> = ({
 
       {/* Header Branding */}
       <div className="text-center space-y-2 mb-6">
-        <div className={`inline-flex w-14 h-14 rounded-2xl items-center justify-center text-white shadow-lg mb-1 ${
+        <div className={`inline-flex w-14 h-14 rounded-2xl items-center justify-center text-white shadow-md mb-1 ${
           isSiswa 
-            ? 'bg-gradient-to-tr from-emerald-600 to-teal-500 shadow-emerald-600/30' 
-            : 'bg-gradient-to-tr from-blue-700 via-indigo-600 to-cyan-500 shadow-blue-600/30'
+            ? 'bg-gradient-to-tr from-emerald-600 to-emerald-500 shadow-emerald-600/20' 
+            : 'bg-gradient-to-tr from-blue-600 to-blue-700 shadow-blue-600/20'
         }`}>
           {isSiswa ? <GraduationCap className="w-7 h-7" /> : <ShieldCheck className="w-7 h-7" />}
         </div>
-        <h2 className="text-lg sm:text-xl font-bold text-white tracking-tight">
+        <h2 className="text-lg sm:text-xl font-extrabold text-slate-900 tracking-tight">
           {isSiswa ? 'Login Siswa PKL' : 'Login Guru / Pembimbing'}
         </h2>
-        <p className="text-xs text-slate-400">
+        <p className="text-xs text-slate-600">
           {isSiswa 
             ? 'Masukkan Username dan Password untuk presensi' 
             : 'Masukkan Username dan Password pengawas'}
@@ -227,8 +230,8 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       </div>
 
       {errorMessage && (
-        <div className="mb-4 p-3 rounded-xl bg-red-950/60 border border-red-500/40 text-red-300 text-xs flex items-center gap-2 animate-in fade-in">
-          <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
+        <div className="mb-4 p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs flex items-center gap-2 animate-in fade-in font-medium">
+          <AlertCircle className="w-4 h-4 shrink-0 text-red-600" />
           <span>{errorMessage}</span>
         </div>
       )}
@@ -236,16 +239,16 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       {/* Form Input */}
       <form onSubmit={handleLogin} className="space-y-4 text-xs">
         <div>
-          <label className="block text-slate-300 font-medium mb-1.5 flex items-center justify-between">
+          <label className="block text-slate-700 font-semibold mb-1.5 flex items-center justify-between">
             <span>{isSiswa ? 'Username Siswa' : 'Username Guru / Pembimbing'}</span>
             {isSiswa && (
-              <span className="text-[10px] text-cyan-400 font-normal">
+              <span className="text-[10px] text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200 font-semibold">
                 Sesuai saat registrasi
               </span>
             )}
           </label>
           <div className="relative">
-            <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
+            <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
               <UserIcon className="w-4 h-4" />
             </div>
             <input
@@ -254,24 +257,24 @@ export const LoginModal: React.FC<LoginModalProps> = ({
               value={identifier}
               onChange={(e) => setIdentifier(e.target.value)}
               placeholder={isSiswa ? 'Masukkan username siswa...' : 'Masukkan username...'}
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-10 pr-3.5 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition font-mono"
+              className="w-full bg-white border border-slate-300 rounded-xl pl-10 pr-3.5 py-2.5 text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20 transition font-mono"
             />
           </div>
         </div>
 
         <div>
           <div className="flex items-center justify-between mb-1.5">
-            <label className="text-slate-300 font-medium">Password</label>
+            <label className="text-slate-700 font-semibold">Password</label>
             <button
               type="button"
               onClick={() => setViewState('forgot')}
-              className="text-[11px] text-cyan-400 hover:text-cyan-300 transition cursor-pointer"
+              className="text-[11px] text-amber-700 hover:text-amber-800 font-semibold hover:underline transition cursor-pointer"
             >
               Lupa Password?
             </button>
           </div>
           <div className="relative">
-            <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
+            <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
               <Lock className="w-4 h-4" />
             </div>
             <input
@@ -280,12 +283,12 @@ export const LoginModal: React.FC<LoginModalProps> = ({
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder={isSiswa ? 'Masukkan password...' : 'Masukkan password...'}
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-10 pr-10 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition"
+              className="w-full bg-white border border-slate-300 rounded-xl pl-10 pr-10 py-2.5 text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20 transition"
             />
             <button
               type="button"
               onClick={() => setShowPassword(!showPassword)}
-              className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-500 hover:text-slate-300 transition cursor-pointer"
+              className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-700 transition cursor-pointer"
             >
               {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
             </button>
@@ -294,10 +297,10 @@ export const LoginModal: React.FC<LoginModalProps> = ({
 
         <button
           type="submit"
-          className={`w-full py-2.5 text-white font-bold rounded-xl shadow-lg flex items-center justify-center gap-2 transition cursor-pointer text-xs mt-2 ${
+          className={`w-full py-2.5 text-white font-bold rounded-xl shadow-md flex items-center justify-center gap-2 transition cursor-pointer text-xs mt-2 ${
             isSiswa
-              ? 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 shadow-emerald-700/30'
-              : 'bg-gradient-to-r from-blue-700 via-indigo-600 to-cyan-600 hover:from-blue-600 hover:to-cyan-500 shadow-blue-700/30'
+              ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/20'
+              : 'bg-blue-600 hover:bg-blue-700 shadow-blue-600/20'
           }`}
         >
           <LogIn className="w-4 h-4" />
@@ -307,12 +310,12 @@ export const LoginModal: React.FC<LoginModalProps> = ({
 
       {/* Registration Section (Hanya untuk siswa; untuk pembimbing tidak ditampilkan) */}
       {isSiswa && (
-        <div className="mt-5 pt-4 border-t border-slate-800/80 text-center">
-          <p className="text-xs text-slate-400">
+        <div className="mt-5 pt-4 border-t border-slate-100 text-center">
+          <p className="text-xs text-slate-600">
             Belum memiliki akun siswa PKL?{' '}
             <button
               onClick={() => setViewState('register')}
-              className="text-cyan-400 font-semibold hover:underline inline-flex items-center gap-1 cursor-pointer"
+              className="text-blue-600 font-bold hover:underline inline-flex items-center gap-1 cursor-pointer"
             >
               Registrasi Siswa <ArrowRight className="w-3 h-3" />
             </button>

@@ -419,9 +419,9 @@ export const AdminStudentManagement: React.FC = () => {
       
       {/* Toast */}
       {toastMessage && (
-        <div className="p-3 rounded-xl bg-emerald-950/90 border border-emerald-500/40 text-emerald-200 text-xs flex items-center gap-2 animate-in fade-in">
-          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-          <span>{toastMessage}</span>
+        <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs flex items-center gap-2 animate-in fade-in shadow-sm">
+          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+          <span className="font-medium">{toastMessage}</span>
         </div>
       )}
 
@@ -435,15 +435,15 @@ export const AdminStudentManagement: React.FC = () => {
       />
 
       {/* Header & Controls */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-800 pb-4">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-200 pb-4">
         <div>
-          <div className="flex items-center gap-2">
-            <h2 className="text-lg font-bold text-white">Manajemen Siswa PKL & Bengkel Mitra</h2>
-            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-500/20 text-cyan-300 border border-blue-500/30">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-lg font-bold text-slate-900">Manajemen Siswa PKL & Bengkel Mitra</h2>
+            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
               Format Excel TKR
             </span>
           </div>
-          <p className="text-xs text-slate-400 mt-0.5">
+          <p className="text-xs text-slate-600 mt-0.5">
             Kelola data siswa, penempatan bengkel mitra, data nama pembimbing sekolah (dari registrasi siswa), dan import massal via file Excel
           </p>
         </div>
@@ -452,27 +452,27 @@ export const AdminStudentManagement: React.FC = () => {
           {/* Download Template Button */}
           <button
             onClick={handleDownloadTemplate}
-            className="px-3 py-2 bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white font-semibold rounded-xl text-xs flex items-center gap-1.5 border border-slate-700 transition cursor-pointer shadow-sm"
+            className="px-3 py-2 bg-white hover:bg-slate-50 text-slate-700 hover:text-slate-900 font-semibold rounded-xl text-xs flex items-center gap-1.5 border border-slate-300 transition cursor-pointer shadow-sm"
             title="Unduh format file Excel (.xlsx) dengan kolom yang sesuai untuk import data siswa"
           >
-            <Download className="w-3.5 h-3.5 text-cyan-400" />
+            <Download className="w-3.5 h-3.5 text-blue-600" />
             <span>Format Template (.xlsx)</span>
           </button>
 
           {/* Upload Excel Button */}
           <button
             onClick={() => fileInputRef.current?.click()}
-            className="px-3.5 py-2 bg-emerald-950/80 hover:bg-emerald-900/80 border border-emerald-500/50 text-emerald-300 font-bold rounded-xl text-xs flex items-center gap-1.5 transition shadow-lg shadow-emerald-950/30 cursor-pointer"
+            className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 transition shadow-sm cursor-pointer"
             title="Upload file Excel (.xlsx / .xls) data siswa PKL"
           >
-            <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
+            <FileSpreadsheet className="w-4 h-4" />
             <span>Upload Data Siswa Excel</span>
           </button>
 
           {/* Manual Add Button */}
           <button
             onClick={handleOpenAdd}
-            className="px-3.5 py-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-lg shadow-cyan-600/20 transition cursor-pointer"
+            className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-sm transition cursor-pointer"
           >
             <UserPlus className="w-4 h-4" />
             <span>Tambah Siswa Manual</span>
@@ -482,67 +482,67 @@ export const AdminStudentManagement: React.FC = () => {
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div className="p-3.5 rounded-2xl bg-slate-900/90 border border-slate-800 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400">
+        <div className="p-3.5 rounded-2xl bg-white border border-blue-200 shadow-sm flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-200 flex items-center justify-center text-blue-600">
             <School className="w-5 h-5" />
           </div>
           <div>
-            <span className="text-[11px] text-slate-400 font-medium block">Total Siswa PKL (TKR)</span>
-            <span className="text-lg font-black text-white">{users.length} Siswa</span>
+            <span className="text-[11px] text-slate-500 font-medium block">Total Siswa PKL (TKR)</span>
+            <span className="text-lg font-black text-slate-900 tabular-nums">{users.length} Siswa</span>
           </div>
         </div>
 
-        <div className="p-3.5 rounded-2xl bg-slate-900/90 border border-slate-800 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
+        <div className="p-3.5 rounded-2xl bg-white border border-emerald-200 shadow-sm flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-600">
             <Building2 className="w-5 h-5" />
           </div>
           <div>
-            <span className="text-[11px] text-slate-400 font-medium block">Tempat PKL / Bengkel Mitra</span>
-            <span className="text-lg font-black text-emerald-300">{uniqueWorkshops.length} Bengkel Aktif</span>
+            <span className="text-[11px] text-slate-500 font-medium block">Tempat PKL / Bengkel Mitra</span>
+            <span className="text-lg font-black text-emerald-700 tabular-nums">{uniqueWorkshops.length} Bengkel Aktif</span>
           </div>
         </div>
 
-        <div className="p-3.5 rounded-2xl bg-slate-900/90 border border-slate-800 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
+        <div className="p-3.5 rounded-2xl bg-white border border-amber-200 shadow-sm flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-600">
             <GraduationCap className="w-5 h-5" />
           </div>
           <div>
             <div className="flex items-center gap-1.5">
-              <span className="text-[11px] text-slate-400 font-medium block">Guru Pembimbing Sekolah</span>
-              <span className="text-[9px] px-1.5 py-0.2 rounded bg-indigo-500/20 text-indigo-300 font-semibold">Registrasi Siswa</span>
+              <span className="text-[11px] text-slate-500 font-medium block">Guru Pembimbing Sekolah</span>
+              <span className="text-[9px] px-1.5 py-0.2 rounded bg-amber-50 text-amber-800 border border-amber-200 font-semibold">Registrasi Siswa</span>
             </div>
-            <span className="text-lg font-black text-indigo-300">10 Guru TKR</span>
+            <span className="text-lg font-black text-amber-700">10 Guru TKR</span>
           </div>
         </div>
       </div>
 
       {/* Search and Filter Bar */}
-      <div className="p-3.5 rounded-2xl bg-slate-900 border border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-3">
+      <div className="p-3.5 rounded-2xl bg-white border border-slate-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-3">
         {/* Search Input */}
         <div className="relative flex-1">
-          <Search className="w-4 h-4 text-slate-500 absolute left-3 top-2.5" />
+          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Cari Nama Siswa, NIS, Pembimbing Sekolah, atau Bengkel..."
-            className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-3.5 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500"
+            className="w-full bg-white border border-slate-300 rounded-xl pl-9 pr-3.5 py-2 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20"
           />
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
           {/* Filter by Tahun Ajaran */}
-          <div className="flex items-center gap-1.5 bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1.5">
-            <Filter className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-            <span className="text-[11px] text-slate-400 font-medium shrink-0">Tahun Ajaran:</span>
+          <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-300 rounded-xl px-2.5 py-1.5">
+            <Filter className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+            <span className="text-[11px] text-slate-600 font-medium shrink-0">Tahun Ajaran:</span>
             <select
               value={selectedTahun}
               onChange={(e) => setSelectedTahun(e.target.value)}
-              className="bg-transparent text-xs text-white font-mono font-medium focus:outline-none cursor-pointer"
+              className="bg-transparent text-xs text-slate-900 font-mono font-medium focus:outline-none cursor-pointer"
             >
-              <option value="all" className="bg-slate-900 text-white">Semua Periode</option>
+              <option value="all" className="bg-white text-slate-900">Semua Periode</option>
               {tahunConfig.daftarTahun.map((t) => (
-                <option key={t} value={t} className="bg-slate-900 text-white">
+                <option key={t} value={t} className="bg-white text-slate-900">
                   {t} {t === tahunConfig.tahunAktif ? '(Aktif)' : ''}
                 </option>
               ))}
@@ -550,20 +550,20 @@ export const AdminStudentManagement: React.FC = () => {
           </div>
 
           {/* Filter by Guru Pembimbing Sekolah Dropdown */}
-          <div className="flex items-center gap-1.5 bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1.5">
-            <span className="text-[11px] text-slate-400 font-medium shrink-0">Pembimbing:</span>
+          <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-300 rounded-xl px-2.5 py-1.5">
+            <span className="text-[11px] text-slate-600 font-medium shrink-0">Pembimbing:</span>
             <select
               value={selectedMentor}
               onChange={(e) => setSelectedMentor(e.target.value)}
-              className="bg-transparent text-xs text-white font-medium focus:outline-none cursor-pointer max-w-[180px] truncate"
+              className="bg-transparent text-xs text-slate-900 font-medium focus:outline-none cursor-pointer max-w-[180px] truncate"
             >
-              <option value="all" className="bg-slate-900 text-white">
+              <option value="all" className="bg-white text-slate-900">
                 Semua Pembimbing
               </option>
               {PEMBIMBING_TKR_LIST.map((mentor) => {
                 const count = users.filter(u => u.namaPembimbing === mentor).length;
                 return (
-                  <option key={mentor} value={mentor} className="bg-slate-900 text-white">
+                  <option key={mentor} value={mentor} className="bg-white text-slate-900">
                     {mentor} ({count})
                   </option>
                 );
@@ -579,9 +579,9 @@ export const AdminStudentManagement: React.FC = () => {
                 setSelectedTahun('all');
               }}
               title="Reset Filter & Pencarian"
-              className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition cursor-pointer text-xs flex items-center gap-1"
+              className="p-2 rounded-xl bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 transition cursor-pointer text-xs flex items-center gap-1 font-medium"
             >
-              <RotateCcw className="w-3.5 h-3.5 text-cyan-400" />
+              <RotateCcw className="w-3.5 h-3.5 text-red-600" />
               <span className="hidden sm:inline">Reset</span>
             </button>
           )}
@@ -590,16 +590,16 @@ export const AdminStudentManagement: React.FC = () => {
 
       {/* Active Filter Indicator */}
       {selectedMentor !== 'all' && (
-        <div className="px-3 py-2 rounded-xl bg-indigo-950/50 border border-indigo-500/30 text-indigo-200 text-xs flex items-center justify-between gap-2">
+        <div className="px-3.5 py-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <GraduationCap className="w-4 h-4 text-indigo-400 shrink-0" />
+            <GraduationCap className="w-4 h-4 text-amber-600 shrink-0" />
             <span>
-              Menampilkan siswa bimbingan dari: <strong className="text-white">{selectedMentor}</strong> (Data dari formulir registrasi siswa)
+              Menampilkan siswa bimbingan dari: <strong className="text-slate-900">{selectedMentor}</strong> (Data dari formulir registrasi siswa)
             </span>
           </div>
           <button
             onClick={() => setSelectedMentor('all')}
-            className="text-[11px] text-indigo-300 hover:text-white underline cursor-pointer"
+            className="text-[11px] text-amber-800 hover:text-slate-900 font-semibold underline cursor-pointer"
           >
             Tampilkan Semua
           </button>
@@ -607,30 +607,30 @@ export const AdminStudentManagement: React.FC = () => {
       )}
 
       {/* Student Table */}
-      <div className="overflow-x-auto rounded-2xl border border-slate-800 bg-slate-900/60">
+      <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
         <table className="w-full text-left text-xs border-collapse">
           <thead>
-            <tr className="border-b border-slate-800 bg-slate-900 text-slate-300">
+            <tr className="border-b border-slate-200 bg-slate-100 text-slate-700">
               <th className="p-3.5 font-semibold">NIS & Nama Siswa</th>
               <th className="p-3.5 font-semibold">
                 <div className="flex items-center gap-1.5">
-                  <Building2 className="w-3.5 h-3.5 text-emerald-400" />
+                  <Building2 className="w-3.5 h-3.5 text-emerald-600" />
                   <span>Bengkel Mitra / Tempat PKL</span>
                 </div>
               </th>
               <th className="p-3.5 font-semibold">
                 <div className="flex items-center gap-1.5">
-                  <GraduationCap className="w-3.5 h-3.5 text-cyan-400" />
+                  <GraduationCap className="w-3.5 h-3.5 text-blue-600" />
                   <span>Guru Pembimbing Sekolah</span>
                 </div>
-                <span className="text-[10px] text-cyan-400/80 font-normal block">(Dari Registrasi Siswa)</span>
+                <span className="text-[10px] text-blue-700 font-normal block">(Dari Registrasi Siswa)</span>
               </th>
               <th className="p-3.5 font-semibold">Jurusan & Sekolah</th>
               <th className="p-3.5 font-semibold">Kontak HP</th>
               <th className="p-3.5 font-semibold text-right">Aksi & Kredensial</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-800/80 text-slate-300">
+          <tbody className="divide-y divide-slate-200 text-slate-700">
             {filtered.length === 0 ? (
               <tr>
                 <td colSpan={6} className="p-8 text-center text-slate-500">
@@ -639,16 +639,16 @@ export const AdminStudentManagement: React.FC = () => {
               </tr>
             ) : (
               filtered.map((u) => (
-                <tr key={u.id} className="hover:bg-slate-800/30 transition">
+                <tr key={u.id} className="hover:bg-blue-50/40 transition">
                   {/* NIS & Nama Siswa */}
                   <td className="p-3.5">
-                    <p className="font-bold text-white text-xs">{u.nama}</p>
+                    <p className="font-bold text-slate-900 text-xs">{u.nama}</p>
                     <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
-                      <span className="font-mono text-[10px] text-cyan-400 font-semibold">{u.nis}</span>
-                      <span className="px-1.5 py-0.2 rounded text-[10px] font-semibold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+                      <span className="font-mono text-[10px] text-blue-700 font-semibold">{u.nis}</span>
+                      <span className="px-1.5 py-0.2 rounded text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
                         {u.kelas || 'XII TKR 1'}
                       </span>
-                      <span className="font-mono text-[10px] text-indigo-300 font-medium bg-indigo-500/10 px-1 rounded border border-indigo-500/20">
+                      <span className="font-mono text-[10px] text-amber-800 font-medium bg-amber-50 px-1.5 rounded border border-amber-200">
                         @{u.username || u.nis}
                       </span>
                       <span className="text-slate-500 text-[10px]">({u.jenisKelamin})</span>
@@ -658,12 +658,12 @@ export const AdminStudentManagement: React.FC = () => {
                   {/* Bengkel Mitra / Tempat PKL */}
                   <td className="p-3.5">
                     <div className="flex items-start gap-1.5">
-                      <Building2 className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
+                      <Building2 className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
                       <div>
-                        <p className="text-emerald-300 font-semibold text-xs leading-tight">
+                        <p className="text-emerald-700 font-semibold text-xs leading-tight">
                           {u.tempatPkl || 'Belum Ditentukan'}
                         </p>
-                        <span className="text-[10px] text-slate-400 block mt-0.5">Tempat PKL Industri</span>
+                        <span className="text-[10px] text-slate-500 block mt-0.5">Tempat PKL Industri</span>
                       </div>
                     </div>
                   </td>
@@ -672,13 +672,13 @@ export const AdminStudentManagement: React.FC = () => {
                   <td className="p-3.5">
                     <div className="space-y-1">
                       <div className="flex items-center gap-1.5">
-                        <UserCheck className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-                        <span className="text-white font-bold text-xs">
+                        <UserCheck className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                        <span className="text-slate-900 font-bold text-xs">
                           {u.namaPembimbing || 'Belum Memilih'}
                         </span>
                       </div>
-                      <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-indigo-950/70 text-indigo-300 border border-indigo-500/30">
-                        <GraduationCap className="w-3 h-3 text-indigo-400" />
+                      <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-blue-50 text-blue-700 border border-blue-200">
+                        <GraduationCap className="w-3 h-3 text-blue-600" />
                         <span>Dari Registrasi Siswa</span>
                       </div>
                     </div>
@@ -686,12 +686,12 @@ export const AdminStudentManagement: React.FC = () => {
 
                   {/* Jurusan & Asal Sekolah */}
                   <td className="p-3.5">
-                    <p className="text-slate-200">{u.jurusan}</p>
+                    <p className="text-slate-800 font-medium">{u.jurusan}</p>
                     <p className="text-[10px] text-slate-500">{u.asalSekolah}</p>
                   </td>
 
                   {/* Kontak HP */}
-                  <td className="p-3.5 font-mono text-slate-300">
+                  <td className="p-3.5 font-mono text-slate-700">
                     {u.noHp || '-'}
                   </td>
 
@@ -701,21 +701,21 @@ export const AdminStudentManagement: React.FC = () => {
                       <button
                         onClick={() => handleResetPassword(u)}
                         title="Reset Password ke: siswa123"
-                        className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-400 transition cursor-pointer"
+                        className="p-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 transition cursor-pointer"
                       >
                         <KeyRound className="w-3.5 h-3.5" />
                       </button>
                       <button
                         onClick={() => handleOpenEdit(u)}
                         title="Edit Data Siswa & Pembimbing"
-                        className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-400 transition cursor-pointer"
+                        className="p-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 transition cursor-pointer"
                       >
                         <Edit3 className="w-3.5 h-3.5" />
                       </button>
                       <button
                         onClick={() => handleDelete(u)}
                         title="Hapus Siswa"
-                        className="p-1.5 rounded-lg bg-slate-800 hover:bg-red-950/60 text-slate-400 hover:text-red-400 transition cursor-pointer"
+                        className="p-1.5 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 transition cursor-pointer"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -730,16 +730,17 @@ export const AdminStudentManagement: React.FC = () => {
 
       {/* Add / Edit Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          <div className="w-full max-w-lg bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl relative text-slate-200 animate-in fade-in zoom-in-95">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
-              <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                <UserPlus className="w-4 h-4 text-cyan-400" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="w-full max-w-lg bg-white border border-slate-200 rounded-3xl p-6 shadow-2xl relative text-slate-700 animate-in fade-in zoom-in-95 overflow-hidden my-auto">
+            <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-red-600 via-amber-500 via-blue-600 to-emerald-600" />
+            <div className="flex items-center justify-between border-b border-slate-200 pb-3 mb-4 pt-1">
+              <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                <UserPlus className="w-4 h-4 text-blue-600" />
                 {editingUser ? 'Edit Data Siswa PKL' : 'Tambah Siswa PKL Baru'}
               </h3>
               <button
                 onClick={() => setShowAddModal(false)}
-                className="text-slate-500 hover:text-white p-1 rounded-lg"
+                className="text-slate-400 hover:text-slate-900 p-1 rounded-lg hover:bg-slate-100 cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -748,9 +749,9 @@ export const AdminStudentManagement: React.FC = () => {
             <form onSubmit={handleSave} className="space-y-3 text-xs">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-slate-300 font-medium mb-1 flex items-center justify-between">
+                  <label className="block text-slate-700 font-medium mb-1 flex items-center justify-between">
                     <span>Username Siswa *</span>
-                    <span className="text-[10px] text-cyan-400">Untuk Login</span>
+                    <span className="text-[10px] text-blue-700 font-semibold">Untuk Login</span>
                   </label>
                   <input
                     type="text"
@@ -758,40 +759,40 @@ export const AdminStudentManagement: React.FC = () => {
                     value={formData.username}
                     onChange={(e) => setFormData({ ...formData, username: e.target.value.toLowerCase().replace(/\s+/g, '') })}
                     placeholder="Contoh: ahmad_rizki"
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-cyan-500"
+                    className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-slate-900 font-mono focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20"
                   />
                 </div>
                 <div>
-                  <label className="block text-slate-300 font-medium mb-1">NIS / NISN *</label>
+                  <label className="block text-slate-700 font-medium mb-1">NIS / NISN *</label>
                   <input
                     type="text"
                     required
                     value={formData.nis}
                     onChange={(e) => setFormData({ ...formData, nis: e.target.value })}
                     placeholder="Contoh: 20240105"
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-cyan-500"
+                    className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-slate-900 font-mono focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20"
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="sm:col-span-2">
-                  <label className="block text-slate-300 font-medium mb-1">Nama Lengkap Siswa *</label>
+                  <label className="block text-slate-700 font-medium mb-1">Nama Lengkap Siswa *</label>
                   <input
                     type="text"
                     required
                     value={formData.nama}
                     onChange={(e) => setFormData({ ...formData, nama: e.target.value })}
                     placeholder="Nama lengkap siswa"
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-cyan-500"
+                    className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-slate-900 focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20"
                   />
                 </div>
                 <div>
-                  <label className="block text-slate-300 font-medium mb-1">Kelas *</label>
+                  <label className="block text-slate-700 font-medium mb-1">Kelas *</label>
                   <select
                     value={formData.kelas}
                     onChange={(e) => setFormData({ ...formData, kelas: e.target.value })}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-medium focus:outline-none focus:border-cyan-500"
+                    className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-slate-900 font-medium focus:outline-none focus:border-blue-600"
                   >
                     <option value="XII TKR 1">XII TKR 1</option>
                     <option value="XII TKR 2">XII TKR 2</option>
@@ -804,71 +805,71 @@ export const AdminStudentManagement: React.FC = () => {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-slate-300 font-medium mb-1">Jenis Kelamin</label>
+                  <label className="block text-slate-700 font-medium mb-1">Jenis Kelamin</label>
                   <select
                     value={formData.jenisKelamin}
                     onChange={(e) => setFormData({ ...formData, jenisKelamin: e.target.value as any })}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-cyan-500"
+                    className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-slate-900 focus:outline-none focus:border-blue-600"
                   >
                     <option value="Laki-laki">Laki-laki</option>
                     <option value="Perempuan">Perempuan</option>
                   </select>
                 </div>
                 <div>
-                  <label className="block text-slate-300 font-medium mb-1">No. WhatsApp</label>
+                  <label className="block text-slate-700 font-medium mb-1">No. WhatsApp</label>
                   <input
                     type="tel"
                     value={formData.noHp}
                     onChange={(e) => setFormData({ ...formData, noHp: e.target.value })}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-cyan-500"
+                    className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-slate-900 focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20"
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-slate-300 font-medium mb-1">Asal Sekolah</label>
+                  <label className="block text-slate-700 font-medium mb-1">Asal Sekolah</label>
                   <input
                     type="text"
                     value={formData.asalSekolah}
                     onChange={(e) => setFormData({ ...formData, asalSekolah: e.target.value })}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-cyan-500"
+                    className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-slate-900 focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20"
                   />
                 </div>
                 <div>
-                  <label className="block text-slate-300 font-medium mb-1">Jurusan</label>
+                  <label className="block text-slate-700 font-medium mb-1">Jurusan</label>
                   <input
                     type="text"
                     value={formData.jurusan}
                     onChange={(e) => setFormData({ ...formData, jurusan: e.target.value })}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-cyan-500"
+                    className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-slate-900 focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20"
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-slate-300 font-medium mb-1">Tempat PKL / Bengkel Mitra</label>
+                  <label className="block text-slate-700 font-medium mb-1">Tempat PKL / Bengkel Mitra</label>
                   <input
                     type="text"
                     value={formData.tempatPkl}
                     onChange={(e) => setFormData({ ...formData, tempatPkl: e.target.value })}
                     placeholder="Nama bengkel / PT"
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-cyan-500"
+                    className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-slate-900 focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20"
                   />
                 </div>
                 <div>
-                  <label className="block text-slate-300 font-medium mb-1">
+                  <label className="block text-slate-700 font-medium mb-1">
                     Guru Pembimbing Sekolah *
                   </label>
-                  <span className="text-[10px] text-cyan-400 block -mt-0.5 mb-1">
+                  <span className="text-[10px] text-blue-700 block -mt-0.5 mb-1">
                     (Data sesuai yang dipilih siswa saat registrasi)
                   </span>
                   <select
                     required
                     value={formData.namaPembimbing}
                     onChange={(e) => setFormData({ ...formData, namaPembimbing: e.target.value })}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-cyan-500 font-medium"
+                    className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-slate-900 focus:outline-none focus:border-blue-600 font-medium"
                   >
                     {PEMBIMBING_TKR_LIST.map((mentor) => (
                       <option key={mentor} value={mentor}>
@@ -880,27 +881,27 @@ export const AdminStudentManagement: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-slate-300 font-medium mb-1">Password Akun Siswa</label>
+                <label className="block text-slate-700 font-medium mb-1">Password Akun Siswa</label>
                 <input
                   type="text"
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                   placeholder="Default: siswa123"
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-cyan-500"
+                  className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-slate-900 font-mono focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20"
                 />
               </div>
 
-              <div className="pt-2 flex justify-end gap-2">
+              <div className="pt-2 flex justify-end gap-2 border-t border-slate-200">
                 <button
                   type="button"
                   onClick={() => setShowAddModal(false)}
-                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl font-medium"
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-medium cursor-pointer"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold rounded-xl shadow-md"
+                  className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-sm cursor-pointer"
                 >
                   {editingUser ? 'Simpan Perubahan' : 'Tambahkan Siswa'}
                 </button>
@@ -912,23 +913,24 @@ export const AdminStudentManagement: React.FC = () => {
 
       {/* Excel Import Preview & Confirmation Modal */}
       {importPreview && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 overflow-y-auto">
-          <div className="w-full max-w-4xl bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl relative text-slate-200 animate-in fade-in zoom-in-95 my-8 max-h-[90vh] flex flex-col">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="w-full max-w-4xl bg-white border border-slate-200 rounded-3xl p-6 shadow-2xl relative text-slate-700 animate-in fade-in zoom-in-95 my-8 max-h-[90vh] flex flex-col overflow-hidden">
+            <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-red-600 via-amber-500 via-blue-600 to-emerald-600" />
             
             {/* Modal Header */}
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3 shrink-0">
+            <div className="flex items-center justify-between border-b border-slate-200 pb-3 pt-1 shrink-0">
               <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
+                <div className="w-9 h-9 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-600 flex items-center justify-center">
                   <FileSpreadsheet className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-white">Preview Import Data Siswa PKL</h3>
-                  <p className="text-xs text-slate-400">File: <span className="font-mono text-cyan-300">{importPreview.fileName}</span></p>
+                  <h3 className="text-base font-bold text-slate-900">Preview Import Data Siswa PKL</h3>
+                  <p className="text-xs text-slate-500">File: <span className="font-mono text-blue-700 font-semibold">{importPreview.fileName}</span></p>
                 </div>
               </div>
               <button
                 onClick={() => setImportPreview(null)}
-                className="text-slate-500 hover:text-white p-1 rounded-lg"
+                className="text-slate-400 hover:text-slate-900 p-1 rounded-lg hover:bg-slate-100 cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -936,32 +938,32 @@ export const AdminStudentManagement: React.FC = () => {
 
             {/* Metrics Bar */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 my-4 shrink-0 text-xs">
-              <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-800">
-                <span className="text-slate-400 text-[10px] block">Total Siswa Terbaca</span>
-                <span className="text-base font-bold font-mono text-white">{importPreview.students.length} Siswa</span>
+              <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200">
+                <span className="text-slate-500 text-[10px] block">Total Siswa Terbaca</span>
+                <span className="text-base font-bold font-mono text-slate-900">{importPreview.students.length} Siswa</span>
               </div>
-              <div className="p-2.5 rounded-xl bg-emerald-950/60 border border-emerald-500/40 text-emerald-300">
-                <span className="text-emerald-400/80 text-[10px] block">Siswa Baru</span>
+              <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800">
+                <span className="text-emerald-700 text-[10px] block">Siswa Baru</span>
                 <span className="text-base font-bold font-mono">+{importPreview.newCount}</span>
               </div>
-              <div className="p-2.5 rounded-xl bg-amber-950/60 border border-amber-500/40 text-amber-300">
-                <span className="text-amber-400/80 text-[10px] block">Siswa Update</span>
+              <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-800">
+                <span className="text-amber-700 text-[10px] block">Siswa Update</span>
                 <span className="text-base font-bold font-mono">{importPreview.updateCount}</span>
               </div>
-              <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 text-slate-400">
+              <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-600">
                 <span className="text-slate-500 text-[10px] block">Baris Kosong/Lewat</span>
-                <span className="text-base font-bold font-mono text-slate-300">{importPreview.invalidCount}</span>
+                <span className="text-base font-bold font-mono text-slate-800">{importPreview.invalidCount}</span>
               </div>
             </div>
 
-            <p className="text-[11px] text-slate-400 mb-2 shrink-0">
+            <p className="text-[11px] text-slate-600 mb-2 shrink-0">
               Berikut daftar siswa yang akan ditambahkan ke sistem. Siswa dengan NIS yang sudah ada akan diperbarui datanya.
             </p>
 
             {/* Table Preview */}
-            <div className="overflow-y-auto flex-1 rounded-2xl border border-slate-800 bg-slate-950 min-h-[200px]">
+            <div className="overflow-y-auto flex-1 rounded-2xl border border-slate-200 bg-white min-h-[200px]">
               <table className="w-full text-left text-xs border-collapse">
-                <thead className="sticky top-0 bg-slate-900 border-b border-slate-800 text-slate-300">
+                <thead className="sticky top-0 bg-slate-100 border-b border-slate-200 text-slate-700">
                   <tr>
                     <th className="p-2.5 font-semibold">NIS</th>
                     <th className="p-2.5 font-semibold">Nama Siswa</th>
@@ -971,18 +973,18 @@ export const AdminStudentManagement: React.FC = () => {
                     <th className="p-2.5 font-semibold">No HP</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-800/80 text-slate-300">
+                <tbody className="divide-y divide-slate-200 text-slate-700">
                   {importPreview.students.map((st, idx) => (
-                    <tr key={idx} className="hover:bg-slate-900/50">
-                      <td className="p-2.5 font-mono text-cyan-400 font-bold whitespace-nowrap">{st.nis}</td>
-                      <td className="p-2.5 font-medium text-white whitespace-nowrap">{st.nama}</td>
-                      <td className="p-2.5 text-slate-400 whitespace-nowrap">{st.jenisKelamin}</td>
-                      <td className="p-2.5 text-emerald-300">{st.tempatPkl}</td>
+                    <tr key={idx} className="hover:bg-blue-50/40">
+                      <td className="p-2.5 font-mono text-blue-700 font-bold whitespace-nowrap">{st.nis}</td>
+                      <td className="p-2.5 font-medium text-slate-900 whitespace-nowrap">{st.nama}</td>
+                      <td className="p-2.5 text-slate-600 whitespace-nowrap">{st.jenisKelamin}</td>
+                      <td className="p-2.5 text-emerald-700 font-medium">{st.tempatPkl}</td>
                       <td className="p-2.5">
-                        <span className="font-semibold text-indigo-300 block">{st.namaPembimbing}</span>
-                        <span className="text-[10px] text-slate-400">Dari Registrasi</span>
+                        <span className="font-semibold text-blue-700 block">{st.namaPembimbing}</span>
+                        <span className="text-[10px] text-slate-500">Dari Registrasi</span>
                       </td>
-                      <td className="p-2.5 font-mono text-slate-400">{st.noHp || '-'}</td>
+                      <td className="p-2.5 font-mono text-slate-600">{st.noHp || '-'}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -990,22 +992,22 @@ export const AdminStudentManagement: React.FC = () => {
             </div>
 
             {/* Action Buttons */}
-            <div className="pt-4 mt-2 border-t border-slate-800 flex items-center justify-between gap-3 shrink-0">
-              <span className="text-xs text-slate-400">
-                Format jurusan default: <strong className="text-white">Teknik Kendaraan Ringan (TKR)</strong>
+            <div className="pt-4 mt-2 border-t border-slate-200 flex items-center justify-between gap-3 shrink-0">
+              <span className="text-xs text-slate-600">
+                Format jurusan default: <strong className="text-slate-900">Teknik Kendaraan Ringan (TKR)</strong>
               </span>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => setImportPreview(null)}
-                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl font-medium text-xs cursor-pointer"
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-medium text-xs cursor-pointer"
                 >
                   Batal
                 </button>
                 <button
                   type="button"
                   onClick={handleConfirmImport}
-                  className="px-5 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold rounded-xl text-xs flex items-center gap-2 shadow-lg shadow-emerald-900/40 cursor-pointer"
+                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs flex items-center gap-2 shadow-sm cursor-pointer"
                 >
                   <Check className="w-4 h-4" />
                   <span>Simpan & Import ke Database</span>

@@ -1,5 +1,18 @@
 @import "tailwindcss";
 
+@theme {
+  --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+}
+
+@layer base {
+  body {
+    font-family: var(--font-sans);
+    background-color: #f8fafc;
+    color: #0f172a;
+  }
+}
+
 /* ==========================================================================
    OFFICIAL A4 PRINT STYLES FOR SMKN 1 TEGALSARI PKL REPORTS
    Ensures authentic paper printouts (A4), crisp borders, zero black backgrounds

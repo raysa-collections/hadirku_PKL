@@ -73,30 +73,31 @@ export const RegisterGuruModal: React.FC<RegisterGuruModalProps> = ({ onSuccess,
   };
 
   return (
-    <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl relative text-slate-200">
+    <div className="w-full max-w-md bg-white border border-slate-200 rounded-3xl p-6 sm:p-8 shadow-xl relative text-slate-800 overflow-hidden">
+      <div className="h-1.5 w-full bg-gradient-to-r from-blue-600 via-red-600 to-amber-500 absolute top-0 left-0 right-0" />
       
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-slate-800 pb-4 mb-5">
+      <div className="flex items-center justify-between border-b border-slate-200 pb-4 mb-5 pt-1">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-cyan-600 to-blue-600 flex items-center justify-center text-white shadow-md">
+          <div className="w-10 h-10 rounded-2xl bg-blue-600 flex items-center justify-center text-white shadow-md shadow-blue-600/20">
             <ShieldCheck className="w-5 h-5" />
           </div>
           <div>
-            <h2 className="text-base font-bold text-white">Registrasi Guru / Pembimbing</h2>
-            <p className="text-xs text-slate-400">Pendaftaran akun pembimbing PKL sekolah</p>
+            <h2 className="text-base font-extrabold text-slate-900">Registrasi Guru / Pembimbing</h2>
+            <p className="text-xs text-slate-600">Pendaftaran akun pembimbing PKL sekolah</p>
           </div>
         </div>
         <button
           onClick={onBackToLogin}
-          className="text-xs text-slate-400 hover:text-white flex items-center gap-1 transition"
+          className="text-xs text-slate-600 hover:text-slate-900 font-semibold flex items-center gap-1 transition cursor-pointer"
         >
           <ArrowLeft className="w-3.5 h-3.5" /> Kembali
         </button>
       </div>
 
       {error && (
-        <div className="mb-4 p-3 rounded-xl bg-red-950/60 border border-red-500/40 text-red-300 text-xs flex items-center gap-2">
-          <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
+        <div className="mb-4 p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs flex items-center gap-2 font-medium">
+          <AlertCircle className="w-4 h-4 shrink-0 text-red-600" />
           <span>{error}</span>
         </div>
       )}
@@ -104,43 +105,43 @@ export const RegisterGuruModal: React.FC<RegisterGuruModalProps> = ({ onSuccess,
       {/* 5 Kolom Spesifik Permintaan User: Nama Lengkap, NIP, Jabatan, Username, Password */}
       <form onSubmit={handleSubmit} className="space-y-3.5 text-xs">
         <div>
-          <label className="block text-slate-300 font-medium mb-1">Nama Lengkap & Gelar *</label>
+          <label className="block text-slate-700 font-semibold mb-1">Nama Lengkap & Gelar *</label>
           <input
             type="text"
             required
             value={formData.nama}
             onChange={(e) => setFormData({ ...formData, nama: e.target.value })}
             placeholder="Contoh: Drs. Bambang Sutrisno, M.Pd"
-            className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-cyan-500"
+            className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20"
           />
         </div>
 
         <div>
-          <label className="block text-slate-300 font-medium mb-1">Nomor Induk Pegawai (NIP) *</label>
+          <label className="block text-slate-700 font-semibold mb-1">Nomor Induk Pegawai (NIP) *</label>
           <input
             type="text"
             required
             value={formData.nip}
             onChange={(e) => setFormData({ ...formData, nip: e.target.value })}
             placeholder="Contoh: 197805122005011003 atau NIP/NUPTK"
-            className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-cyan-500"
+            className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-slate-900 placeholder-slate-400 font-mono focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20"
           />
         </div>
 
         <div>
-          <label className="block text-slate-300 font-medium mb-1">Jabatan / Peran di Sekolah *</label>
+          <label className="block text-slate-700 font-semibold mb-1">Jabatan / Peran di Sekolah *</label>
           <input
             type="text"
             required
             value={formData.jabatan}
             onChange={(e) => setFormData({ ...formData, jabatan: e.target.value })}
             placeholder="Contoh: Koordinator PKL / Guru Pembimbing TKR"
-            className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-cyan-500"
+            className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20"
           />
         </div>
 
         <div>
-          <label className="block text-slate-300 font-medium mb-1 flex items-center justify-between">
+          <label className="block text-slate-700 font-semibold mb-1 flex items-center justify-between">
             <span>Username Akun *</span>
             <span className="text-[10px] text-slate-500">Huruf kecil & angka</span>
           </label>
@@ -150,32 +151,32 @@ export const RegisterGuruModal: React.FC<RegisterGuruModalProps> = ({ onSuccess,
             value={formData.username}
             onChange={(e) => setFormData({ ...formData, username: e.target.value })}
             placeholder="Contoh: bambang.pkl"
-            className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-cyan-500"
+            className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-slate-900 placeholder-slate-400 font-mono focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20"
           />
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 border-t border-slate-800/80">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-200">
           <div>
-            <label className="block text-slate-300 font-medium mb-1">Password *</label>
+            <label className="block text-slate-700 font-semibold mb-1">Password *</label>
             <input
               type="password"
               required
               value={formData.password}
               onChange={(e) => setFormData({ ...formData, password: e.target.value })}
               placeholder="Minimal 5 karakter"
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-cyan-500"
+              className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20"
             />
           </div>
 
           <div>
-            <label className="block text-slate-300 font-medium mb-1">Konfirmasi Password *</label>
+            <label className="block text-slate-700 font-semibold mb-1">Konfirmasi Password *</label>
             <input
               type="password"
               required
               value={formData.confirmPassword}
               onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
               placeholder="Ketik ulang password"
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-cyan-500"
+              className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20"
             />
           </div>
         </div>
@@ -183,7 +184,7 @@ export const RegisterGuruModal: React.FC<RegisterGuruModalProps> = ({ onSuccess,
         <div className="pt-3">
           <button
             type="submit"
-            className="w-full py-2.5 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold rounded-xl shadow-lg shadow-cyan-600/30 transition text-xs cursor-pointer"
+            className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-md shadow-blue-600/20 transition text-xs cursor-pointer"
           >
             Daftarkan Guru / Pembimbing & Masuk
           </button>

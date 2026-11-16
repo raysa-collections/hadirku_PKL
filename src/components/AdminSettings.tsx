@@ -331,40 +331,40 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ onThemeUpdated }) 
       
       {/* Toast Alert */}
       {toastMessage && (
-        <div className="p-3.5 rounded-xl bg-emerald-950/90 border border-emerald-500/40 text-emerald-200 text-xs flex items-center gap-2 animate-in fade-in">
-          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+        <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-medium flex items-center gap-2 shadow-sm">
+          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
           <span>{toastMessage}</span>
         </div>
       )}
 
       {/* Header Info */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 pb-4">
         <div>
-          <div className="flex items-center gap-2">
-            <h2 className="text-lg font-bold text-white">Pengaturan Sistem, Tahun Ajaran & Reset Data</h2>
-            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-500/20 text-cyan-300 border border-blue-500/30">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-lg font-bold text-slate-900">Pengaturan Sistem, Tahun Ajaran & Reset Data</h2>
+            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
               Periode Aktif: {tahunConfig.tahunAktif}
             </span>
           </div>
-          <p className="text-xs text-slate-400 mt-0.5">
+          <p className="text-xs text-slate-600 mt-0.5">
             Kelola Tahun Ajaran PKL, reset total data peserta, ekspor/restore backup database, serta kustomisasi logo & border header
           </p>
         </div>
 
-        <div className="flex items-center gap-2 self-start sm:self-auto">
+        <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
           <button
             onClick={() => setShowVercelModal(true)}
-            className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-black via-slate-800 to-slate-900 hover:from-slate-900 hover:to-black text-cyan-300 border border-cyan-500/40 text-xs font-bold flex items-center gap-2 transition cursor-pointer shadow-lg shadow-cyan-950/30"
+            className="px-3.5 py-2 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-xs font-bold flex items-center gap-2 transition cursor-pointer shadow-sm"
           >
-            <Globe className="w-4 h-4 text-cyan-400" />
+            <Globe className="w-4 h-4 text-blue-600" />
             <span>Onlinekan ke Vercel.app</span>
           </button>
 
           <button
             onClick={handleResetTheme}
-            className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition border border-slate-700 cursor-pointer"
+            className="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-slate-900 text-xs font-semibold flex items-center gap-1.5 transition border border-slate-200 cursor-pointer"
           >
-            <RotateCcw className="w-3.5 h-3.5 text-slate-400" />
+            <RotateCcw className="w-3.5 h-3.5 text-slate-500" />
             <span>Reset Tampilan Default</span>
           </button>
         </div>
@@ -373,21 +373,22 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ onThemeUpdated }) 
       {/* =========================================================================
           SEKSI UTAMA: MENU PENGGANTIAN TAHUN AJARAN & METRIKS SISTEM
           ========================================================================= */}
-      <div className="p-5 rounded-3xl bg-slate-900 border border-slate-800 space-y-4 shadow-xl">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
+      <div className="p-5 rounded-3xl bg-white border border-slate-200 space-y-4 shadow-sm relative overflow-hidden">
+        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-red-600 via-amber-500 via-blue-600 to-emerald-600" />
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-3 pt-1">
           <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-2xl bg-cyan-500/10 text-cyan-400 flex items-center justify-center border border-cyan-500/20">
+            <div className="w-9 h-9 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center border border-amber-200">
               <Calendar className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-sm font-bold text-white">Menu Penggantian & Kelola Tahun Ajaran PKL</h3>
-              <p className="text-[11px] text-slate-400">Sinkronisasi periode aktif dengan seluruh data siswa, absensi, dan laporan</p>
+              <h3 className="text-sm font-bold text-slate-900">Menu Penggantian & Kelola Tahun Ajaran PKL</h3>
+              <p className="text-[11px] text-slate-600">Sinkronisasi periode aktif dengan seluruh data siswa, absensi, dan laporan</p>
             </div>
           </div>
 
           <div className="flex items-center gap-2 self-start sm:self-auto">
-            <span className="text-[11px] text-slate-400">Tahun Ajaran Aktif:</span>
-            <span className="px-3 py-1 rounded-xl bg-cyan-950 text-cyan-300 border border-cyan-500/40 text-xs font-black font-mono">
+            <span className="text-[11px] text-slate-600 font-medium">Tahun Ajaran Aktif:</span>
+            <span className="px-3 py-1 rounded-xl bg-amber-50 text-amber-800 border border-amber-200 text-xs font-black font-mono">
               {tahunConfig.tahunAktif}
             </span>
           </div>
@@ -397,7 +398,7 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ onThemeUpdated }) 
           
           {/* List Pilihan Tahun Ajaran */}
           <div className="lg:col-span-2 space-y-3">
-            <span className="text-xs font-semibold text-slate-300 block">Pilih / Ganti Tahun Ajaran Aktif:</span>
+            <span className="text-xs font-bold text-slate-700 block">Pilih / Ganti Tahun Ajaran Aktif:</span>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               {tahunConfig.daftarTahun.map((t) => {
                 const isSelected = tahunConfig.tahunAktif === t;
@@ -408,17 +409,17 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ onThemeUpdated }) 
                       onClick={() => handleSelectActiveTahun(t)}
                       className={`w-full p-3 rounded-2xl border text-center transition cursor-pointer flex flex-col items-center justify-center gap-1 ${
                         isSelected
-                          ? 'bg-gradient-to-br from-cyan-950 to-blue-950 border-cyan-500 text-white font-bold ring-2 ring-cyan-500/30 shadow-lg'
-                          : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white hover:border-slate-700'
+                          ? 'bg-blue-600 border-blue-600 text-white font-bold shadow-sm'
+                          : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-white hover:border-blue-300'
                       }`}
                     >
                       <span className="text-xs font-mono font-bold">{t}</span>
                       {isSelected ? (
-                        <span className="text-[9px] px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 font-bold border border-cyan-500/40">
+                        <span className="text-[9px] px-2 py-0.5 rounded-full bg-white/20 text-white font-bold border border-white/30">
                           Aktif Sekarang
                         </span>
                       ) : (
-                        <span className="text-[9px] text-slate-500 group-hover:text-slate-400">Klik untuk Aktifkan</span>
+                        <span className="text-[9px] text-slate-500">Klik untuk Aktifkan</span>
                       )}
                     </button>
                     {tahunConfig.daftarTahun.length > 1 && !isSelected && (
@@ -429,7 +430,7 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ onThemeUpdated }) 
                           handleDeleteTahunAjaran(t);
                         }}
                         title={`Hapus tahun ajaran ${t}`}
-                        className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-slate-800 hover:bg-rose-900 text-slate-400 hover:text-rose-200 flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition shadow-md border border-slate-700 cursor-pointer"
+                        className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-white hover:bg-red-600 text-slate-500 hover:text-white flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition shadow-sm border border-slate-300 cursor-pointer"
                       >
                         <X className="w-3 h-3" />
                       </button>
@@ -446,11 +447,11 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ onThemeUpdated }) 
                 value={newTahunInput}
                 onChange={(e) => setNewTahunInput(e.target.value)}
                 placeholder="Tambah Periode Baru (Contoh: 2026/2027)"
-                className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white font-mono placeholder-slate-500 focus:outline-none focus:border-cyan-500"
+                className="flex-1 bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 font-mono placeholder-slate-400 focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20"
               />
               <button
                 type="submit"
-                className="px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 transition cursor-pointer shrink-0 shadow-md"
+                className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 transition cursor-pointer shrink-0 shadow-sm"
               >
                 <Plus className="w-3.5 h-3.5" />
                 Tambah & Aktifkan
@@ -459,19 +460,19 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ onThemeUpdated }) 
           </div>
 
           {/* Action Quick Card Periode Baru */}
-          <div className="p-4 rounded-2xl bg-gradient-to-br from-slate-950 to-blue-950/40 border border-cyan-500/30 flex flex-col justify-between space-y-3">
+          <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 flex flex-col justify-between space-y-3">
             <div className="space-y-1.5">
-              <span className="text-xs font-bold text-cyan-300 flex items-center gap-1.5">
-                <RefreshCw className="w-3.5 h-3.5 text-cyan-400" />
+              <span className="text-xs font-bold text-amber-800 flex items-center gap-1.5">
+                <RefreshCw className="w-3.5 h-3.5 text-amber-600" />
                 Transisi Periode Baru (Auto Backup)
               </span>
-              <p className="text-[11px] text-slate-300 leading-relaxed">
+              <p className="text-[11px] text-amber-900 leading-relaxed">
                 Akan berpindah ke periode siswa angkatan berikutnya? Sistem akan secara otomatis mengunduh file cadangan data (JSON & Excel) lalu menyiapkan database kosong untuk pendaftaran siswa baru.
               </p>
             </div>
             <button
               onClick={handleAutoBackupAndPrepareNewPeriod}
-              className="w-full py-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 shadow-md transition cursor-pointer"
+              className="w-full py-2 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 shadow-sm transition cursor-pointer"
             >
               <Download className="w-3.5 h-3.5" />
               Buka Periode Baru (Auto Backup & Reset)
@@ -486,15 +487,15 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ onThemeUpdated }) 
         {/* =========================================================================
             BAGIAN 1: PENGATURAN TEKS JUDUL, LOGO, DAN BORDER HEADER
             ========================================================================= */}
-        <div className="p-5 rounded-3xl bg-slate-900 border border-slate-800 space-y-5 shadow-xl">
-          <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+        <div className="p-5 rounded-3xl bg-white border border-slate-200 space-y-5 shadow-sm">
+          <div className="flex items-center justify-between border-b border-slate-200 pb-3">
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-xl bg-cyan-500/10 text-cyan-400 flex items-center justify-center">
+              <div className="w-8 h-8 rounded-xl bg-blue-50 border border-blue-200 text-blue-600 flex items-center justify-center">
                 <Palette className="w-4 h-4" />
               </div>
               <div>
-                <h3 className="text-sm font-bold text-white">Kustomisasi Tampilan Header & Logo</h3>
-                <p className="text-[11px] text-slate-400">Ganti judul, instansi, logo, serta warna border</p>
+                <h3 className="text-sm font-bold text-slate-900">Kustomisasi Tampilan Header & Logo</h3>
+                <p className="text-[11px] text-slate-600">Ganti judul, instansi, logo, serta warna border</p>
               </div>
             </div>
           </div>
@@ -502,8 +503,8 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ onThemeUpdated }) 
           <form onSubmit={handleSaveTheme} className="space-y-4 text-xs">
             {/* Input Teks Judul Aplikasi */}
             <div className="space-y-1">
-              <label className="block text-slate-300 font-semibold flex items-center gap-1.5">
-                <Type className="w-3.5 h-3.5 text-cyan-400" />
+              <label className="block text-slate-700 font-bold flex items-center gap-1.5">
+                <Type className="w-3.5 h-3.5 text-blue-600" />
                 Teks Judul Aplikasi
               </label>
               <input
@@ -512,14 +513,14 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ onThemeUpdated }) 
                 onChange={(e) => setTheme({ ...theme, appTitle: e.target.value })}
                 placeholder="Contoh: Absensi Siswa PKL / SIM-PKL TKR"
                 required
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white font-medium focus:outline-none focus:border-cyan-500"
+                className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-slate-900 font-medium focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20"
               />
               <span className="text-[10px] text-slate-500 block">Tampil pada header navigasi atas aplikasi</span>
             </div>
 
             {/* Input Teks Sub-Judul / Instansi */}
             <div className="space-y-1">
-              <label className="block text-slate-300 font-semibold">
+              <label className="block text-slate-700 font-bold">
                 Teks Sub-Judul / Keterangan Instansi
               </label>
               <input
@@ -527,23 +528,23 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ onThemeUpdated }) 
                 value={theme.appSubtitle}
                 onChange={(e) => setTheme({ ...theme, appSubtitle: e.target.value })}
                 placeholder="Contoh: SMK Negeri 1 Tegalsari • Jurusan Teknik Kendaraan Ringan (TKR)"
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white text-xs focus:outline-none focus:border-cyan-500"
+                className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-slate-900 text-xs focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20"
               />
               <span className="text-[10px] text-slate-500 block">Tampil di bawah nama pengguna dan halaman login</span>
             </div>
 
             {/* Logo Aplikasi: Preset or Custom Upload */}
-            <div className="space-y-2 pt-1 border-t border-slate-800/80">
+            <div className="space-y-2 pt-2 border-t border-slate-200">
               <div className="flex items-center justify-between">
-                <label className="block text-slate-300 font-semibold flex items-center gap-1.5">
-                  <ImageIcon className="w-3.5 h-3.5 text-cyan-400" />
+                <label className="block text-slate-700 font-bold flex items-center gap-1.5">
+                  <ImageIcon className="w-3.5 h-3.5 text-blue-600" />
                   Logo Aplikasi
                 </label>
                 {theme.logoUrl && (
                   <button
                     type="button"
                     onClick={handleRemoveCustomLogo}
-                    className="text-[11px] text-rose-400 hover:text-rose-300 flex items-center gap-1"
+                    className="text-[11px] text-red-600 hover:text-red-700 font-semibold flex items-center gap-1 cursor-pointer"
                   >
                     <Trash2 className="w-3 h-3" /> Hapus Logo Kustom
                   </button>
@@ -551,23 +552,23 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ onThemeUpdated }) 
               </div>
 
               {/* Logo Preview and Upload Button */}
-              <div className="p-3 rounded-2xl bg-slate-950 border border-slate-800 flex items-center gap-4">
+              <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200 flex items-center gap-4">
                 <div className="relative group shrink-0">
                   {theme.logoUrl ? (
                     <img 
                       src={theme.logoUrl} 
                       alt="Logo Kustom" 
-                      className="w-12 h-12 rounded-2xl object-cover border border-cyan-500/40 bg-slate-900 shadow-md"
+                      className="w-12 h-12 rounded-2xl object-cover border border-blue-200 bg-white shadow-sm"
                     />
                   ) : (
-                    <div className="w-12 h-12 rounded-2xl flex items-center justify-center bg-gradient-to-tr from-cyan-600 to-blue-700 shadow-md">
+                    <div className="w-12 h-12 rounded-2xl flex items-center justify-center bg-blue-600 shadow-sm">
                       {renderPresetIcon(theme.logoPreset)}
                     </div>
                   )}
                 </div>
 
                 <div className="space-y-1.5 min-w-0 flex-1">
-                  <p className="text-xs font-semibold text-white">
+                  <p className="text-xs font-bold text-slate-900">
                     {theme.logoUrl ? 'Menggunakan Logo Gambar Kustom' : 'Menggunakan Ikon Preset'}
                   </p>
                   <div className="flex flex-wrap gap-2">
@@ -581,7 +582,7 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ onThemeUpdated }) 
                     <button
                       type="button"
                       onClick={() => logoFileInputRef.current?.click()}
-                      className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-cyan-300 rounded-lg text-[11px] font-medium transition flex items-center gap-1 border border-slate-700 cursor-pointer"
+                      className="px-2.5 py-1 bg-white hover:bg-blue-50 text-blue-700 rounded-lg text-[11px] font-bold transition flex items-center gap-1 border border-blue-200 cursor-pointer shadow-sm"
                     >
                       <Upload className="w-3 h-3" /> Upload Gambar Logo (.png / .jpg)
                     </button>
@@ -592,7 +593,7 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ onThemeUpdated }) 
               {/* Preset Icon Selector if no custom logo */}
               {!theme.logoUrl && (
                 <div className="space-y-1.5 pt-1">
-                  <span className="text-[11px] text-slate-400 block">Pilih Ikon Preset Logo:</span>
+                  <span className="text-[11px] text-slate-600 font-medium block">Pilih Ikon Preset Logo:</span>
                   <div className="grid grid-cols-5 gap-2">
                     {[
                       { id: 'school', label: 'Sekolah', icon: School },
@@ -610,8 +611,8 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ onThemeUpdated }) 
                           onClick={() => setTheme({ ...theme, logoPreset: item.id as any })}
                           className={`p-2 rounded-xl flex flex-col items-center gap-1 transition text-center cursor-pointer border ${
                             isSelected
-                              ? 'bg-cyan-500/20 border-cyan-500/50 text-cyan-300 font-bold'
-                              : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
+                              ? 'bg-blue-50 border-blue-600 text-blue-700 font-bold shadow-sm'
+                              : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900'
                           }`}
                         >
                           <IconComp className="w-4 h-4" />
@@ -625,18 +626,18 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ onThemeUpdated }) 
             </div>
 
             {/* Warna Skema Border & Header Theme */}
-            <div className="space-y-2 pt-1 border-t border-slate-800/80">
-              <label className="block text-slate-300 font-semibold">
+            <div className="space-y-2 pt-2 border-t border-slate-200">
+              <label className="block text-slate-700 font-bold">
                 Skema Warna Header & Border Aksen
               </label>
               <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
                 {[
-                  { id: 'cyan', label: 'Cyan / Biru', color: 'from-cyan-500 to-blue-600', border: 'border-cyan-500' },
-                  { id: 'emerald', label: 'Emerald', color: 'from-emerald-500 to-teal-600', border: 'border-emerald-500' },
-                  { id: 'indigo', label: 'Indigo', color: 'from-indigo-500 to-purple-600', border: 'border-indigo-500' },
-                  { id: 'amber', label: 'Emas/Amber', color: 'from-amber-500 to-yellow-600', border: 'border-amber-500' },
-                  { id: 'rose', label: 'Crimson', color: 'from-rose-500 to-red-600', border: 'border-rose-500' },
-                  { id: 'slate', label: 'Netral', color: 'from-slate-600 to-slate-800', border: 'border-slate-500' },
+                  { id: 'cyan', label: 'Biru Utama', color: 'from-blue-600 to-blue-700', border: 'border-blue-600' },
+                  { id: 'emerald', label: 'Hijau', color: 'from-emerald-500 to-emerald-600', border: 'border-emerald-600' },
+                  { id: 'indigo', label: 'Indigo', color: 'from-blue-700 to-indigo-700', border: 'border-blue-700' },
+                  { id: 'amber', label: 'Emas/Gold', color: 'from-amber-400 to-amber-600', border: 'border-amber-500' },
+                  { id: 'rose', label: 'Merah', color: 'from-red-500 to-red-600', border: 'border-red-600' },
+                  { id: 'slate', label: 'Netral', color: 'from-slate-500 to-slate-700', border: 'border-slate-500' },
                 ].map((c) => {
                   const isSelected = theme.headerColor === c.id;
                   return (
@@ -646,8 +647,8 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ onThemeUpdated }) 
                       onClick={() => setTheme({ ...theme, headerColor: c.id as HeaderThemeColor })}
                       className={`p-2 rounded-xl border flex flex-col items-center gap-1.5 transition cursor-pointer ${
                         isSelected
-                          ? 'bg-slate-800 border-white text-white font-bold ring-2 ring-white/20'
-                          : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
+                          ? 'bg-blue-50 border-blue-600 text-slate-900 font-bold ring-2 ring-blue-600/20'
+                          : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900'
                       }`}
                     >
                       <div className={`w-5 h-5 rounded-full bg-gradient-to-r ${c.color}`} />
@@ -660,7 +661,7 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ onThemeUpdated }) 
 
             {/* Gaya Ketebalan Border Header */}
             <div className="space-y-1.5">
-              <label className="block text-slate-300 font-semibold">
+              <label className="block text-slate-700 font-bold">
                 Gaya Garis Border Header
               </label>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -678,8 +679,8 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ onThemeUpdated }) 
                       onClick={() => setTheme({ ...theme, borderStyle: s.id as HeaderBorderStyle })}
                       className={`p-2 rounded-xl border text-center transition cursor-pointer text-[11px] ${
                         isSelected
-                          ? 'bg-cyan-600 text-white border-cyan-400 font-bold shadow-md'
-                          : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
+                          ? 'bg-blue-600 text-white border-blue-600 font-bold shadow-sm'
+                          : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900'
                       }`}
                     >
                       {s.label}
@@ -693,7 +694,7 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ onThemeUpdated }) 
             <div className="pt-2">
               <button
                 type="submit"
-                className="w-full py-2.5 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-2 shadow-lg shadow-cyan-600/20 transition cursor-pointer"
+                className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-2 shadow-sm transition cursor-pointer"
               >
                 <Check className="w-4 h-4" />
                 Simpan Perubahan Judul, Logo & Header
@@ -705,30 +706,30 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ onThemeUpdated }) 
         {/* =========================================================================
             BAGIAN 2: MENU BACKUP & RESET TOTAL DATA SISWA
             ========================================================================= */}
-        <div className="p-5 rounded-3xl bg-slate-900 border border-slate-800 space-y-5 shadow-xl flex flex-col justify-between">
+        <div className="p-5 rounded-3xl bg-white border border-slate-200 space-y-5 shadow-sm flex flex-col justify-between">
           <div className="space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center">
+                <div className="w-8 h-8 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-600 flex items-center justify-center">
                   <Database className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-white">Menu Backup, Restore & Reset Data</h3>
-                  <p className="text-[11px] text-slate-400">Unduh cadangan data atau kosongkan database periode ini</p>
+                  <h3 className="text-sm font-bold text-slate-900">Menu Backup, Restore & Reset Data</h3>
+                  <p className="text-[11px] text-slate-600">Unduh cadangan data atau kosongkan database periode ini</p>
                 </div>
               </div>
             </div>
 
             {/* KETERANGAN SAAT DATA DIBACKUP & DIRESET (INFO BOX) */}
-            <div className="p-3.5 rounded-2xl bg-slate-950 border border-blue-500/30 text-xs space-y-1.5">
-              <div className="flex items-center gap-1.5 text-cyan-300 font-bold">
-                <Info className="w-4 h-4 text-cyan-400 shrink-0" />
+            <div className="p-3.5 rounded-2xl bg-blue-50 border border-blue-200 text-xs space-y-1.5">
+              <div className="flex items-center gap-1.5 text-blue-800 font-bold">
+                <Info className="w-4 h-4 text-blue-600 shrink-0" />
                 <span>Keterangan Penting Backup & Reset Data:</span>
               </div>
-              <ul className="text-[11px] text-slate-300 space-y-1 list-disc list-inside leading-relaxed">
-                <li><strong className="text-white">Backup JSON:</strong> Memuat seluruh akun siswa, username, riwayat presensi, koordinat GPS, foto bukti, dan konfigurasi Google Apps Script.</li>
-                <li><strong className="text-white">Master Excel (.xlsx):</strong> Menyediakan 2 Sheet terpisah (Sheet Data Siswa & Sheet Rekapitulasi Presensi Lengkap).</li>
-                <li><strong className="text-white">Sebelum Melakukan Reset Data:</strong> Pastikan Anda telah mengunduh Backup JSON atau Master Excel terlebih dahulu agar data historis siswa & presensi periode ini tersimpan dengan aman.</li>
+              <ul className="text-[11px] text-blue-900 space-y-1 list-disc list-inside leading-relaxed">
+                <li><strong className="text-slate-900">Backup JSON:</strong> Memuat seluruh akun siswa, username, riwayat presensi, koordinat GPS, foto bukti, dan konfigurasi Google Apps Script.</li>
+                <li><strong className="text-slate-900">Master Excel (.xlsx):</strong> Menyediakan 2 Sheet terpisah (Sheet Data Siswa & Sheet Rekapitulasi Presensi Lengkap).</li>
+                <li><strong className="text-slate-900">Sebelum Melakukan Reset Data:</strong> Pastikan Anda telah mengunduh Backup JSON atau Master Excel terlebih dahulu agar data historis siswa & presensi periode ini tersimpan dengan aman.</li>
               </ul>
             </div>
 
@@ -736,19 +737,19 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ onThemeUpdated }) 
             <div className="space-y-2.5">
               
               {/* 1. Download Backup JSON Penuh */}
-              <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 hover:border-slate-700 transition flex items-center justify-between">
+              <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 hover:border-blue-300 transition flex items-center justify-between">
                 <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-xl bg-blue-500/20 text-cyan-400 flex items-center justify-center shrink-0">
+                  <div className="w-8 h-8 rounded-xl bg-blue-50 border border-blue-200 text-blue-600 flex items-center justify-center shrink-0">
                     <FileJson className="w-4 h-4" />
                   </div>
                   <div>
-                    <h4 className="text-xs font-bold text-white">Backup Penuh Database (.json)</h4>
-                    <p className="text-[10px] text-slate-400">Unduh cadangan lengkap seluruh data sistem</p>
+                    <h4 className="text-xs font-bold text-slate-900">Backup Penuh Database (.json)</h4>
+                    <p className="text-[10px] text-slate-600">Unduh cadangan lengkap seluruh data sistem</p>
                   </div>
                 </div>
                 <button
                   onClick={handleExportJsonBackup}
-                  className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer shadow-sm shrink-0"
+                  className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer shadow-sm shrink-0"
                 >
                   <Download className="w-3.5 h-3.5" />
                   JSON
@@ -756,19 +757,19 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ onThemeUpdated }) 
               </div>
 
               {/* 2. Download Master Excel (.xlsx) */}
-              <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 hover:border-slate-700 transition flex items-center justify-between">
+              <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 hover:border-emerald-300 transition flex items-center justify-between">
                 <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
+                  <div className="w-8 h-8 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-600 flex items-center justify-center shrink-0">
                     <FileSpreadsheet className="w-4 h-4" />
                   </div>
                   <div>
-                    <h4 className="text-xs font-bold text-white">Ekspor Master Excel (.xlsx)</h4>
-                    <p className="text-[10px] text-slate-400">Sheet 1: Siswa • Sheet 2: Presensi Lengkap</p>
+                    <h4 className="text-xs font-bold text-slate-900">Ekspor Master Excel (.xlsx)</h4>
+                    <p className="text-[10px] text-slate-600">Sheet 1: Siswa • Sheet 2: Presensi Lengkap</p>
                   </div>
                 </div>
                 <button
                   onClick={handleExportExcelMaster}
-                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer shadow-sm shrink-0"
+                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer shadow-sm shrink-0"
                 >
                   <Download className="w-3.5 h-3.5" />
                   Excel
@@ -776,14 +777,14 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ onThemeUpdated }) 
               </div>
 
               {/* 3. Restore JSON Backup */}
-              <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 hover:border-slate-700 transition flex items-center justify-between">
+              <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 hover:border-amber-300 transition flex items-center justify-between">
                 <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-xl bg-purple-500/20 text-purple-400 flex items-center justify-center shrink-0">
+                  <div className="w-8 h-8 rounded-xl bg-amber-50 border border-amber-200 text-amber-600 flex items-center justify-center shrink-0">
                     <Upload className="w-4 h-4" />
                   </div>
                   <div>
-                    <h4 className="text-xs font-bold text-white">Pulihkan / Restore Data (.json)</h4>
-                    <p className="text-[10px] text-slate-400">Kembalikan data dari file backup JSON</p>
+                    <h4 className="text-xs font-bold text-slate-900">Pulihkan / Restore Data (.json)</h4>
+                    <p className="text-[10px] text-slate-600">Kembalikan data dari file backup JSON</p>
                   </div>
                 </div>
                 <input
@@ -796,7 +797,7 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ onThemeUpdated }) 
                 <button
                   onClick={() => jsonFileInputRef.current?.click()}
                   disabled={isRestoring}
-                  className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer shadow-sm shrink-0"
+                  className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer shadow-sm shrink-0"
                 >
                   <Upload className="w-3.5 h-3.5" />
                   {isRestoring ? 'Memproses...' : 'Restore'}
@@ -809,16 +810,16 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ onThemeUpdated }) 
           {/* =========================================================================
               SEKSI KHUSUS: TOMBOL RESET TOTAL DATA PESERTA (CLEAR ALL DATA)
               ========================================================================= */}
-          <div className="pt-4 border-t border-red-500/30 space-y-3">
-            <div className="flex items-center justify-between">
+          <div className="pt-4 border-t border-red-200 bg-red-50/70 p-4 rounded-2xl space-y-3">
+            <div className="flex items-center justify-between flex-wrap gap-2">
               <div className="flex items-center gap-2">
-                <ShieldAlert className="w-4 h-4 text-rose-400" />
+                <ShieldAlert className="w-4 h-4 text-red-600" />
                 <div>
-                  <span className="text-xs font-bold text-rose-200">Tombol Reset Total Data Peserta</span>
-                  <p className="text-[10px] text-slate-400">Kosongkan semua data siswa & presensi untuk periode/tahun ajaran baru</p>
+                  <span className="text-xs font-bold text-red-800">Tombol Reset Total Data Peserta</span>
+                  <p className="text-[10px] text-red-700">Kosongkan semua data siswa & presensi untuk periode/tahun ajaran baru</p>
                 </div>
               </div>
-              <span className="text-[10px] font-mono text-slate-400 bg-slate-950 px-2 py-0.5 rounded border border-slate-800">
+              <span className="text-[10px] font-mono font-bold text-red-800 bg-white px-2 py-0.5 rounded border border-red-200">
                 {currentStudentsCount} Siswa • {currentAttendanceCount} Presensi
               </span>
             </div>
@@ -828,9 +829,9 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ onThemeUpdated }) 
               <button
                 type="button"
                 onClick={() => handleOpenResetModal('all')}
-                className="p-2.5 rounded-xl bg-rose-950/80 hover:bg-rose-900 border border-rose-500/50 text-rose-200 text-xs font-bold transition flex flex-col items-center gap-1 cursor-pointer shadow-md text-center"
+                className="p-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold transition flex flex-col items-center gap-1 cursor-pointer shadow-sm text-center"
               >
-                <Trash2 className="w-4 h-4 text-rose-400" />
+                <Trash2 className="w-4 h-4 text-white" />
                 <span>Reset Total (Kosongkan Semua)</span>
               </button>
 
@@ -838,9 +839,9 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ onThemeUpdated }) 
               <button
                 type="button"
                 onClick={() => handleOpenResetModal('attendance')}
-                className="p-2.5 rounded-xl bg-amber-950/60 hover:bg-amber-900/80 border border-amber-500/40 text-amber-200 text-xs font-bold transition flex flex-col items-center gap-1 cursor-pointer shadow-sm text-center"
+                className="p-2.5 rounded-xl bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-900 text-xs font-bold transition flex flex-col items-center gap-1 cursor-pointer shadow-sm text-center"
               >
-                <RotateCcw className="w-4 h-4 text-amber-400" />
+                <RotateCcw className="w-4 h-4 text-amber-600" />
                 <span>Reset Presensi Saja</span>
               </button>
 
@@ -848,9 +849,9 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ onThemeUpdated }) 
               <button
                 type="button"
                 onClick={() => handleOpenResetModal('students')}
-                className="p-2.5 rounded-xl bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white text-xs font-bold transition flex flex-col items-center gap-1 cursor-pointer text-center"
+                className="p-2.5 rounded-xl bg-white hover:bg-red-50 border border-red-300 text-red-700 text-xs font-bold transition flex flex-col items-center gap-1 cursor-pointer shadow-sm text-center"
               >
-                <Trash2 className="w-4 h-4 text-slate-400" />
+                <Trash2 className="w-4 h-4 text-red-600" />
                 <span>Reset Siswa Saja</span>
               </button>
             </div>
@@ -864,20 +865,21 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ onThemeUpdated }) 
           MODAL KONFIRMASI KESELAMATAN RESET DATA
           ========================================================================= */}
       {showResetModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
-          <div className="w-full max-w-md bg-slate-900 border border-rose-500/40 rounded-3xl p-6 shadow-2xl relative text-slate-200 animate-in fade-in zoom-in-95 space-y-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md bg-white border border-red-200 rounded-3xl p-6 shadow-2xl relative text-slate-900 space-y-4 overflow-hidden">
+            <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-red-600 via-amber-500 to-red-600" />
             
-            <div className="flex items-center gap-3 border-b border-slate-800 pb-3">
-              <div className="w-10 h-10 rounded-2xl bg-rose-500/20 text-rose-400 flex items-center justify-center shrink-0">
+            <div className="flex items-center gap-3 border-b border-slate-200 pb-3 pt-1">
+              <div className="w-10 h-10 rounded-2xl bg-red-50 border border-red-200 text-red-600 flex items-center justify-center shrink-0">
                 <AlertTriangle className="w-6 h-6" />
               </div>
               <div>
-                <h3 className="text-base font-bold text-white">Konfirmasi Reset Total Data</h3>
-                <p className="text-xs text-rose-300">Tindakan ini tidak dapat dibatalkan</p>
+                <h3 className="text-base font-bold text-slate-900">Konfirmasi Reset Total Data</h3>
+                <p className="text-xs text-red-600 font-semibold">Tindakan ini tidak dapat dibatalkan</p>
               </div>
             </div>
 
-            <p className="text-xs text-slate-300 leading-relaxed">
+            <p className="text-xs text-slate-700 leading-relaxed">
               {showResetModal === 'all'
                 ? `Anda akan MENGOSONGKAN SELURUH data siswa (${currentStudentsCount} siswa) dan riwayat presensi (${currentAttendanceCount} presensi) dalam sistem.`
                 : showResetModal === 'attendance'
@@ -885,34 +887,34 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ onThemeUpdated }) 
                 : `Anda akan MENGHAPUS SELURUH profil siswa (${currentStudentsCount} siswa) dan riwayat presensinya.`}
             </p>
 
-            <div className="p-3 rounded-xl bg-amber-950/60 border border-amber-500/40 text-amber-200 text-[11px] space-y-1">
-              <strong className="block text-amber-300 font-bold">⚠️ Perhatian Pengguna:</strong>
+            <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-[11px] space-y-1">
+              <strong className="block text-amber-800 font-bold">⚠️ Perhatian Pengguna:</strong>
               <p>Pastikan Anda telah melakukan <strong>Backup Data (JSON / Excel)</strong> pada menu di atas jika masih membutuhkan data periode sebelumnya.</p>
-              <p className="text-emerald-300 font-semibold pt-0.5">
-                ✓ Akun awal Pembimbing Sekolah (<code className="font-mono bg-slate-950 px-1 rounded">admin123</code>) TIDAK akan terhapus sehingga Anda dapat tetap mengelola sistem.
+              <p className="text-emerald-700 font-semibold pt-0.5">
+                ✓ Akun awal Administrator PKL TKR (<code className="font-mono bg-white border border-emerald-200 px-1 rounded">admin123</code>) TIDAK akan terhapus sehingga Anda dapat tetap mengelola sistem.
               </p>
             </div>
 
             {showResetModal === 'all' && (
               <div className="space-y-1.5 pt-1">
-                <label className="block text-xs font-semibold text-slate-300">
-                  Ketik kata <span className="font-mono font-black text-rose-400">RESET</span> untuk mengonfirmasi:
+                <label className="block text-xs font-bold text-slate-700">
+                  Ketik kata <span className="font-mono font-black text-red-600">RESET</span> untuk mengonfirmasi:
                 </label>
                 <input
                   type="text"
                   value={confirmInputText}
                   onChange={(e) => setConfirmInputText(e.target.value)}
                   placeholder="Ketik RESET"
-                  className="w-full bg-slate-950 border border-rose-500/40 rounded-xl px-3 py-2 text-white font-mono text-center text-sm uppercase focus:outline-none focus:border-rose-400"
+                  className="w-full bg-white border border-red-300 rounded-xl px-3 py-2 text-slate-900 font-mono text-center text-sm uppercase focus:outline-none focus:border-red-600 focus:ring-2 focus:ring-red-600/20"
                 />
               </div>
             )}
 
-            <div className="pt-2 flex items-center justify-end gap-2 border-t border-slate-800">
+            <div className="pt-2 flex items-center justify-end gap-2 border-t border-slate-200">
               <button
                 type="button"
                 onClick={() => setShowResetModal(null)}
-                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl font-semibold text-xs cursor-pointer"
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-semibold text-xs cursor-pointer transition"
               >
                 Batal
               </button>
@@ -920,10 +922,10 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ onThemeUpdated }) 
                 type="button"
                 onClick={handleExecuteReset}
                 disabled={showResetModal === 'all' && confirmInputText.trim().toUpperCase() !== 'RESET'}
-                className={`px-5 py-2 font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-lg cursor-pointer ${
+                className={`px-5 py-2 font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-sm cursor-pointer transition ${
                   showResetModal === 'all' && confirmInputText.trim().toUpperCase() !== 'RESET'
-                    ? 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700'
-                    : 'bg-rose-600 hover:bg-rose-500 text-white shadow-rose-900/40'
+                    ? 'bg-slate-200 text-slate-400 cursor-not-allowed border border-slate-300'
+                    : 'bg-red-600 hover:bg-red-700 text-white'
                 }`}
               >
                 <Trash2 className="w-4 h-4" />

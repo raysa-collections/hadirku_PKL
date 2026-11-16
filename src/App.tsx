@@ -72,41 +72,47 @@ export default function App() {
   // =========================================================================
   if (!currentUser) {
     return (
-      <div className="min-h-screen bg-slate-950 flex flex-col justify-center items-center p-4 sm:p-6 font-sans selection:bg-cyan-500 selection:text-slate-950 relative overflow-hidden">
-        {/* Subtle background ambient lights */}
-        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-96 h-96 bg-blue-600/10 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute bottom-10 right-10 w-80 h-80 bg-indigo-600/10 rounded-full blur-3xl pointer-events-none" />
+      <div className="min-h-screen bg-slate-50 flex flex-col justify-between font-sans selection:bg-blue-600 selection:text-white relative overflow-hidden">
+        {/* Top Four-Color Institutional Accent Bar (Merah - Emas - Biru - Hijau) */}
+        <div className="h-1.5 w-full bg-gradient-to-r from-red-600 via-amber-500 via-blue-600 to-emerald-600 shrink-0" />
 
-        {/* Cloud Auto-Connect Toast */}
-        {cloudNotice && (
-          <div className="w-full max-w-lg mb-4 p-3 rounded-2xl bg-emerald-950/90 border border-emerald-500/40 text-emerald-200 text-xs flex items-center justify-between shadow-xl animate-in fade-in">
-            <span>{cloudNotice}</span>
-            <button onClick={() => setCloudNotice(null)} className="text-slate-400 hover:text-white">✕</button>
+        {/* Subtle Bright Ambient Highlights */}
+        <div className="absolute -top-24 left-1/4 w-96 h-96 bg-blue-100/70 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute top-1/3 right-1/6 w-80 h-80 bg-amber-100/60 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute bottom-10 left-10 w-80 h-80 bg-emerald-100/60 rounded-full blur-3xl pointer-events-none" />
+
+        <div className="flex-1 flex flex-col justify-center items-center p-4 sm:p-6 relative z-10 w-full">
+          {/* Cloud Auto-Connect Toast */}
+          {cloudNotice && (
+            <div className="w-full max-w-lg mb-4 p-3.5 rounded-2xl bg-emerald-50 border border-emerald-300 text-emerald-800 text-xs font-medium flex items-center justify-between shadow-sm animate-in fade-in">
+              <span>{cloudNotice}</span>
+              <button onClick={() => setCloudNotice(null)} className="text-emerald-700 hover:text-emerald-950 font-bold cursor-pointer">✕</button>
+            </div>
+          )}
+
+          {/* PWA Mobile Install Banner */}
+          <div className="w-full max-w-3xl mb-4">
+            <PWAInstallBanner />
           </div>
-        )}
 
-        {/* PWA Mobile Install Banner */}
-        <div className="w-full max-w-3xl mb-4">
-          <PWAInstallBanner />
+          {/* 1. INITIAL LANDING: HANYA 2 PILIHAN UTAMA */}
+          {!selectedRole ? (
+            <RoleSelectScreen onSelectRole={(role) => setSelectedRole(role)} />
+          ) : (
+            /* 2. JENDELA LOGIN / REGISTRASI KHUSUS SESUAI PERAN */
+            <LoginModal
+              selectedRole={selectedRole}
+              onLoginSuccess={handleLoginSuccess}
+              onBackToRoleSelect={() => setSelectedRole(null)}
+            />
+          )}
+
+          {/* Institutional Footer */}
+          <footer className="mt-10 text-center text-xs text-slate-600">
+            <p className="font-semibold text-slate-700">Sistem Informasi Absensi Siswa Praktik Kerja Lapangan (PKL)</p>
+            <p className="text-[11px] text-slate-500 mt-0.5">SMK Negeri 1 Tegalsari • Terintegrasi Google Spreadsheet Real-Time (WIB)</p>
+          </footer>
         </div>
-
-        {/* 1. INITIAL LANDING: HANYA 2 PILIHAN UTAMA */}
-        {!selectedRole ? (
-          <RoleSelectScreen onSelectRole={(role) => setSelectedRole(role)} />
-        ) : (
-          /* 2. JENDELA LOGIN / REGISTRASI KHUSUS SESUAI PERAN */
-          <LoginModal
-            selectedRole={selectedRole}
-            onLoginSuccess={handleLoginSuccess}
-            onBackToRoleSelect={() => setSelectedRole(null)}
-          />
-        )}
-
-        {/* Institutional Footer */}
-        <footer className="mt-10 text-center text-xs text-slate-500">
-          <p>Sistem Informasi Absensi Siswa Praktik Kerja Lapangan (PKL)</p>
-          <p className="text-[11px] text-slate-600 mt-0.5">SMK Negeri 1 Tegalsari • Terintegrasi Google Spreadsheet Real-Time (WIB)</p>
-        </footer>
       </div>
     );
   }
@@ -119,28 +125,28 @@ export default function App() {
     const { headerColor, borderStyle } = themeConfig;
     
     if (borderStyle === 'bold') {
-      if (headerColor === 'emerald') return 'border-b-2 border-emerald-500 shadow-md shadow-emerald-950/20';
-      if (headerColor === 'indigo') return 'border-b-2 border-indigo-500 shadow-md shadow-indigo-950/20';
-      if (headerColor === 'amber') return 'border-b-2 border-amber-500 shadow-md shadow-amber-950/20';
-      if (headerColor === 'rose') return 'border-b-2 border-rose-500 shadow-md shadow-rose-950/20';
-      if (headerColor === 'slate') return 'border-b-2 border-slate-600';
-      return 'border-b-2 border-cyan-500 shadow-md shadow-cyan-950/20';
+      if (headerColor === 'emerald') return 'border-b-2 border-emerald-600 shadow-sm';
+      if (headerColor === 'indigo') return 'border-b-2 border-blue-700 shadow-sm';
+      if (headerColor === 'amber') return 'border-b-2 border-amber-500 shadow-sm';
+      if (headerColor === 'rose') return 'border-b-2 border-red-600 shadow-sm';
+      if (headerColor === 'slate') return 'border-b-2 border-slate-400 shadow-sm';
+      return 'border-b-2 border-blue-600 shadow-sm';
     }
 
     if (borderStyle === 'glow') {
-      if (headerColor === 'emerald') return 'border-b border-emerald-500/70 shadow-lg shadow-emerald-500/20';
-      if (headerColor === 'indigo') return 'border-b border-indigo-500/70 shadow-lg shadow-indigo-500/20';
-      if (headerColor === 'amber') return 'border-b border-amber-500/70 shadow-lg shadow-amber-500/20';
-      if (headerColor === 'rose') return 'border-b border-rose-500/70 shadow-lg shadow-rose-500/20';
-      if (headerColor === 'slate') return 'border-b border-slate-500/70 shadow-lg shadow-slate-500/20';
-      return 'border-b border-cyan-500/70 shadow-lg shadow-cyan-500/20';
+      if (headerColor === 'emerald') return 'border-b border-emerald-400 shadow-md shadow-emerald-500/10';
+      if (headerColor === 'indigo') return 'border-b border-blue-500 shadow-md shadow-blue-500/10';
+      if (headerColor === 'amber') return 'border-b border-amber-400 shadow-md shadow-amber-500/10';
+      if (headerColor === 'rose') return 'border-b border-red-400 shadow-md shadow-red-500/10';
+      if (headerColor === 'slate') return 'border-b border-slate-300 shadow-md shadow-slate-400/10';
+      return 'border-b border-blue-400 shadow-md shadow-blue-500/10';
     }
 
     if (borderStyle === 'double') {
-      return 'border-b-4 border-double border-cyan-500/70';
+      return 'border-b-4 border-double border-blue-600';
     }
 
-    return 'border-b border-slate-800';
+    return 'border-b border-slate-200 shadow-xs';
   };
 
   const renderAppLogo = () => {
@@ -149,23 +155,23 @@ export default function App() {
         <img 
           src={themeConfig.logoUrl} 
           alt="Logo Instansi" 
-          className="w-10 h-10 rounded-2xl object-cover shadow-md border border-white/10" 
+          className="w-10 h-10 rounded-2xl object-cover shadow-sm border border-slate-200 bg-white" 
         />
       );
     }
     
-    // Preset Icons with gradient
+    // Preset Icons with vibrant institutional colors
     const bgGradient = themeConfig.headerColor === 'emerald'
-      ? 'bg-gradient-to-tr from-emerald-600 to-teal-500 shadow-emerald-600/20'
+      ? 'bg-gradient-to-tr from-emerald-600 to-emerald-500 shadow-emerald-600/20'
       : themeConfig.headerColor === 'indigo'
-      ? 'bg-gradient-to-tr from-indigo-600 to-purple-600 shadow-indigo-600/20'
+      ? 'bg-gradient-to-tr from-blue-700 to-blue-500 shadow-blue-700/20'
       : themeConfig.headerColor === 'amber'
-      ? 'bg-gradient-to-tr from-amber-600 to-yellow-500 shadow-amber-600/20'
+      ? 'bg-gradient-to-tr from-amber-500 to-yellow-500 shadow-amber-500/20'
       : themeConfig.headerColor === 'rose'
-      ? 'bg-gradient-to-tr from-rose-600 to-red-600 shadow-rose-600/20'
+      ? 'bg-gradient-to-tr from-red-600 to-rose-500 shadow-red-600/20'
       : themeConfig.headerColor === 'slate'
-      ? 'bg-gradient-to-tr from-slate-700 to-slate-900 shadow-slate-700/20'
-      : 'bg-gradient-to-tr from-cyan-600 to-blue-700 shadow-blue-700/20';
+      ? 'bg-gradient-to-tr from-slate-700 to-slate-600 shadow-slate-600/20'
+      : 'bg-gradient-to-tr from-blue-600 to-blue-700 shadow-blue-600/20';
 
     return (
       <div className={`w-10 h-10 rounded-2xl flex items-center justify-center text-white shadow-md ${bgGradient}`}>
@@ -179,38 +185,39 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-cyan-500 selection:text-slate-950">
+    <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans selection:bg-blue-600 selection:text-white">
       
-      {/* Top Navigation Bar with Dynamic Header Border Style */}
-      <header className={`${getHeaderBorderClass()} bg-slate-900/90 backdrop-blur-md sticky top-0 z-40 print:hidden transition-all duration-300`}>
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
+      {/* Top Navigation Bar with Dynamic Header Border Style & 4-Color Accent Strip */}
+      <header className={`${getHeaderBorderClass()} bg-white/95 backdrop-blur-md sticky top-0 z-40 print:hidden transition-all duration-300`}>
+        <div className="h-1 w-full bg-gradient-to-r from-red-600 via-amber-500 via-blue-600 to-emerald-600" />
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-3">
           
           {/* Brand Logo & Name */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 min-w-0">
             {renderAppLogo()}
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="font-bold text-sm sm:text-base text-white tracking-tight leading-none">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                <h1 className="font-extrabold text-sm sm:text-base text-slate-900 tracking-tight leading-none truncate">
                   {themeConfig.appTitle || 'Absensi Siswa PKL'}
                 </h1>
-                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
                   currentUser.role === 'admin' 
-                    ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30' 
-                    : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                    ? 'bg-blue-50 text-blue-700 border-blue-200' 
+                    : 'bg-emerald-50 text-emerald-700 border-emerald-200'
                 }`}>
                   {currentUser.role === 'admin' ? 'Administrator PKL TKR' : 'Siswa PKL'}
                 </span>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30 font-mono">
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-300 font-mono tabular-nums">
                   TA: {StorageService.getActiveTahunAjaran()}
                 </span>
               </div>
-              <p className="text-[11px] text-slate-300 mt-0.5 truncate max-w-sm font-medium flex items-center gap-1">
+              <p className="text-[11px] text-slate-600 mt-0.5 truncate max-w-sm font-medium flex items-center gap-1">
                 {currentUser.role === 'admin' ? (
-                  <span className="text-cyan-400 font-semibold">Administrator PKL TKR</span>
+                  <span className="text-blue-700 font-semibold">Administrator PKL TKR</span>
                 ) : (
                   <>
-                    <span className="text-emerald-400 font-bold">Siswa:</span>
-                    <span>{currentUser.nama} ({currentUser.nis})</span>
+                    <span className="text-emerald-700 font-bold">Siswa:</span>
+                    <span className="text-slate-700">{currentUser.nama} ({currentUser.nis})</span>
                   </>
                 )}
               </p>
@@ -218,15 +225,11 @@ export default function App() {
           </div>
 
           {/* Action Header Menu */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             {currentUser.role === 'siswa' && (
-              <span className={`px-2.5 py-1 rounded-xl text-[11px] font-semibold border flex items-center gap-1.5 ${
-                sheetConfig.connected || sheetConfig.scriptUrl
-                  ? 'bg-emerald-950/60 border-emerald-500/40 text-emerald-300'
-                  : 'bg-amber-950/60 border-amber-500/40 text-amber-300'
-              }`} title={sheetConfig.connected || sheetConfig.scriptUrl ? 'Terhubung dengan Google Spreadsheet Sekolah' : 'Penyimpanan Lokal (Belum Terhubung Cloud)'}>
-                <span className={`w-2 h-2 rounded-full ${sheetConfig.connected || sheetConfig.scriptUrl ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
-                <span className="hidden sm:inline">{sheetConfig.connected || sheetConfig.scriptUrl ? 'Cloud Terhubung' : 'Mode Lokal'}</span>
+              <span className="px-2.5 py-1 rounded-xl text-[11px] font-bold border bg-emerald-50 border-emerald-200 text-emerald-700 flex items-center gap-1.5" title="Terhubung Otomatis dengan Google Spreadsheet Sekolah">
+                <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                <span className="hidden sm:inline">Cloud Terhubung</span>
               </span>
             )}
 
@@ -234,28 +237,28 @@ export default function App() {
               <>
                 <button
                   onClick={() => setShowGoogleSheetModal(true)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-medium border flex items-center gap-1.5 transition cursor-pointer ${
+                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold border flex items-center gap-1.5 transition cursor-pointer ${
                     sheetConfig.connected || sheetConfig.scriptUrl
-                      ? 'bg-emerald-950/60 border-emerald-500/40 text-emerald-300 hover:bg-emerald-900/60'
-                      : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700'
+                      ? 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100'
+                      : 'bg-amber-50 border-amber-200 text-amber-800 hover:bg-amber-100'
                   }`}
                   title="Konfigurasi Integrasi Google Spreadsheet"
                 >
-                  <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
+                  <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
                   <span className="hidden md:inline">Google Spreadsheet</span>
-                  <span className={`w-2 h-2 rounded-full ${sheetConfig.connected ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
+                  <span className={`w-2 h-2 rounded-full ${sheetConfig.connected ? 'bg-emerald-500' : 'bg-amber-500'}`} />
                 </button>
 
                 <button
                   onClick={() => setAdminTab('settings')}
                   className={`px-3 py-1.5 rounded-xl text-xs font-semibold border flex items-center gap-1.5 transition cursor-pointer ${
                     adminTab === 'settings'
-                      ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white border-blue-500 shadow-md'
-                      : 'bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border-slate-700'
+                      ? 'bg-amber-500 text-white border-amber-500 shadow-sm'
+                      : 'bg-white hover:bg-amber-50 text-slate-700 hover:text-amber-800 border-slate-200 hover:border-amber-300'
                   }`}
                   title="Menu Pengaturan Sistem & Backup Data"
                 >
-                  <Settings className="w-3.5 h-3.5 text-cyan-400" />
+                  <Settings className={`w-3.5 h-3.5 ${adminTab === 'settings' ? 'text-white' : 'text-amber-600'}`} />
                   <span className="hidden sm:inline">Setting</span>
                 </button>
               </>
@@ -263,7 +266,7 @@ export default function App() {
 
             <button
               onClick={handleLogout}
-              className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-red-950/60 text-slate-300 hover:text-red-300 border border-slate-700 hover:border-red-500/40 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer"
+              className="px-3 py-1.5 rounded-xl bg-red-50 hover:bg-red-600 text-red-700 hover:text-white border border-red-200 hover:border-red-600 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer"
               title="Keluar dari akun"
             >
               <LogOut className="w-3.5 h-3.5" />
@@ -289,13 +292,13 @@ export default function App() {
           <div className="space-y-6">
             
             {/* Student Navigation Sub-tabs */}
-            <div className="flex items-center gap-2 border-b border-slate-800 pb-2 print:hidden">
+            <div className="flex items-center gap-2 border-b border-slate-200 pb-3 print:hidden">
               <button
                 onClick={() => setStudentTab('dashboard')}
                 className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition cursor-pointer ${
                   studentTab === 'dashboard'
-                    ? 'bg-gradient-to-r from-emerald-600 to-teal-700 text-white shadow-md'
-                    : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+                    ? 'bg-emerald-600 text-white shadow-sm shadow-emerald-600/20'
+                    : 'bg-white text-slate-600 hover:text-emerald-700 hover:bg-emerald-50 border border-slate-200'
                 }`}
               >
                 <LayoutDashboard className="w-4 h-4" />
@@ -306,8 +309,8 @@ export default function App() {
                 onClick={() => setStudentTab('history')}
                 className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition cursor-pointer ${
                   studentTab === 'history'
-                    ? 'bg-gradient-to-r from-emerald-600 to-teal-700 text-white shadow-md'
-                    : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+                    ? 'bg-blue-600 text-white shadow-sm shadow-blue-600/20'
+                    : 'bg-white text-slate-600 hover:text-blue-700 hover:bg-blue-50 border border-slate-200'
                 }`}
               >
                 <History className="w-4 h-4" />
@@ -339,16 +342,16 @@ export default function App() {
           <div className="space-y-6">
             
             {/* Admin Navigation Sub-tabs */}
-            <div className="flex flex-wrap items-center gap-2 border-b border-slate-800 pb-2 print:hidden">
+            <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-3 print:hidden">
               <button
                 onClick={() => setAdminTab('dashboard')}
                 className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition cursor-pointer ${
                   adminTab === 'dashboard'
-                    ? 'bg-gradient-to-r from-blue-700 to-indigo-700 text-white shadow-md'
-                    : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+                    ? 'bg-blue-600 text-white shadow-sm shadow-blue-600/20'
+                    : 'bg-white text-slate-700 hover:text-blue-700 hover:bg-blue-50 border border-slate-200'
                 }`}
               >
-                <LayoutDashboard className="w-4 h-4" />
+                <LayoutDashboard className={`w-4 h-4 ${adminTab === 'dashboard' ? 'text-white' : 'text-blue-600'}`} />
                 Dashboard Monitoring
               </button>
 
@@ -356,11 +359,11 @@ export default function App() {
                 onClick={() => setAdminTab('students')}
                 className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition cursor-pointer ${
                   adminTab === 'students'
-                    ? 'bg-gradient-to-r from-blue-700 to-indigo-700 text-white shadow-md'
-                    : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+                    ? 'bg-blue-600 text-white shadow-sm shadow-blue-600/20'
+                    : 'bg-white text-slate-700 hover:text-blue-700 hover:bg-blue-50 border border-slate-200'
                 }`}
               >
-                <Users className="w-4 h-4" />
+                <Users className={`w-4 h-4 ${adminTab === 'students' ? 'text-white' : 'text-blue-600'}`} />
                 Manajemen Siswa & Bengkel PKL
               </button>
 
@@ -368,11 +371,11 @@ export default function App() {
                 onClick={() => setAdminTab('attendance')}
                 className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition cursor-pointer ${
                   adminTab === 'attendance'
-                    ? 'bg-gradient-to-r from-blue-700 to-indigo-700 text-white shadow-md'
-                    : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+                    ? 'bg-red-600 text-white shadow-sm shadow-red-600/20'
+                    : 'bg-white text-slate-700 hover:text-red-700 hover:bg-red-50 border border-slate-200'
                 }`}
               >
-                <ClipboardCheck className="w-4 h-4" />
+                <ClipboardCheck className={`w-4 h-4 ${adminTab === 'attendance' ? 'text-white' : 'text-red-600'}`} />
                 Koreksi Data Absensi
               </button>
 
@@ -380,11 +383,11 @@ export default function App() {
                 onClick={() => setAdminTab('reports')}
                 className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition cursor-pointer ${
                   adminTab === 'reports'
-                    ? 'bg-gradient-to-r from-blue-700 to-indigo-700 text-white shadow-md'
-                    : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+                    ? 'bg-blue-600 text-white shadow-sm shadow-blue-600/20'
+                    : 'bg-white text-slate-700 hover:text-blue-700 hover:bg-blue-50 border border-slate-200'
                 }`}
               >
-                <FileText className="w-4 h-4" />
+                <FileText className={`w-4 h-4 ${adminTab === 'reports' ? 'text-white' : 'text-blue-600'}`} />
                 Laporan & Ekspor (.xlsx / PDF)
               </button>
 
@@ -392,11 +395,11 @@ export default function App() {
                 onClick={() => setAdminTab('gas_sync')}
                 className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition cursor-pointer ${
                   adminTab === 'gas_sync'
-                    ? 'bg-gradient-to-r from-blue-700 to-indigo-700 text-white shadow-md'
-                    : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+                    ? 'bg-emerald-600 text-white shadow-sm shadow-emerald-600/20'
+                    : 'bg-white text-slate-700 hover:text-emerald-700 hover:bg-emerald-50 border border-slate-200'
                 }`}
               >
-                <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
+                <FileSpreadsheet className={`w-4 h-4 ${adminTab === 'gas_sync' ? 'text-white' : 'text-emerald-600'}`} />
                 <span>Sinkron Spreadsheet & Code.gs</span>
               </button>
 
@@ -404,11 +407,11 @@ export default function App() {
                 onClick={() => setAdminTab('settings')}
                 className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition cursor-pointer ${
                   adminTab === 'settings'
-                    ? 'bg-gradient-to-r from-blue-700 to-indigo-700 text-white shadow-md'
-                    : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+                    ? 'bg-amber-500 text-white shadow-sm shadow-amber-500/20'
+                    : 'bg-white text-slate-700 hover:text-amber-800 hover:bg-amber-50 border border-slate-200'
                 }`}
               >
-                <Settings className="w-4 h-4" />
+                <Settings className={`w-4 h-4 ${adminTab === 'settings' ? 'text-white' : 'text-amber-600'}`} />
                 Setting & Backup Data
               </button>
             </div>
@@ -451,11 +454,11 @@ export default function App() {
       )}
 
       {/* Footer */}
-      <footer className="border-t border-slate-800 bg-slate-900/60 py-6 px-4 mt-12 text-center text-xs text-slate-500 print:hidden">
-        <p>
+      <footer className="border-t border-slate-200 bg-white py-6 px-4 mt-12 text-center text-xs text-slate-600 print:hidden">
+        <p className="font-semibold text-slate-700">
           Sistem Informasi Absensi Siswa Praktik Kerja Lapangan (PKL) • SMKN 1 Tegalsari
         </p>
-        <p className="mt-1 text-[11px] text-slate-600">
+        <p className="mt-1 text-[11px] text-slate-500">
           Database Terintegrasi Google Spreadsheet & Apps Script Web API • Waktu Server Asia/Jakarta (WIB)
         </p>
       </footer>
