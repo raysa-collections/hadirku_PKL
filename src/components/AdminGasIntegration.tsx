@@ -33,6 +33,7 @@ import {
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { VercelDeployModal } from './VercelDeployModal';
+import { QrShareBox } from './QrShareBox';
 
 export const AdminGasIntegration: React.FC = () => {
   const [showVercelModal, setShowVercelModal] = useState(false);
@@ -52,20 +53,34 @@ export const AdminGasIntegration: React.FC = () => {
   const [testingStatus, setTestingStatus] = useState<{ loading: boolean; success?: boolean; message?: string } | null>(null);
   const [syncingAll, setSyncingAll] = useState(false);
 
+  const diagnostics = StorageService.getServerDiagnostics();
+
+  const refreshCloudView = async () => {
+    const cfg = await StorageService.ensureConfigSynced();
+    setConfig(cfg);
+    if (cfg.scriptUrl) {
+      setScriptUrl(prev => prev || cfg.scriptUrl);
+    }
+    await Promise.all([
+      StorageService.fetchAttendanceFromServer(),
+      StorageService.fetchStudentsFromServer(),
+    ]);
+    if (StorageService.isGoogleSheetConnected()) {
+      await Promise.all([
+        StorageService.pullAttendanceFromCloud().catch(() => {}),
+        StorageService.pullStudentsFromCloud().catch(() => {}),
+      ]);
+    }
+    setRecords(StorageService.getAttendance());
+    setAllStudents(StorageService.getUsers().filter(u => u.role === 'siswa'));
+  };
+
   React.useEffect(() => {
-    StorageService.ensureConfigSynced().then((cfg) => {
-      setConfig(cfg);
-      if (!scriptUrl && cfg.scriptUrl) {
-        setScriptUrl(cfg.scriptUrl);
-      }
-      Promise.all([
-        StorageService.fetchAttendanceFromServer(),
-        StorageService.fetchStudentsFromServer(),
-      ]).then(() => {
-        setRecords(StorageService.getAttendance());
-        setAllStudents(StorageService.getUsers().filter(u => u.role === 'siswa'));
-      });
-    });
+    refreshCloudView();
+    const timer = setInterval(() => {
+      refreshCloudView();
+    }, 15000);
+    return () => clearInterval(timer);
   }, []);
 
   const showToast = (msg: string) => {
@@ -418,17 +433,17 @@ export const AdminGasIntegration: React.FC = () => {
             <div className="p-3.5 rounded-xl bg-white border border-slate-200 shadow-sm space-y-2 flex flex-col justify-between">
               <div>
                 <div className="flex items-center justify-between gap-2">
-                  <span className="font-bold text-blue-700 block text-xs">Cara 2: Pasang di Vercel Environment Variables (Permanen)</span>
+                  <span className="font-bold text-blue-700 block text-xs">2. Pasang di Vercel Environment Variables (Permanen)</span>
                   <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
-                    (import.meta as any).env?.VITE_GOOGLE_APPS_SCRIPT_URL
+                    diagnostics.hasEnvScriptUrl
                       ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                       : 'bg-amber-50 text-amber-800 border-amber-200'
                   }`}>
-                    {(import.meta as any).env?.VITE_GOOGLE_APPS_SCRIPT_URL ? 'Env Terpasang' : 'Env Belum Diset'}
+                    {diagnostics.hasEnvScriptUrl ? 'Env Aktif' : 'Env Belum Diset'}
                   </span>
                 </div>
                 <p className="text-[11px] text-slate-600 mt-1 leading-relaxed">
-                  Pasang variabel <code className="text-slate-900 font-mono font-bold bg-slate-100 border border-slate-200 px-1 py-0.5 rounded">VITE_GOOGLE_APPS_SCRIPT_URL</code> (dan opsional <code className="text-slate-900 font-mono font-bold bg-slate-100 border border-slate-200 px-1 py-0.5 rounded">GOOGLE_APPS_SCRIPT_URL</code>) di Vercel agar semua HP siswa otomatis tersambung permanen meski Server Vercel sedang cold start.
+                  Pasang variabel <code className="text-slate-900 font-mono font-bold bg-slate-100 border border-slate-200 px-1 py-0.5 rounded">VITE_GOOGLE_APPS_SCRIPT_URL</code> dan <code className="text-slate-900 font-mono font-bold bg-slate-100 border border-slate-200 px-1 py-0.5 rounded">GOOGLE_APPS_SCRIPT_URL</code> di Vercel lalu <strong>Redeploy</strong> agar semua HP siswa otomatis tersambung ke Spreadsheet meski membuka URL polos tanpa <code className="font-mono font-bold">?gas=</code>.
                 </p>
               </div>
 
@@ -450,6 +465,10 @@ export const AdminGasIntegration: React.FC = () => {
               </button>
             </div>
           </div>
+
+          {config.connected && config.scriptUrl && (
+            <QrShareBox url={StorageService.getStudentShareUrl()} title="QR Code Presensi Siswa PKL (Scan via Kamera HP)" />
+          )}
         </div>
       </div>
 

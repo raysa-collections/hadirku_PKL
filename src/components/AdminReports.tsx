@@ -175,8 +175,33 @@ const getPreviewMaxWidth = (size: PaperSize, orientation: PaperOrientation): str
 };
 
 export const AdminReports: React.FC = () => {
-  const allRecords = StorageService.getAttendance();
-  const allStudents = StorageService.getUsers().filter(u => u.role === 'siswa');
+  const [allRecords, setAllRecords] = useState<AttendanceRecord[]>(() => StorageService.getAttendance());
+  const [allStudents, setAllStudents] = useState(() => StorageService.getUsers().filter(u => u.role === 'siswa'));
+
+  useEffect(() => {
+    let active = true;
+    const loadLatestForReport = async () => {
+      try {
+        await StorageService.ensureConfigSynced();
+        await Promise.all([
+          StorageService.fetchAttendanceFromServer(),
+          StorageService.fetchStudentsFromServer(),
+        ]);
+        if (StorageService.isGoogleSheetConnected()) {
+          await Promise.all([
+            StorageService.pullAttendanceFromCloud().catch(() => {}),
+            StorageService.pullStudentsFromCloud().catch(() => {}),
+          ]);
+        }
+        if (active) {
+          setAllRecords(StorageService.getAttendance());
+          setAllStudents(StorageService.getUsers().filter(u => u.role === 'siswa'));
+        }
+      } catch {}
+    };
+    loadLatestForReport();
+    return () => { active = false; };
+  }, []);
 
   const getOffsetDate = (baseDateStr: string, offsetDays: number): string => {
     try {

@@ -9,8 +9,9 @@ interface StudentHistoryProps {
 }
 
 export const StudentHistory: React.FC<StudentHistoryProps> = ({ user, onBackToDashboard }) => {
+  const normNis = String(user.nis || '').trim().toLowerCase();
   const [allRecords, setAllRecords] = useState<AttendanceRecord[]>(() => 
-    StorageService.getAttendance().filter(r => r.nis === user.nis)
+    StorageService.getAttendance().filter(r => String(r.nis || '').trim().toLowerCase() === normNis)
   );
   
   const currentYear = new Date().getFullYear().toString();
@@ -22,16 +23,18 @@ export const StudentHistory: React.FC<StudentHistoryProps> = ({ user, onBackToDa
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const reloadData = () => {
-    setAllRecords(StorageService.getAttendance().filter(r => r.nis === user.nis));
+    setAllRecords(
+      StorageService.getAttendance().filter(r => String(r.nis || '').trim().toLowerCase() === normNis)
+    );
   };
 
   React.useEffect(() => {
     setIsRefreshing(true);
-    StorageService.fetchAttendanceFromServer()
+    StorageService.fetchAttendanceFromServer(user.nis)
       .then(() => {
         reloadData();
         if (StorageService.isGoogleSheetConnected()) {
-          return StorageService.pullAttendanceFromCloud();
+          return StorageService.pullAttendanceFromCloud(undefined, user.nis);
         }
       })
       .then(reloadData)
@@ -214,9 +217,15 @@ export const StudentHistory: React.FC<StudentHistoryProps> = ({ user, onBackToDa
                   </td>
                   <td className="p-3.5 text-center">
                     <div className="flex flex-col items-center gap-1">
-                      <span className="inline-flex items-center gap-1 text-[10px] text-emerald-700 font-semibold bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
-                        <CheckCircle2 className="w-3 h-3" /> Spreadsheet
-                      </span>
+                      {rec.syncStatus === 'synced' ? (
+                        <span className="inline-flex items-center gap-1 text-[10px] text-emerald-700 font-semibold bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                          <CheckCircle2 className="w-3 h-3" /> Spreadsheet
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-[10px] text-amber-800 font-semibold bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
+                          <Clock className="w-3 h-3" /> Antrean Sinkron
+                        </span>
+                      )}
                       {rec.fotoBukti && (
                         <span className="text-[10px] text-blue-700 font-medium">📷 Foto Ada</span>
                       )}

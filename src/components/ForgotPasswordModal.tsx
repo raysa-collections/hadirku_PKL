@@ -10,16 +10,36 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({ onBack
   const [nisInput, setNisInput] = useState('');
   const [resultMessage, setResultMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  const handleLookup = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!nisInput.trim()) return;
+  const [isLookingUp, setIsLookingUp] = useState(false);
 
-    const users = StorageService.getUsers();
-    const found = users.find(u => 
-      u.nis.toLowerCase() === nisInput.trim().toLowerCase() || 
-      u.username.toLowerCase() === nisInput.trim().toLowerCase() ||
-      (u.nip && u.nip.toLowerCase() === nisInput.trim().toLowerCase())
-    );
+  const handleLookup = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!nisInput.trim() || isLookingUp) return;
+
+    const cleanTarget = nisInput.trim().toLowerCase();
+    const matchFn = (u: any) =>
+      (u.nis && u.nis.toLowerCase() === cleanTarget) ||
+      (u.username && u.username.toLowerCase() === cleanTarget) ||
+      (u.nip && u.nip.toLowerCase() === cleanTarget);
+
+    let users = StorageService.getUsers();
+    let found = users.find(matchFn);
+
+    if (!found) {
+      setIsLookingUp(true);
+      try {
+        await StorageService.ensureConfigSynced();
+        await StorageService.fetchStudentsFromServer();
+        if (StorageService.isGoogleSheetConnected()) {
+          await StorageService.pullStudentsFromCloud();
+        }
+        users = StorageService.getUsers();
+        found = users.find(matchFn);
+      } catch {
+      } finally {
+        setIsLookingUp(false);
+      }
+    }
 
     if (found) {
       if (found.role === 'admin') {
@@ -30,7 +50,7 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({ onBack
       } else {
         setResultMessage({
           type: 'success',
-          text: `Akun ditemukan atas nama "${found.nama}" (${found.jurusan}). Kredensial default siswa adalah NIS: "${found.nis}" dengan password: "siswa123". Silakan coba masuk kembali.`,
+          text: `Akun ditemukan atas nama "${found.nama}" (${found.jurusan}) dengan Username: "${found.username}" dan NIS: "${found.nis}". Jika lupa password pribadi, hubungi Administrator PKL untuk reset.`,
         });
       }
     } else {

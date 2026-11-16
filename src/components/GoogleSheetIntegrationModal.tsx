@@ -84,7 +84,12 @@ export const GoogleSheetIntegrationModal: React.FC<GoogleSheetIntegrationModalPr
     for (const rec of records) {
       const action = rec.jamPulang && rec.jamPulang !== '-' ? 'CHECK_OUT' : 'CHECK_IN';
       const res = await StorageService.syncToGoogleSheet(action, rec);
-      if (res.success) successCount++;
+      if (res.sheetSynced) {
+        rec.syncStatus = 'synced';
+        rec.syncedAt = new Date().toISOString();
+        StorageService.addOrUpdateAttendance(rec);
+        successCount++;
+      }
     }
 
     setSyncingAll(false);

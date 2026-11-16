@@ -37,12 +37,17 @@ export default function App() {
   const [showGoogleSheetModal, setShowGoogleSheetModal] = useState(false);
   const [themeConfig, setThemeConfig] = useState<AppThemeConfig>(() => StorageService.getAppThemeConfig());
   const [sheetConfig, setSheetConfig] = useState(() => StorageService.getGoogleSheetConfig());
+  const [pendingCount, setPendingCount] = useState(() => StorageService.getPendingSyncCount());
   const [cloudNotice, setCloudNotice] = useState<string | null>(null);
 
   React.useEffect(() => {
-    // Immediately read local/query config
+    const refreshSyncBadges = () => {
+      setSheetConfig(StorageService.getGoogleSheetConfig());
+      setPendingCount(StorageService.getPendingSyncCount());
+    };
+
+    refreshSyncBadges();
     const config = StorageService.getGoogleSheetConfig();
-    setSheetConfig(config);
     if (config.connected && config.scriptUrl) {
       if (typeof window !== 'undefined' && window.location.search.includes('gas')) {
         setCloudNotice('Tautan presensi berhasil terhubung otomatis dengan Google Spreadsheet sekolah!');
@@ -50,11 +55,17 @@ export default function App() {
       }
     }
 
+    window.addEventListener('pkl-sync-updated', refreshSyncBadges);
+
     // Also wait for server sync so Admin/Student picks up server-configured GAS URL & theme
     StorageService.initServerSync().then(() => {
-      setSheetConfig(StorageService.getGoogleSheetConfig());
+      refreshSyncBadges();
       setThemeConfig(StorageService.getAppThemeConfig());
     });
+
+    return () => {
+      window.removeEventListener('pkl-sync-updated', refreshSyncBadges);
+    };
   }, []);
 
   const handleLoginSuccess = (user: User) => {
@@ -233,9 +244,38 @@ export default function App() {
           {/* Action Header Menu */}
           <div className="flex items-center gap-2 shrink-0">
             {currentUser.role === 'siswa' && (
-              <span className="px-2.5 py-1 rounded-xl text-[11px] font-bold border bg-emerald-50 border-emerald-200 text-emerald-700 flex items-center gap-1.5" title="Terhubung Otomatis dengan Google Spreadsheet Sekolah">
-                <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                <span className="hidden sm:inline">Cloud Terhubung</span>
+              <span
+                className={`px-2.5 py-1 rounded-xl text-[11px] font-bold border flex items-center gap-1.5 ${
+                  sheetConfig.connected && pendingCount === 0
+                    ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                    : sheetConfig.connected && pendingCount > 0
+                    ? 'bg-blue-50 border-blue-200 text-blue-700'
+                    : 'bg-amber-50 border-amber-200 text-amber-800'
+                }`}
+                title={
+                  sheetConfig.connected && pendingCount === 0
+                    ? 'Terhubung Otomatis dengan Google Spreadsheet Sekolah'
+                    : sheetConfig.connected
+                    ? `${pendingCount} data menunggu konfirmasi sinkron Spreadsheet`
+                    : 'Tautan Spreadsheet belum aktif di perangkat ini — buka link resmi dari grup WhatsApp sekolah'
+                }
+              >
+                <span
+                  className={`w-2 h-2 rounded-full ${
+                    sheetConfig.connected && pendingCount === 0
+                      ? 'bg-emerald-500'
+                      : sheetConfig.connected
+                      ? 'bg-blue-500 animate-pulse'
+                      : 'bg-amber-500'
+                  }`}
+                />
+                <span className="hidden sm:inline">
+                  {sheetConfig.connected && pendingCount === 0
+                    ? 'Cloud Terhubung'
+                    : sheetConfig.connected
+                    ? `Sinkronisasi (${pendingCount})`
+                    : 'Perlu Tautan Sekolah'}
+                </span>
               </span>
             )}
 

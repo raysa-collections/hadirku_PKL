@@ -52,33 +52,34 @@ export const AdminAttendanceManagement: React.FC = () => {
     setTimeout(() => setToastMsg(null), 3500);
   };
 
-  const handleCloudPull = async () => {
-    setIsSyncing(true);
+  const handleCloudPull = async (silent = false) => {
+    if (!silent) setIsSyncing(true);
     try {
+      await StorageService.ensureConfigSynced();
       const serverRecords = await StorageService.fetchAttendanceFromServer();
       setRecords(serverRecords);
 
       if (StorageService.isGoogleSheetConnected()) {
         const res = await StorageService.pullAttendanceFromCloud();
         reloadData();
-        showToast(res.message);
-      } else {
+        if (!silent) showToast(res.message);
+      } else if (!silent) {
         showToast(`Sinkronisasi server selesai. Total: ${serverRecords.length} data.`);
       }
     } catch (e: any) {
-      showToast('Gagal menarik data: ' + e.message);
+      if (!silent) showToast('Gagal menarik data: ' + e.message);
     } finally {
-      setIsSyncing(false);
+      if (!silent) setIsSyncing(false);
     }
   };
 
-  // Auto-sync on mount and poll server every 8s for live attendance from student mobile phones
+  // Auto-sync on mount and poll server + Google Spreadsheet every 12s for live attendance from student phones
   React.useEffect(() => {
-    handleCloudPull();
+    handleCloudPull(true);
 
     const interval = setInterval(() => {
-      StorageService.fetchAttendanceFromServer().then(recs => setRecords(recs));
-    }, 8000);
+      handleCloudPull(true);
+    }, 12000);
 
     return () => clearInterval(interval);
   }, []);
@@ -150,7 +151,7 @@ export const AdminAttendanceManagement: React.FC = () => {
 
         <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
           <button
-            onClick={handleCloudPull}
+            onClick={() => handleCloudPull(false)}
             disabled={isSyncing}
             className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-sm cursor-pointer disabled:opacity-50"
             title="Tarik data presensi langsung dari Google Spreadsheet"

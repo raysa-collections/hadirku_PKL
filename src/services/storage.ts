@@ -49,13 +49,65 @@ function setCookieValue(name: string, value: string, maxAgeSeconds: number = 315
   } catch {}
 }
 
-async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs: number = 8500): Promise<Response> {
+async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs: number = 10000): Promise<Response> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     return await fetch(url, { ...options, signal: controller.signal });
   } finally {
     clearTimeout(timer);
+  }
+}
+
+function notifySyncUpdate() {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('pkl-sync-updated'));
+  }
+}
+
+async function verifyGasRecordExists(
+  targetUrl: string,
+  type: 'STUDENT' | 'ATTENDANCE',
+  identifier: string,
+  tanggal?: string,
+  action?: 'CHECK_IN' | 'CHECK_OUT'
+): Promise<{ verified: boolean; permissionError?: boolean }> {
+  try {
+    const query =
+      type === 'STUDENT'
+        ? `action=GET_STUDENTS&_t=${Date.now()}`
+        : `action=GET_ALL&nis=${encodeURIComponent(identifier)}&_t=${Date.now()}`;
+    const checkUrl = targetUrl.includes('?') ? `${targetUrl}&${query}` : `${targetUrl}?${query}`;
+    const res = await fetchWithTimeout(checkUrl, { redirect: 'follow' }, 15000);
+    const txt = await res.text();
+    if (txt.includes('accounts.google.com') || txt.trim().startsWith('<')) {
+      return { verified: false, permissionError: true };
+    }
+    const json = JSON.parse(txt);
+    if (!json || json.status !== 'success' || !Array.isArray(json.data)) {
+      return { verified: false };
+    }
+    const normId = identifier.trim().toLowerCase();
+    if (type === 'STUDENT') {
+      const found = json.data.some(
+        (st: any) =>
+          (st.nis && String(st.nis).trim().toLowerCase() === normId) ||
+          (st.username && String(st.username).trim().toLowerCase() === normId)
+      );
+      return { verified: found };
+    }
+    const found = json.data.some((att: any) => {
+      const sameNis = att.nis && String(att.nis).trim().toLowerCase() === normId;
+      const sameDate = !tanggal || att.tanggal === tanggal;
+      if (!sameNis || !sameDate) return false;
+      if (action === 'CHECK_OUT') {
+        return Boolean(att.jamPulang && att.jamPulang !== '-');
+      }
+      return true;
+    });
+    return { verified: found };
+  } catch {
+    return { verified: false };
   }
 }
 
@@ -498,6 +550,7 @@ export const StorageService = {
       records.unshift(record);
     }
     this.saveAttendance(records);
+    notifySyncUpdate();
     return record;
   },
 
@@ -517,6 +570,7 @@ export const StorageService = {
     try {
       localStorage.setItem(SYNC_QUEUE_KEY, JSON.stringify(queue));
     } catch {}
+    notifySyncUpdate();
   },
 
   enqueuePendingSync(item: Omit<SyncQueueItem, 'queuedAt'>) {
@@ -542,6 +596,22 @@ export const StorageService = {
     const qCount = this.getSyncQueue().length;
     const pendingAtt = this.getAttendance().filter(r => r.syncStatus === 'pending').length;
     return Math.max(qCount, pendingAtt);
+  },
+
+  getServerDiagnostics(): { isVercel: boolean; hasEnvScriptUrl: boolean } {
+    if (typeof window === 'undefined') {
+      return { isVercel: false, hasEnvScriptUrl: false };
+    }
+    const envUrl = (import.meta as any).env?.VITE_GOOGLE_APPS_SCRIPT_URL || (import.meta as any).env?.VITE_SCRIPT_URL;
+    let storedMeta: any = null;
+    try {
+      const raw = sessionStorage.getItem('pkl_server_meta_v1');
+      if (raw) storedMeta = JSON.parse(raw);
+    } catch {}
+    return {
+      isVercel: Boolean(storedMeta?.isVercel || window.location.hostname.includes('vercel.app')),
+      hasEnvScriptUrl: Boolean((envUrl && String(envUrl).startsWith('http')) || storedMeta?.hasEnvScriptUrl),
+    };
   },
 
   _flushPromise: null as Promise<{ flushed: number; remaining: number }> | null,
@@ -622,9 +692,12 @@ export const StorageService = {
       return current;
     }
     try {
-      const cfgRes = await fetchWithTimeout(`/api/config?_t=${Date.now()}`, {}, 5000);
+      const cfgRes = await fetchWithTimeout(`/api/config?_t=${Date.now()}`, {}, 6000);
       if (cfgRes.ok) {
         const json = await cfgRes.json();
+        if (json?.meta) {
+          try { sessionStorage.setItem('pkl_server_meta_v1', JSON.stringify(json.meta)); } catch {}
+        }
         if (json && json.status === 'success' && json.data?.googleSheet?.scriptUrl) {
           this.saveGoogleSheetConfig(json.data.googleSheet, false);
         }
@@ -643,9 +716,12 @@ export const StorageService = {
         const localConfig = this.getGoogleSheetConfig();
 
         // 1. Fetch server config to pick up global Google Apps Script URL set by Admin
-        const cfgRes = await fetchWithTimeout(`/api/config?_t=${Date.now()}`, {}, 5000);
+        const cfgRes = await fetchWithTimeout(`/api/config?_t=${Date.now()}`, {}, 6000);
         if (cfgRes.ok) {
           const json = await cfgRes.json();
+          if (json?.meta) {
+            try { sessionStorage.setItem('pkl_server_meta_v1', JSON.stringify(json.meta)); } catch {}
+          }
           if (json && json.status === 'success' && json.data) {
             if (json.data.googleSheet?.scriptUrl) {
               if (!localConfig.scriptUrl || localConfig.scriptUrl !== json.data.googleSheet.scriptUrl) {
@@ -675,6 +751,7 @@ export const StorageService = {
         const scopeNis = curUser && curUser.role === 'siswa' ? curUser.nis : undefined;
         await this.fetchAttendanceFromServer(scopeNis);
         await this.fetchStudentsFromServer();
+        notifySyncUpdate();
       } catch (e) {
         console.warn('Initial server sync warning (running offline fallback):', e);
       }
@@ -686,8 +763,13 @@ export const StorageService = {
   async fetchAttendanceFromServer(filterNis?: string): Promise<AttendanceRecord[]> {
     if (typeof window === 'undefined') return this.getAttendance();
     try {
+      const cfg = this.getGoogleSheetConfig();
       const nisQuery = filterNis ? `&nis=${encodeURIComponent(filterNis.trim())}` : '';
-      const res = await fetchWithTimeout(`/api/attendance?_t=${Date.now()}${nisQuery}`, {}, 6500);
+      const headers: Record<string, string> = {};
+      if (cfg.scriptUrl && cfg.scriptUrl.startsWith('http')) {
+        headers['x-gas-url'] = cfg.scriptUrl;
+      }
+      const res = await fetchWithTimeout(`/api/attendance?_t=${Date.now()}${nisQuery}`, { headers }, 8000);
       if (res.ok) {
         const json = await res.json();
         if (json && json.status === 'success' && Array.isArray(json.data)) {
@@ -751,7 +833,12 @@ export const StorageService = {
   async fetchStudentsFromServer(): Promise<User[]> {
     if (typeof window === 'undefined') return this.getUsers();
     try {
-      const res = await fetchWithTimeout(`/api/students?_t=${Date.now()}`, {}, 6500);
+      const cfg = this.getGoogleSheetConfig();
+      const headers: Record<string, string> = {};
+      if (cfg.scriptUrl && cfg.scriptUrl.startsWith('http')) {
+        headers['x-gas-url'] = cfg.scriptUrl;
+      }
+      const res = await fetchWithTimeout(`/api/students?_t=${Date.now()}`, { headers }, 8000);
       if (res.ok) {
         const json = await res.json();
         if (json && json.status === 'success' && Array.isArray(json.data)) {
@@ -907,6 +994,7 @@ export const StorageService = {
         body: JSON.stringify({ googleSheet: normalized }),
       }).catch(err => console.warn('Sync config to server warning:', err));
     }
+    notifySyncUpdate();
   },
 
   isGoogleSheetConnected(): boolean {
@@ -1028,7 +1116,7 @@ export const StorageService = {
         ? `${targetUrl}&action=GET_ALL${nisParam}&_t=${Date.now()}`
         : `${targetUrl}?action=GET_ALL${nisParam}&_t=${Date.now()}`;
 
-      const response = await fetchWithTimeout(fetchUrl, { redirect: 'follow' }, 9000);
+      const response = await fetchWithTimeout(fetchUrl, { redirect: 'follow' }, 20000);
       const rawText = await response.text();
       if (rawText.includes('accounts.google.com') || rawText.trim().startsWith('<')) {
         throw new Error('Akses Google Apps Script belum disetel ke Anyone (Siapa saja).');
@@ -1265,7 +1353,7 @@ export const StorageService = {
         },
         body: JSON.stringify(payload),
         redirect: 'follow',
-      }, 9000);
+      }, 20000);
 
       const rawText = await response.text();
       if (rawText.includes('accounts.google.com') || rawText.trim().startsWith('<')) {
@@ -1305,7 +1393,8 @@ export const StorageService = {
       }
       throw new Error(`HTTP ${response.status}`);
     } catch (err: any) {
-      // Fallback with mode: 'no-cors' when CORS blocks reading the GAS redirect response
+      // Fallback with mode: 'no-cors' when CORS blocks reading the GAS redirect response,
+      // followed by strict GET verification so we NEVER silently lose failed syncs!
       try {
         await fetchWithTimeout(targetUrl, {
           method: 'POST',
@@ -1314,26 +1403,40 @@ export const StorageService = {
             'Content-Type': 'text/plain;charset=utf-8',
           },
           body: JSON.stringify(payload),
-        }, 8500);
-        this.dequeuePendingSync('STUDENT', queueKey);
-        config.lastSync = new Date().toISOString();
-        config.connected = true;
-        this.saveGoogleSheetConfig(config, false);
-        return {
-          success: true,
-          serverSynced,
-          sheetSynced: true,
-          message: 'Data siswa terkirim ke Google Spreadsheet via background sync.',
-        };
-      } catch {
-        this.enqueuePendingSync({ type: 'STUDENT', key: queueKey });
-        return {
-          success: false,
-          serverSynced,
-          sheetSynced: false,
-          message: 'Tersimpan lokal di HP & masuk antrean sinkronisasi otomatis.',
-        };
-      }
+        }, 18000);
+
+        await new Promise(resolve => setTimeout(resolve, 1200));
+        const verify = await verifyGasRecordExists(targetUrl, 'STUDENT', student.nis || student.username);
+        if (verify.permissionError) {
+          this.enqueuePendingSync({ type: 'STUDENT', key: queueKey });
+          return {
+            success: false,
+            serverSynced,
+            sheetSynced: false,
+            message: 'Gagal menyimpan ke Spreadsheet: akses Google Apps Script belum diatur ke "Anyone / Siapa saja".',
+          };
+        }
+        if (verify.verified) {
+          this.dequeuePendingSync('STUDENT', queueKey);
+          config.lastSync = new Date().toISOString();
+          config.connected = true;
+          this.saveGoogleSheetConfig(config, false);
+          return {
+            success: true,
+            serverSynced,
+            sheetSynced: true,
+            message: 'Siswa berhasil terverifikasi masuk ke Google Spreadsheet!',
+          };
+        }
+      } catch {}
+
+      this.enqueuePendingSync({ type: 'STUDENT', key: queueKey });
+      return {
+        success: false,
+        serverSynced,
+        sheetSynced: false,
+        message: 'Tersimpan lokal & masuk antrean kirim ulang ke Google Spreadsheet (sedang menunggu konfirmasi server).',
+      };
     }
   },
 
@@ -1431,7 +1534,7 @@ export const StorageService = {
         },
         body: JSON.stringify(payload),
         redirect: 'follow',
-      }, 9000);
+      }, 20000);
 
       const rawText = await response.text();
       if (rawText.includes('accounts.google.com') || rawText.trim().startsWith('<')) {
@@ -1471,7 +1574,7 @@ export const StorageService = {
       }
       throw new Error(`HTTP ${response.status}`);
     } catch (err: any) {
-      console.warn('Standard fetch to Google Apps Script failed, trying no-cors fallback:', err);
+      console.warn('Standard fetch to Google Apps Script failed, trying verified no-cors fallback:', err);
       try {
         await fetchWithTimeout(targetUrl, {
           method: 'POST',
@@ -1480,27 +1583,42 @@ export const StorageService = {
             'Content-Type': 'text/plain;charset=utf-8',
           },
           body: JSON.stringify(payload),
-        }, 8500);
-        this.dequeuePendingSync('ATTENDANCE', record.id);
-        config.lastSync = new Date().toISOString();
-        config.connected = true;
-        this.saveGoogleSheetConfig(config, false);
-        return {
-          success: true,
-          serverSynced,
-          sheetSynced: true,
-          message: 'Presensi berhasil dikirim ke Google Spreadsheet via background dispatch!',
-        };
+        }, 18000);
+
+        await new Promise(resolve => setTimeout(resolve, 1200));
+        const verify = await verifyGasRecordExists(targetUrl, 'ATTENDANCE', record.nis, record.tanggal, action);
+        if (verify.permissionError) {
+          this.enqueuePendingSync({ type: 'ATTENDANCE', key: record.id, action });
+          return {
+            success: false,
+            serverSynced,
+            sheetSynced: false,
+            message: 'Akses Google Apps Script belum disetel ke Anyone (Siapa saja).',
+          };
+        }
+        if (verify.verified) {
+          this.dequeuePendingSync('ATTENDANCE', record.id);
+          config.lastSync = new Date().toISOString();
+          config.connected = true;
+          this.saveGoogleSheetConfig(config, false);
+          return {
+            success: true,
+            serverSynced,
+            sheetSynced: true,
+            message: 'Presensi berhasil terverifikasi masuk ke Google Spreadsheet!',
+          };
+        }
       } catch (fallbackErr: any) {
         console.warn('No-cors fallback failed:', fallbackErr);
-        this.enqueuePendingSync({ type: 'ATTENDANCE', key: record.id, action });
-        return {
-          success: false,
-          serverSynced,
-          sheetSynced: false,
-          message: 'Tersimpan lokal di HP & masuk antrean kirim otomatis saat sinyal membaik.',
-        };
       }
+
+      this.enqueuePendingSync({ type: 'ATTENDANCE', key: record.id, action });
+      return {
+        success: false,
+        serverSynced,
+        sheetSynced: false,
+        message: 'Tersimpan lokal di HP & masuk antrean kirim otomatis saat konfirmasi Spreadsheet siap.',
+      };
     }
   },
 

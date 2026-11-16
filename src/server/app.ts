@@ -11,27 +11,41 @@ app.use(express.urlencoded({ extended: true, limit: '25mb' }));
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, X-Gas-Url, x-gas-url');
   if (req.method === 'OPTIONS') {
     return res.sendStatus(200);
+  }
+  // Normalize Vercel /api/index.ts rewrite or stripped /api prefix edge cases
+  if (req.url && !req.url.startsWith('/api') && req.url !== '/') {
+    req.url = `/api${req.url.startsWith('/') ? '' : '/'}${req.url}`;
   }
   next();
 });
 
 // Health check
 app.get('/api/health', (req: Request, res: Response) => {
+  const diag = serverStore.getDiagnostics();
   res.json({
     status: 'ok',
     app: 'HADIRKU PKL TKR Server API',
     time: new Date().toISOString(),
     totalAttendance: serverStore.getAttendance().length,
     totalStudents: serverStore.getStudents().length,
+    ...diag,
   });
 });
 
 // --- CONFIG API ---
 app.get('/api/config', (req: Request, res: Response) => {
-  res.json({ status: 'success', data: serverStore.getConfig() });
+  const headerGas = (req.headers['x-gas-url'] as string | undefined) || (typeof req.query.gas === 'string' ? req.query.gas : undefined);
+  if (headerGas && headerGas.trim().startsWith('http')) {
+    serverStore.saveConfig({ googleSheet: { scriptUrl: headerGas.trim(), sheetName: 'Data_Absensi_PKL', connected: true, autoSync: true } });
+  }
+  res.json({
+    status: 'success',
+    data: serverStore.getConfig(),
+    meta: serverStore.getDiagnostics(),
+  });
 });
 
 app.post('/api/config', (req: Request, res: Response) => {
@@ -45,8 +59,10 @@ app.post('/api/config', (req: Request, res: Response) => {
 
 // --- ATTENDANCE API ---
 // GET all attendance records from server (optionally filtered by ?nis=)
-app.get('/api/attendance', (req: Request, res: Response) => {
+app.get('/api/attendance', async (req: Request, res: Response) => {
   const nis = typeof req.query.nis === 'string' ? req.query.nis : undefined;
+  const overrideGas = (req.headers['x-gas-url'] as string | undefined) || (typeof req.query.scriptUrl === 'string' ? req.query.scriptUrl : undefined);
+  await serverStore.hydrateFromGasIfCold(overrideGas);
   const records = serverStore.getAttendance(nis);
   res.json({ status: 'success', total: records.length, data: records });
 });
@@ -143,7 +159,9 @@ app.post('/api/gas/test', async (req: Request, res: Response) => {
 });
 
 // --- STUDENTS / USERS API ---
-app.get('/api/students', (req: Request, res: Response) => {
+app.get('/api/students', async (req: Request, res: Response) => {
+  const overrideGas = (req.headers['x-gas-url'] as string | undefined) || (typeof req.query.scriptUrl === 'string' ? req.query.scriptUrl : undefined);
+  await serverStore.hydrateFromGasIfCold(overrideGas);
   const students = serverStore.getStudents();
   res.json({ status: 'success', total: students.length, data: students });
 });

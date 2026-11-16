@@ -191,7 +191,7 @@ class ServerStore {
   }
 
   // --- HELPER: FETCH WITH TIMEOUT (PREVENT VERCEL 10s 504 TIMEOUTS) ---
-  private async fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs: number = 7500): Promise<globalThis.Response> {
+  private async fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs: number = 8500): Promise<globalThis.Response> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
@@ -202,6 +202,39 @@ class ServerStore {
     } finally {
       clearTimeout(timer);
     }
+  }
+
+  private hasHydratedFromGas = false;
+  private hydratePromise: Promise<void> | null = null;
+
+  public getDiagnostics() {
+    const envUrl = (process.env.VITE_GOOGLE_APPS_SCRIPT_URL || process.env.GOOGLE_APPS_SCRIPT_URL || '').trim();
+    return {
+      isVercel: Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME),
+      hasEnvScriptUrl: Boolean(envUrl && envUrl.startsWith('http')),
+    };
+  }
+
+  public async hydrateFromGasIfCold(overrideScriptUrl?: string): Promise<void> {
+    if (this.hasHydratedFromGas) return;
+    if (this.hydratePromise) return this.hydratePromise;
+
+    const targetUrl = this.resolveAndCacheScriptUrl(overrideScriptUrl);
+    if (!targetUrl) return;
+
+    this.hydratePromise = (async () => {
+      try {
+        await Promise.all([
+          this.pullStudentsFromGAS(targetUrl).catch(() => {}),
+          this.pullAttendanceFromGAS(targetUrl).catch(() => {}),
+        ]);
+        this.hasHydratedFromGas = true;
+      } finally {
+        this.hydratePromise = null;
+      }
+    })();
+
+    return this.hydratePromise;
   }
 
   // --- ATTENDANCE METHODS ---
@@ -520,7 +553,7 @@ class ServerStore {
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify(payload),
       redirect: 'follow',
-    }, 7500);
+    }, 8500);
 
     const parsed = await this.parseGasResponse(res);
     return { success: parsed.ok, message: parsed.message };
@@ -548,7 +581,7 @@ class ServerStore {
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify(payload),
       redirect: 'follow',
-    }, 7500);
+    }, 8500);
 
     const parsed = await this.parseGasResponse(res);
     return { success: parsed.ok, message: parsed.message };
