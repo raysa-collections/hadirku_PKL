@@ -257,13 +257,14 @@ export const StorageService = {
     localStorage.setItem(USERS_KEY, JSON.stringify(users));
   },
 
-  addUser(user: User): boolean {
+  addUser(user: User, syncToRemote: boolean = true): boolean {
     const users = this.getUsers();
     const existingIdx = users.findIndex(u => 
       (u.username && user.username && u.username.toLowerCase() === user.username.toLowerCase()) || 
       (u.nis && user.nis && u.nis.toLowerCase() === user.nis.toLowerCase())
     );
 
+    let savedUser = { ...user };
     if (existingIdx >= 0) {
       // Preserve existing user's custom password if user parameter doesn't provide a new non-default password
       const existingPass = users[existingIdx].password;
@@ -272,67 +273,129 @@ export const StorageService = {
         ? incomingPass 
         : (existingPass || incomingPass || 'siswa123');
 
-      users[existingIdx] = {
+      savedUser = {
         ...users[existingIdx],
         ...user,
         password: finalPass,
       };
+      users[existingIdx] = savedUser;
       this.saveUsers(users);
     } else {
-      users.push(user);
+      users.push(savedUser);
       this.saveUsers(users);
     }
 
-    // Sync to application server database immediately
-    if (typeof window !== 'undefined' && user.role === 'siswa') {
-      fetch('/api/students', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(user),
-      }).catch(err => console.warn('Server student save warning:', err));
-    }
-
-    if (user.role === 'siswa') {
-      this.syncStudentToGoogleSheet(user).catch(err => console.warn('Sync student warning:', err));
+    if (syncToRemote && savedUser.role === 'siswa') {
+      // Single clean sync path (posts to /api/students and falls back/forwards to Google Spreadsheet)
+      this.syncStudentToGoogleSheet(savedUser).catch(err => console.warn('Sync student warning:', err));
     }
     return true;
   },
 
-  addUsersBulk(newUsers: User[]): { addedCount: number; updatedCount: number } {
+  async registerStudent(user: User): Promise<{
+    user: User;
+    success: boolean;
+    serverSynced: boolean;
+    sheetSynced: boolean;
+    isUnconfigured?: boolean;
+    message: string;
+  }> {
+    await this.ensureConfigSynced();
+    this.addUser(user, false);
+
+    // Re-read saved user (with resolved password merge if NIS existed)
+    const saved = this.getUsers().find(
+      u => u.role === 'siswa' && (u.id === user.id || u.nis.toLowerCase() === user.nis.toLowerCase())
+    ) || user;
+
+    if (saved.role !== 'siswa') {
+      return { user: saved, success: true, serverSynced: false, sheetSynced: false, message: 'Tersimpan lokal.' };
+    }
+
+    const syncRes = await this.syncStudentToGoogleSheet(saved);
+    return {
+      user: saved,
+      success: true,
+      serverSynced: Boolean(syncRes.serverSynced),
+      sheetSynced: Boolean(syncRes.sheetSynced),
+      isUnconfigured: syncRes.isUnconfigured,
+      message: syncRes.message,
+    };
+  },
+
+  addUsersBulk(newUsers: User[], syncToCloud: boolean = true): { addedCount: number; updatedCount: number } {
     const users = this.getUsers();
     let addedCount = 0;
     let updatedCount = 0;
+    const syncedBatch: User[] = [];
 
     for (const nu of newUsers) {
       const existingIndex = users.findIndex(
-        u => u.nis === nu.nis || (u.username && nu.username && u.username.toLowerCase() === nu.username.toLowerCase())
+        u =>
+          (u.nis && nu.nis && u.nis.toLowerCase() === nu.nis.toLowerCase()) ||
+          (u.username && nu.username && u.username.toLowerCase() === nu.username.toLowerCase())
       );
       if (existingIndex >= 0) {
-        // PRESERVE existing user custom password if nu has default or missing password
+        // If remote provides a non-default custom password, adopt it; otherwise preserve existing custom password
         const existingPass = users[existingIndex].password;
         const incomingPass = nu.password;
-        const finalPass = (existingPass && existingPass !== 'siswa123')
-          ? existingPass
-          : (incomingPass || 'siswa123');
+        const finalPass =
+          incomingPass && incomingPass !== 'siswa123'
+            ? incomingPass
+            : existingPass && existingPass !== 'siswa123'
+            ? existingPass
+            : incomingPass || 'siswa123';
 
-        users[existingIndex] = {
+        const merged = {
           ...users[existingIndex],
           ...nu,
           password: finalPass,
           id: users[existingIndex].id, // keep original ID
         };
+        users[existingIndex] = merged;
+        if (merged.role === 'siswa') syncedBatch.push(merged);
         updatedCount++;
       } else {
         users.push(nu);
+        if (nu.role === 'siswa') syncedBatch.push(nu);
         addedCount++;
-      }
-      if (nu.role === 'siswa') {
-        this.syncStudentToGoogleSheet(nu).catch(err => console.warn('Sync student warning:', err));
       }
     }
 
     this.saveUsers(users);
+
+    if (syncToCloud && syncedBatch.length > 0) {
+      this.syncStudentsBulkToCloud(syncedBatch).catch(err => console.warn('Bulk sync student warning:', err));
+    }
+
     return { addedCount, updatedCount };
+  },
+
+  async syncStudentsBulkToCloud(students: User[]): Promise<void> {
+    if (typeof window === 'undefined' || students.length === 0) return;
+    const config = this.getGoogleSheetConfig();
+    let sheetSyncedCount = 0;
+
+    try {
+      const res = await fetch('/api/students/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ students, scriptUrl: config.scriptUrl || '' }),
+      });
+      if (res.ok) {
+        const json = await res.json();
+        sheetSyncedCount = json?.sheetSyncedCount || 0;
+      }
+    } catch (err) {
+      console.warn('Server bulk student save warning:', err);
+    }
+
+    // If server couldn't push all to GAS (e.g. cold Vercel /tmp) and browser has scriptUrl, push directly
+    if (sheetSyncedCount < students.length && config.scriptUrl && config.scriptUrl.startsWith('http')) {
+      for (const st of students) {
+        await this.syncStudentToGoogleSheet(st, true).catch(() => {});
+      }
+    }
   },
 
   updateUser(updated: User) {
@@ -349,11 +412,26 @@ export const StorageService = {
   },
 
   deleteUser(userId: string) {
-    const users = this.getUsers().filter(u => u.id !== userId);
+    const allUsers = this.getUsers();
+    const target = allUsers.find(u => u.id === userId);
+    const users = allUsers.filter(u => u.id !== userId);
     this.saveUsers(users);
+
     if (typeof window !== 'undefined') {
-      fetch(`/api/students/${userId}`, { method: 'DELETE' }).catch(err => {
+      const config = this.getGoogleSheetConfig();
+      const qs = config.scriptUrl ? `?scriptUrl=${encodeURIComponent(config.scriptUrl)}` : '';
+      fetch(`/api/students/${encodeURIComponent(userId)}${qs}`, { method: 'DELETE' }).catch(async err => {
         console.warn('Failed to delete student on server:', err);
+        if (target && config.scriptUrl && config.scriptUrl.startsWith('http')) {
+          try {
+            await fetch(config.scriptUrl, {
+              method: 'POST',
+              mode: 'no-cors',
+              headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+              body: JSON.stringify({ action: 'DELETE_STUDENT', nis: target.nis, username: target.username }),
+            });
+          } catch {}
+        }
       });
     }
   },
@@ -401,69 +479,71 @@ export const StorageService = {
       records.unshift(record);
     }
     this.saveAttendance(records);
-
-    // Asynchronously send to application server API so other devices receive it immediately
-    if (typeof window !== 'undefined') {
-      fetch('/api/attendance', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(record),
-      }).then(async res => {
-        if (res.ok) {
-          const json = await res.json();
-          if (json && json.data) {
-            const cur = this.getAttendance();
-            const idx = cur.findIndex(r => r.id === record.id);
-            if (idx >= 0) {
-              cur[idx].syncStatus = json.sheetSynced ? 'synced' : 'pending';
-              if (json.sheetSynced) cur[idx].syncedAt = new Date().toISOString();
-              this.saveAttendance(cur);
-            }
-          }
-        }
-      }).catch(err => {
-        console.warn('Background server sync warning:', err);
-      });
-    }
-
     return record;
+  },
+
+  // Deduplicated initial server sync promise
+  _initSyncPromise: null as Promise<void> | null,
+
+  async ensureConfigSynced(): Promise<GoogleSheetConfig> {
+    if (typeof window === 'undefined') return this.getGoogleSheetConfig();
+    const current = this.getGoogleSheetConfig();
+    if (current.scriptUrl && current.scriptUrl.startsWith('http')) {
+      return current;
+    }
+    try {
+      const cfgRes = await fetch(`/api/config?_t=${Date.now()}`);
+      if (cfgRes.ok) {
+        const json = await cfgRes.json();
+        if (json && json.status === 'success' && json.data?.googleSheet?.scriptUrl) {
+          this.saveGoogleSheetConfig(json.data.googleSheet, false);
+        }
+      }
+    } catch {}
+    return this.getGoogleSheetConfig();
   },
 
   // Initialize server sync: load config, users, and all attendance from application server
   async initServerSync(): Promise<void> {
     if (typeof window === 'undefined') return;
-    try {
-      // 1. Fetch server config to pick up global Google Apps Script URL set by Teacher
-      const cfgRes = await fetch('/api/config');
-      if (cfgRes.ok) {
-        const json = await cfgRes.json();
-        if (json && json.status === 'success' && json.data) {
-          if (json.data.googleSheet?.scriptUrl) {
-            const current = this.getGoogleSheetConfig();
-            if (!current.scriptUrl || current.scriptUrl !== json.data.googleSheet.scriptUrl) {
-              this.saveGoogleSheetConfig(json.data.googleSheet, false);
+    if (this._initSyncPromise) return this._initSyncPromise;
+
+    this._initSyncPromise = (async () => {
+      try {
+        // 1. Fetch server config to pick up global Google Apps Script URL set by Admin
+        const cfgRes = await fetch(`/api/config?_t=${Date.now()}`);
+        if (cfgRes.ok) {
+          const json = await cfgRes.json();
+          if (json && json.status === 'success' && json.data) {
+            if (json.data.googleSheet?.scriptUrl) {
+              const current = this.getGoogleSheetConfig();
+              if (!current.scriptUrl || current.scriptUrl !== json.data.googleSheet.scriptUrl) {
+                this.saveGoogleSheetConfig(json.data.googleSheet, false);
+              }
+            }
+            if (json.data.appTheme) {
+              localStorage.setItem(THEME_KEY, JSON.stringify(json.data.appTheme));
+            }
+            if (json.data.tahunAjaran) {
+              localStorage.setItem(TAHUN_AJARAN_KEY, JSON.stringify(json.data.tahunAjaran));
+            }
+            if (json.data.reportConfig) {
+              localStorage.setItem(REPORT_CONFIG_KEY, JSON.stringify(json.data.reportConfig));
             }
           }
-          if (json.data.appTheme) {
-            localStorage.setItem(THEME_KEY, JSON.stringify(json.data.appTheme));
-          }
-          if (json.data.tahunAjaran) {
-            localStorage.setItem(TAHUN_AJARAN_KEY, JSON.stringify(json.data.tahunAjaran));
-          }
-          if (json.data.reportConfig) {
-            localStorage.setItem(REPORT_CONFIG_KEY, JSON.stringify(json.data.reportConfig));
-          }
         }
+
+        // 2. Fetch server attendance
+        await this.fetchAttendanceFromServer();
+
+        // 3. Fetch server students
+        await this.fetchStudentsFromServer();
+      } catch (e) {
+        console.warn('Initial server sync warning (running offline fallback):', e);
       }
+    })();
 
-      // 2. Fetch server attendance
-      await this.fetchAttendanceFromServer();
-
-      // 3. Fetch server students
-      await this.fetchStudentsFromServer();
-    } catch (e) {
-      console.warn('Initial server sync warning (running offline fallback):', e);
-    }
+    return this._initSyncPromise;
   },
 
   async fetchAttendanceFromServer(): Promise<AttendanceRecord[]> {
@@ -473,10 +553,27 @@ export const StorageService = {
       if (res.ok) {
         const json = await res.json();
         if (json && json.status === 'success' && Array.isArray(json.data)) {
-          // Server is authoritative: adopt server records directly
+          // Merge remote records with any unsynced local records so nothing on this device is lost
+          const localRecords = this.getAttendance();
           const remoteRecords: AttendanceRecord[] = json.data;
-          this.saveAttendance(remoteRecords);
-          return remoteRecords;
+          const map = new Map<string, AttendanceRecord>();
+          remoteRecords.forEach(r => map.set(r.id || `${r.tanggal}-${r.nis}`, r));
+          localRecords.forEach(lr => {
+            const key = lr.id || `${lr.tanggal}-${lr.nis}`;
+            if (!map.has(key)) {
+              map.set(key, lr);
+            } else {
+              const ex = map.get(key)!;
+              map.set(key, {
+                ...ex,
+                fotoBukti: ex.fotoBukti || lr.fotoBukti,
+                fotoPulang: ex.fotoPulang || lr.fotoPulang,
+              });
+            }
+          });
+          const merged = Array.from(map.values());
+          this.saveAttendance(merged);
+          return merged;
         }
       }
     } catch (err) {
@@ -496,6 +593,7 @@ export const StorageService = {
           const admins = localUsers.filter(u => u.role === 'admin');
           const localStudents = localUsers.filter(u => u.role === 'siswa');
           const remoteStudents: User[] = json.data;
+          const config = this.getGoogleSheetConfig();
 
           // Merge server students with local students so no newly registered local student is lost!
           const studentMap = new Map<string, User>();
@@ -507,7 +605,6 @@ export const StorageService = {
             const key = (s.nis || s.username || s.id).toLowerCase();
             const existingRemote = studentMap.get(key);
             if (existingRemote) {
-              // Merge: preserve local custom password if s has a custom password!
               const effectivePass = (s.password && s.password !== 'siswa123')
                 ? s.password
                 : (existingRemote.password || s.password || 'siswa123');
@@ -518,11 +615,11 @@ export const StorageService = {
               });
             } else {
               studentMap.set(key, s);
-              // Also sync missing student back to server API
+              // Sync missing local student to server API
               fetch('/api/students', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(s),
+                body: JSON.stringify({ ...s, scriptUrl: config.scriptUrl || '' }),
               }).catch(() => {});
             }
           });
@@ -590,31 +687,37 @@ export const StorageService = {
       }
     }
 
-    const config = parsed || {
+    const config: GoogleSheetConfig = parsed || {
       scriptUrl: '',
       sheetName: 'Data_Absensi_PKL',
-      connected: true,
+      connected: false,
       autoSync: true,
     };
-    if (config.connected === undefined) {
-      config.connected = true;
-    }
+    const hasValidUrl = Boolean(config.scriptUrl && config.scriptUrl.trim().startsWith('http'));
+    config.connected = hasValidUrl;
     return config;
   },
 
   saveGoogleSheetConfig(config: GoogleSheetConfig, syncServer: boolean = true) {
-    localStorage.setItem(GOOGLE_SHEET_KEY, JSON.stringify(config));
+    const cleanUrl = (config.scriptUrl || '').trim();
+    const normalized: GoogleSheetConfig = {
+      ...config,
+      scriptUrl: cleanUrl,
+      connected: Boolean(cleanUrl && cleanUrl.startsWith('http')),
+    };
+    localStorage.setItem(GOOGLE_SHEET_KEY, JSON.stringify(normalized));
     if (syncServer && typeof window !== 'undefined') {
       fetch('/api/config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ googleSheet: config }),
+        body: JSON.stringify({ googleSheet: normalized }),
       }).catch(err => console.warn('Sync config to server warning:', err));
     }
   },
 
   isGoogleSheetConnected(): boolean {
-    return true;
+    const cfg = this.getGoogleSheetConfig();
+    return Boolean(cfg.scriptUrl && cfg.scriptUrl.trim().startsWith('http'));
   },
 
   getStudentShareUrl(): string {
@@ -629,17 +732,33 @@ export const StorageService = {
 
   // Pull all attendance from Google Spreadsheet and merge into local database
   async pullAttendanceFromCloud(customUrl?: string): Promise<{ success: boolean; newCount: number; total: number; message: string }> {
+    const config = await this.ensureConfigSynced();
+    const targetUrl = (customUrl || config.scriptUrl || '').trim();
+    if (!targetUrl || !targetUrl.startsWith('http')) {
+      return {
+        success: false,
+        newCount: 0,
+        total: this.getAttendance().length,
+        message: 'URL Google Apps Script belum dikonfigurasi.',
+      };
+    }
+
     // 1. Try server pull first (server forwards directly, bypassing CORS)
     try {
       const serverRes = await fetch('/api/attendance/pull', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: customUrl }),
+        body: JSON.stringify({ url: targetUrl }),
       });
       if (serverRes.ok) {
         const json = await serverRes.json();
         if (json && json.success) {
-          const updatedRecords = await this.fetchAttendanceFromServer();
+          if (Array.isArray(json.data)) {
+            this.saveAttendance(json.data);
+          } else {
+            await this.fetchAttendanceFromServer();
+          }
+          const updatedRecords = this.getAttendance();
           return {
             success: true,
             newCount: json.count,
@@ -651,28 +770,22 @@ export const StorageService = {
     } catch (e) {
       console.warn('Server attendance pull fallback to client:', e);
     }
-    const config = this.getGoogleSheetConfig();
-    const targetUrl = customUrl || config.scriptUrl;
-    if (!targetUrl || !targetUrl.startsWith('http')) {
-      return {
-        success: false,
-        newCount: 0,
-        total: this.getAttendance().length,
-        message: 'URL Google Apps Script belum dikonfigurasi.',
-      };
-    }
 
     try {
       const fetchUrl = targetUrl.includes('?') 
         ? `${targetUrl}&action=GET_ALL&_t=${Date.now()}` 
         : `${targetUrl}?action=GET_ALL&_t=${Date.now()}`;
 
-      const response = await fetch(fetchUrl);
+      const response = await fetch(fetchUrl, { redirect: 'follow' });
+      const rawText = await response.text();
+      if (rawText.includes('accounts.google.com') || rawText.trim().startsWith('<')) {
+        throw new Error('Akses Google Apps Script belum disetel ke Anyone (Siapa saja).');
+      }
       if (!response.ok) {
         throw new Error(`Server merespon dengan status ${response.status}`);
       }
 
-      const data = await response.json();
+      const data = JSON.parse(rawText);
       if (data && data.status === 'success' && Array.isArray(data.data)) {
         const localRecords = this.getAttendance();
         let addedOrUpdated = 0;
@@ -707,7 +820,6 @@ export const StorageService = {
           };
 
           if (existingIdx >= 0) {
-            // Merge with local: retain photo evidence if already stored locally
             localRecords[existingIdx] = {
               ...remoteRecord,
               fotoBukti: localRecords[existingIdx].fotoBukti || remoteRecord.fotoBukti,
@@ -723,7 +835,7 @@ export const StorageService = {
         this.saveAttendance(localRecords);
         config.lastSync = new Date().toISOString();
         config.connected = true;
-        this.saveGoogleSheetConfig(config);
+        this.saveGoogleSheetConfig(config, false);
 
         return {
           success: true,
@@ -747,69 +859,126 @@ export const StorageService = {
 
   // Pull registered students from Google Spreadsheet (Data_Siswa_TKR)
   async pullStudentsFromCloud(customUrl?: string): Promise<{ success: boolean; count: number; message: string }> {
-    const config = this.getGoogleSheetConfig();
-    const targetUrl = customUrl || config.scriptUrl;
+    const config = await this.ensureConfigSynced();
+    const targetUrl = (customUrl || config.scriptUrl || '').trim();
     if (!targetUrl || !targetUrl.startsWith('http')) {
       return { success: false, count: 0, message: 'URL Google Apps Script belum dikonfigurasi.' };
     }
 
+    // 1. Try server proxy pull first (bypasses browser CORS and merges into server database cleanly)
+    try {
+      const serverRes = await fetch('/api/students/pull', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: targetUrl }),
+      });
+      if (serverRes.ok) {
+        const json = await serverRes.json();
+        if (json && json.success && Array.isArray(json.data)) {
+          // Pass syncToCloud = false so pulling does NOT re-push students back to Spreadsheet
+          this.addUsersBulk(json.data, false);
+          config.lastSync = new Date().toISOString();
+          config.connected = true;
+          this.saveGoogleSheetConfig(config, false);
+          return {
+            success: true,
+            count: json.count ?? json.data.length,
+            message: json.message || `Berhasil sinkron ${json.data.length} data siswa dari Google Spreadsheet.`,
+          };
+        }
+      }
+    } catch (e) {
+      console.warn('Server student pull fallback to client:', e);
+    }
+
+    // 2. Direct browser GET fallback
     try {
       const fetchUrl = targetUrl.includes('?') 
         ? `${targetUrl}&action=GET_STUDENTS&_t=${Date.now()}` 
         : `${targetUrl}?action=GET_STUDENTS&_t=${Date.now()}`;
 
-      const response = await fetch(fetchUrl);
-      const data = await response.json();
+      const response = await fetch(fetchUrl, { redirect: 'follow' });
+      const rawText = await response.text();
+      if (rawText.includes('accounts.google.com') || rawText.trim().startsWith('<')) {
+        return {
+          success: false,
+          count: 0,
+          message: 'Akses Google Apps Script belum disetel ke Anyone (Siapa saja).',
+        };
+      }
+      const data = JSON.parse(rawText);
       if (data && data.status === 'success' && Array.isArray(data.data)) {
-        const studentUsers: User[] = data.data.map((st: any) => ({
-          id: `USR-SISWA-${st.nis}`,
-          username: st.username || st.nis,
-          password: 'siswa123',
-          role: 'siswa' as const,
-          nama: st.nama,
-          nis: String(st.nis),
-          kelas: st.kelas || 'XII TKR 1',
-          jenisKelamin: st.jenisKelamin || 'Laki-laki',
-          asalSekolah: st.asalSekolah || 'SMKN 1 Tegalsari',
-          jurusan: st.jurusan || 'Teknik Kendaraan Ringan (TKR)',
-          noHp: st.noHp || '-',
-          tempatPkl: st.tempatPkl || '-',
-          namaPembimbing: st.namaPembimbing || '-',
-          createdAt: st.createdAt || new Date().toISOString().slice(0, 10),
-        }));
+        const defaultTahun = this.getActiveTahunAjaran();
+        const studentUsers: User[] = data.data
+          .filter((st: any) => st && st.nis && st.nama)
+          .map((st: any) => ({
+            id: `USR-SISWA-${String(st.nis).trim()}`,
+            username: String(st.username || st.nis).trim().toLowerCase().replace(/\s+/g, ''),
+            password: st.password ? String(st.password).trim() : 'siswa123',
+            role: 'siswa' as const,
+            nama: String(st.nama).trim(),
+            nis: String(st.nis).trim(),
+            kelas: st.kelas || 'XII TKR 1',
+            jenisKelamin: (st.jenisKelamin === 'Perempuan' ? 'Perempuan' : 'Laki-laki') as 'Laki-laki' | 'Perempuan',
+            asalSekolah: st.asalSekolah || 'SMKN 1 Tegalsari',
+            jurusan: st.jurusan || 'Teknik Kendaraan Ringan (TKR)',
+            noHp: st.noHp || '-',
+            tempatPkl: st.tempatPkl || '-',
+            namaPembimbing: st.namaPembimbing || '-',
+            tahunAjaran: st.tahunAjaran || defaultTahun,
+            createdAt: st.createdAt || new Date().toISOString().slice(0, 10),
+          }));
 
-        const result = this.addUsersBulk(studentUsers);
+        // IMPORTANT: pass false for syncToCloud so pulled students aren't re-pushed!
+        const result = this.addUsersBulk(studentUsers, false);
+        config.lastSync = new Date().toISOString();
+        config.connected = true;
+        this.saveGoogleSheetConfig(config, false);
         return {
           success: true,
           count: result.addedCount + result.updatedCount,
-          message: `Berhasil sinkron ${result.addedCount + result.updatedCount} data siswa dari Google Spreadsheet.`,
+          message: `Berhasil sinkron ${studentUsers.length} data siswa dari Google Spreadsheet.`,
         };
       }
-      return { success: false, count: 0, message: 'Tidak ada data siswa ditemukan.' };
+      return { success: false, count: 0, message: data?.message || 'Tidak ada data siswa ditemukan.' };
     } catch (err: any) {
       return { success: false, count: 0, message: 'Gagal mengambil data siswa: ' + err.message };
     }
   },
 
   // Sync Student Registration to Application Server & Google Spreadsheet (Data_Siswa_TKR sheet)
-  async syncStudentToGoogleSheet(student: User): Promise<{ success: boolean; message: string }> {
-    // 1. Try sending to application server API first
-    if (typeof window !== 'undefined') {
+  async syncStudentToGoogleSheet(
+    student: User,
+    skipServerApi: boolean = false
+  ): Promise<{ success: boolean; serverSynced?: boolean; sheetSynced?: boolean; isUnconfigured?: boolean; message: string }> {
+    const config = await this.ensureConfigSynced();
+    const targetUrl = (config.scriptUrl || '').trim();
+    let serverSynced = false;
+
+    // 1. Try sending to application server API first (passing scriptUrl so stateless Vercel lambdas can forward cleanly)
+    if (!skipServerApi && typeof window !== 'undefined') {
       try {
         const serverRes = await fetch('/api/students', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(student),
+          body: JSON.stringify({ ...student, scriptUrl: targetUrl }),
         });
         if (serverRes.ok) {
           const json = await serverRes.json();
           if (json && json.status === 'success') {
-            return {
-              success: true,
-              message: json.sheetSynced 
-                ? 'Siswa berhasil didaftarkan di Server & Google Spreadsheet!'
-                : 'Siswa berhasil didaftarkan di Server Aplikasi (tersedia di semua perangkat)!',
-            };
+            serverSynced = true;
+            // ONLY return early if the server CONFIRMED it synced to Google Spreadsheet!
+            if (json.sheetSynced === true) {
+              config.lastSync = new Date().toISOString();
+              config.connected = true;
+              this.saveGoogleSheetConfig(config, false);
+              return {
+                success: true,
+                serverSynced: true,
+                sheetSynced: true,
+                message: 'Siswa berhasil didaftarkan di Server & Google Spreadsheet!',
+              };
+            }
           }
         }
       } catch (err) {
@@ -817,11 +986,16 @@ export const StorageService = {
       }
     }
 
-    const config = this.getGoogleSheetConfig();
-    if (!config.scriptUrl || !config.scriptUrl.startsWith('http')) {
+    // 2. If server didn't sync to Spreadsheet (e.g. cold Vercel /tmp without env var, or static deploy), push directly from browser
+    if (!targetUrl || !targetUrl.startsWith('http')) {
       return {
-        success: false,
-        message: 'Tersimpan di database lokal HP. (Google Sheet URL belum dikonfigurasi).',
+        success: serverSynced,
+        serverSynced,
+        sheetSynced: false,
+        isUnconfigured: true,
+        message: serverSynced
+          ? 'Tersimpan di server lokal. URL Google Spreadsheet belum dikonfigurasi pada perangkat ini.'
+          : 'Tersimpan di perangkat. URL Google Spreadsheet belum dikonfigurasi.',
       };
     }
 
@@ -837,32 +1011,58 @@ export const StorageService = {
       noHp: student.noHp || '-',
       tempatPkl: student.tempatPkl || '-',
       namaPembimbing: student.namaPembimbing || '-',
+      tahunAjaran: student.tahunAjaran || this.getActiveTahunAjaran(),
       password: student.password || 'siswa123',
     };
 
     try {
-      const response = await fetch(config.scriptUrl, {
+      const response = await fetch(targetUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'text/plain;charset=utf-8',
         },
         body: JSON.stringify(payload),
+        redirect: 'follow',
       });
 
+      const rawText = await response.text();
+      if (rawText.includes('accounts.google.com') || rawText.trim().startsWith('<')) {
+        return {
+          success: false,
+          serverSynced,
+          sheetSynced: false,
+          message: 'Gagal menyimpan ke Spreadsheet: akses Google Apps Script belum diatur ke "Anyone / Siapa saja".',
+        };
+      }
+
       if (response.ok) {
+        let parsed: any = null;
+        try {
+          parsed = JSON.parse(rawText);
+        } catch {}
+        if (parsed && parsed.status === 'error') {
+          return {
+            success: false,
+            serverSynced,
+            sheetSynced: false,
+            message: parsed.message || 'Gagal menyimpan data siswa di Google Apps Script.',
+          };
+        }
         config.lastSync = new Date().toISOString();
         config.connected = true;
-        this.saveGoogleSheetConfig(config);
+        this.saveGoogleSheetConfig(config, false);
         return {
           success: true,
+          serverSynced,
+          sheetSynced: true,
           message: 'Siswa berhasil disinkronkan ke Google Spreadsheet!',
         };
       }
       throw new Error(`HTTP ${response.status}`);
     } catch (err: any) {
-      // Fallback with mode: 'no-cors' so the browser still transmits the POST body to Google Apps Script
+      // Fallback with mode: 'no-cors' when CORS blocks reading the GAS redirect response
       try {
-        await fetch(config.scriptUrl, {
+        await fetch(targetUrl, {
           method: 'POST',
           mode: 'no-cors',
           headers: {
@@ -872,14 +1072,18 @@ export const StorageService = {
         });
         config.lastSync = new Date().toISOString();
         config.connected = true;
-        this.saveGoogleSheetConfig(config);
+        this.saveGoogleSheetConfig(config, false);
         return {
           success: true,
+          serverSynced,
+          sheetSynced: true,
           message: 'Data siswa terkirim ke Google Spreadsheet via background sync.',
         };
       } catch (fallbackErr: any) {
         return {
           success: false,
+          serverSynced,
+          sheetSynced: false,
           message: 'Tersimpan lokal di HP. Pengiriman ke Spreadsheet tertunda jaringan.',
         };
       }
@@ -888,35 +1092,31 @@ export const StorageService = {
 
   // Sync Attendance Record to Application Server & Google Sheets
   async syncToGoogleSheet(action: 'CHECK_IN' | 'CHECK_OUT', record: AttendanceRecord): Promise<{ success: boolean; isUnconfigured?: boolean; message: string }> {
-    // 1. Send to Application Server API first (persists on server for all devices and forwards to Google Apps Script)
+    const config = await this.ensureConfigSynced();
+    const targetUrl = (config.scriptUrl || '').trim();
+    let serverSynced = false;
+
+    // 1. Send to Application Server API first (passing scriptUrl so stateless Vercel functions can forward cleanly)
     if (typeof window !== 'undefined') {
       try {
         const serverRes = await fetch('/api/attendance', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(record),
+          body: JSON.stringify({ ...record, scriptUrl: targetUrl }),
         });
 
         if (serverRes.ok) {
           const json = await serverRes.json();
           if (json && json.status === 'success') {
-            if (json.sheetSynced) {
-              const cfg = this.getGoogleSheetConfig();
-              cfg.lastSync = new Date().toISOString();
-              cfg.connected = true;
-              this.saveGoogleSheetConfig(cfg, false);
+            serverSynced = true;
+            // ONLY return early if the server ACTUALLY synced to Google Spreadsheet!
+            if (json.sheetSynced === true) {
+              config.lastSync = new Date().toISOString();
+              config.connected = true;
+              this.saveGoogleSheetConfig(config, false);
               return {
                 success: true,
                 message: 'Presensi berhasil dicatat di Server Aplikasi & tersinkronisasi ke Google Spreadsheet!',
-              };
-            } else {
-              const cfg = this.getGoogleSheetConfig();
-              return {
-                success: true,
-                isUnconfigured: !cfg.scriptUrl,
-                message: cfg.scriptUrl 
-                  ? 'Presensi tersimpan di Server Aplikasi (Multi-Perangkat). Meneruskan ke Spreadsheet...'
-                  : 'Presensi berhasil dicatat di Server Aplikasi (Tersedia untuk Guru di semua perangkat)!',
               };
             }
           }
@@ -926,12 +1126,13 @@ export const StorageService = {
       }
     }
 
-    const config = this.getGoogleSheetConfig();
-    if (!config.scriptUrl || !config.scriptUrl.startsWith('http')) {
+    if (!targetUrl || !targetUrl.startsWith('http')) {
       return {
-        success: false,
+        success: serverSynced,
         isUnconfigured: true,
-        message: 'Google Spreadsheet belum terhubung. Presensi hanya tersimpan di perangkat ini.',
+        message: serverSynced
+          ? 'Presensi tersimpan di Server Aplikasi.'
+          : 'Google Spreadsheet belum terhubung. Presensi hanya tersimpan di perangkat ini.',
       };
     }
 
@@ -961,20 +1162,28 @@ export const StorageService = {
       mapsUrlPulang: record.mapsUrlPulang || '-',
     };
 
-    // Try standard POST fetch
     try {
-      const response = await fetch(config.scriptUrl, {
+      const response = await fetch(targetUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'text/plain;charset=utf-8',
         },
         body: JSON.stringify(payload),
+        redirect: 'follow',
       });
+
+      const rawText = await response.text();
+      if (rawText.includes('accounts.google.com') || rawText.trim().startsWith('<')) {
+        return {
+          success: false,
+          message: 'Akses Google Apps Script belum disetel ke Anyone (Siapa saja).',
+        };
+      }
 
       if (response.ok) {
         config.lastSync = new Date().toISOString();
         config.connected = true;
-        this.saveGoogleSheetConfig(config);
+        this.saveGoogleSheetConfig(config, false);
         return {
           success: true,
           message: 'Sinkronisasi ke Google Spreadsheet berhasil!',
@@ -983,9 +1192,8 @@ export const StorageService = {
       throw new Error(`HTTP ${response.status}`);
     } catch (err: any) {
       console.warn('Standard fetch to Google Apps Script failed, trying no-cors fallback:', err);
-      // Fallback to mode: 'no-cors' so browser still pushes the data to Google Apps Script
       try {
-        await fetch(config.scriptUrl, {
+        await fetch(targetUrl, {
           method: 'POST',
           mode: 'no-cors',
           headers: {
@@ -995,7 +1203,7 @@ export const StorageService = {
         });
         config.lastSync = new Date().toISOString();
         config.connected = true;
-        this.saveGoogleSheetConfig(config);
+        this.saveGoogleSheetConfig(config, false);
         return {
           success: true,
           message: 'Presensi berhasil dikirim ke Google Spreadsheet via background dispatch!',
@@ -1011,28 +1219,53 @@ export const StorageService = {
   },
 
   async testGoogleSheetConnection(url: string): Promise<{ success: boolean; message: string }> {
-    if (!url || !url.startsWith('https://script.google.com')) {
+    const cleanUrl = (url || '').trim();
+    if (!cleanUrl || !cleanUrl.startsWith('https://script.google.com')) {
       return { success: false, message: 'URL harus berformat Web App Google Apps Script (https://script.google.com/...)' };
     }
+
+    // 1. Test through server proxy first so CORS doesn't mask Google Sign-In HTML / permission errors
+    if (typeof window !== 'undefined') {
+      try {
+        const srvRes = await fetch('/api/gas/test', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: cleanUrl }),
+        });
+        if (srvRes.ok) {
+          const json = await srvRes.json();
+          if (typeof json?.success === 'boolean') {
+            return json;
+          }
+        }
+      } catch {
+        // Fallback to direct client test
+      }
+    }
+
+    // 2. Direct client test fallback
     try {
-      const testUrl = url.includes('?') ? `${url}&action=TEST&_t=${Date.now()}` : `${url}?action=TEST&_t=${Date.now()}`;
-      const response = await fetch(testUrl);
+      const testUrl = cleanUrl.includes('?') ? `${cleanUrl}&action=TEST&_t=${Date.now()}` : `${cleanUrl}?action=TEST&_t=${Date.now()}`;
+      const response = await fetch(testUrl, { redirect: 'follow' });
+      const text = await response.text();
+      if (text.includes('accounts.google.com') || text.trim().startsWith('<')) {
+        return {
+          success: false,
+          message: 'Google Apps Script meminta login Google! Pastikan saat Deploy Web App pilih Who has access = Anyone (Siapa saja).',
+        };
+      }
       if (response.ok) {
-        return { success: true, message: 'Koneksi ke Google Apps Script Web App berhasil terverifikasi!' };
+        const data = JSON.parse(text);
+        if (data?.status === 'success') {
+          return { success: true, message: data.message || 'Koneksi ke Google Apps Script Web App berhasil terverifikasi!' };
+        }
       }
       return { success: false, message: `Status respon dari script: ${response.status}` };
     } catch (e: any) {
-      // In web apps where GET might be restricted, try POST
-      try {
-        await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify({ action: 'TEST' }),
-        });
-        return { success: true, message: 'URL berhasil dihubungkan. Endpoint siap menerima presensi.' };
-      } catch {
-        return { success: true, message: 'URL berhasil disimpan. Endpoint disetel untuk sinkronisasi.' };
-      }
+      return {
+        success: false,
+        message: 'Tidak dapat memverifikasi endpoint Google Apps Script: ' + (e?.message || 'Periksa URL & izin Anyone'),
+      };
     }
   },
 

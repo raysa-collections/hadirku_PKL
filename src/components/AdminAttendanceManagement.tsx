@@ -105,11 +105,9 @@ export const AdminAttendanceManagement: React.FC = () => {
     setShowEditModal(false);
     reloadData();
 
-    // Sync edited record to Google Spreadsheet
-    if (StorageService.isGoogleSheetConnected()) {
-      const action = toSave.jamPulang && toSave.jamPulang !== '-' ? 'CHECK_OUT' : 'CHECK_IN';
-      StorageService.syncToGoogleSheet(action, toSave).catch(err => console.warn('Edit sync error:', err));
-    }
+    // Sync edited record to Server API & Google Spreadsheet
+    const action = toSave.jamPulang && toSave.jamPulang !== '-' ? 'CHECK_OUT' : 'CHECK_IN';
+    StorageService.syncToGoogleSheet(action, toSave).catch(err => console.warn('Edit sync error:', err));
   };
 
   const filtered = records.filter(r => {

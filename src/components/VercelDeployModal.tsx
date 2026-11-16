@@ -35,6 +35,10 @@ export const VercelDeployModal: React.FC<VercelDeployModalProps> = ({ onClose })
     "outputDirectory": "dist",
     "rewrites": [
       {
+        "source": "/api/(.*)",
+        "destination": "/api/index.ts"
+      },
+      {
         "source": "/(.*)",
         "destination": "/index.html"
       }

@@ -72,15 +72,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigateTab, o
   };
 
   useEffect(() => {
-    // 1. Immediate fetch from server
+    // 1. Immediate fetch from server & Google Spreadsheet
     handleCloudSync(false);
 
-    // 2. Real-time background polling every 8 seconds:
-    // Captures attendance submitted by students from different phones automatically
+    // 2. Real-time background polling every 12 seconds:
+    // Captures student registrations and attendance submitted from different phones via Server & Google Spreadsheet
     const interval = setInterval(() => {
-      StorageService.fetchAttendanceFromServer().then(recs => setAllAttendance(recs));
-      StorageService.fetchStudentsFromServer().then(users => setAllUsers(users.filter(u => u.role === 'siswa')));
-    }, 8000);
+      handleCloudSync(false);
+    }, 12000);
 
     return () => clearInterval(interval);
   }, []);

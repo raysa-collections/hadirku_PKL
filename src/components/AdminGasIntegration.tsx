@@ -37,10 +37,10 @@ import { VercelDeployModal } from './VercelDeployModal';
 export const AdminGasIntegration: React.FC = () => {
   const [showVercelModal, setShowVercelModal] = useState(false);
   const [activeTab, setActiveTab] = useState<'sync' | 'code' | 'index' | 'guide'>('sync');
-  const [config, setConfig] = useState(StorageService.getGoogleSheetConfig());
+  const [config, setConfig] = useState(() => StorageService.getGoogleSheetConfig());
   const [scriptUrl, setScriptUrl] = useState(config.scriptUrl || '');
-  const [records, setRecords] = useState(StorageService.getAttendance());
-  const [allStudents] = useState(StorageService.getUsers().filter(u => u.role === 'siswa'));
+  const [records, setRecords] = useState(() => StorageService.getAttendance());
+  const [allStudents, setAllStudents] = useState(() => StorageService.getUsers().filter(u => u.role === 'siswa'));
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   
   // Copy state
@@ -52,16 +52,33 @@ export const AdminGasIntegration: React.FC = () => {
   const [testingStatus, setTestingStatus] = useState<{ loading: boolean; success?: boolean; message?: string } | null>(null);
   const [syncingAll, setSyncingAll] = useState(false);
 
+  React.useEffect(() => {
+    StorageService.ensureConfigSynced().then((cfg) => {
+      setConfig(cfg);
+      if (!scriptUrl && cfg.scriptUrl) {
+        setScriptUrl(cfg.scriptUrl);
+      }
+      Promise.all([
+        StorageService.fetchAttendanceFromServer(),
+        StorageService.fetchStudentsFromServer(),
+      ]).then(() => {
+        setRecords(StorageService.getAttendance());
+        setAllStudents(StorageService.getUsers().filter(u => u.role === 'siswa'));
+      });
+    });
+  }, []);
+
   const showToast = (msg: string) => {
     setToastMsg(msg);
     setTimeout(() => setToastMsg(null), 3500);
   };
 
   const handleSaveUrl = () => {
+    const cleanUrl = scriptUrl.trim();
     const updated = {
       ...config,
-      scriptUrl: scriptUrl.trim(),
-      connected: !!scriptUrl.trim(),
+      scriptUrl: cleanUrl,
+      connected: Boolean(cleanUrl && cleanUrl.startsWith('http')),
     };
     StorageService.saveGoogleSheetConfig(updated);
     setConfig(updated);
@@ -97,10 +114,11 @@ export const AdminGasIntegration: React.FC = () => {
 
     for (const student of students) {
       const res = await StorageService.syncStudentToGoogleSheet(student);
-      if (res.success) successCount++;
+      if (res.success && res.sheetSynced !== false) successCount++;
     }
 
     setSyncingAll(false);
+    setAllStudents(StorageService.getUsers().filter(u => u.role === 'siswa'));
     confetti({ particleCount: 60, spread: 80 });
     showToast(`Berhasil mensinkronkan ${successCount} dari ${students.length} data siswa PKL ke sheet Data_Siswa_TKR!`);
   };
@@ -134,37 +152,13 @@ export const AdminGasIntegration: React.FC = () => {
     }
     setSyncingAll(true);
     try {
-      const response = await fetch(`${scriptUrl.trim()}?action=GET_ALL`);
-      const data = await response.json();
-      if (data.status === 'success' && Array.isArray(data.data)) {
-        let pullCount = 0;
-        data.data.forEach((item: any) => {
-          if (item.nis && item.tanggal) {
-            StorageService.addOrUpdateAttendance({
-              id: item.id || `ABS-${item.tanggal}-${item.nis}`,
-              tanggal: item.tanggal,
-              nis: item.nis,
-              namaSiswa: item.namaSiswa || 'Siswa PKL',
-              asalSekolah: item.asalSekolah || 'SMKN 1 Tegalsari',
-              jurusan: item.jurusan || 'Teknik Kendaraan Ringan (TKR)',
-              jamDatang: item.jamDatang || '07:00:00',
-              jamPulang: item.jamPulang || '-',
-              status: item.status || 'Hadir',
-              keterangan: item.keterangan || '-',
-              tempatPkl: item.tempatPkl || 'Bengkel Mitra TKR',
-              koordinatGps: item.koordinatGps || '-',
-              mapsUrl: item.mapsUrl || '-',
-              syncStatus: 'synced',
-              syncedAt: new Date().toISOString(),
-            });
-            pullCount++;
-          }
-        });
+      const res = await StorageService.pullAttendanceFromCloud(scriptUrl.trim());
+      if (res.success) {
         setRecords(StorageService.getAttendance());
         confetti({ particleCount: 50, spread: 70 });
-        showToast(`Berhasil menarik ${pullCount} data presensi terkini dari Google Spreadsheet!`);
+        showToast(res.message);
       } else {
-        alert(data.message || 'Gagal mengambil data dari Google Spreadsheet.');
+        alert(res.message || 'Gagal mengambil data dari Google Spreadsheet.');
       }
     } catch (err: any) {
       alert('Gagal terhubung ke Google Spreadsheet: ' + (err?.message || err.toString()));
@@ -180,33 +174,13 @@ export const AdminGasIntegration: React.FC = () => {
     }
     setSyncingAll(true);
     try {
-      const response = await fetch(`${scriptUrl.trim()}?action=GET_STUDENTS`);
-      const data = await response.json();
-      if (data.status === 'success' && Array.isArray(data.data)) {
-        let pullCount = 0;
-        const newStudents = data.data.map((st: any) => ({
-          id: `USR-SISWA-${st.nis}`,
-          username: st.username || st.nis,
-          password: 'siswa123',
-          role: 'siswa' as const,
-          nama: st.nama,
-          nis: st.nis,
-          kelas: st.kelas || 'XII TKR 1',
-          jenisKelamin: st.jenisKelamin || 'Laki-laki',
-          asalSekolah: st.asalSekolah || 'SMKN 1 Tegalsari',
-          jurusan: st.jurusan || 'Teknik Kendaraan Ringan (TKR)',
-          noHp: st.noHp || '-',
-          tempatPkl: st.tempatPkl || 'Bengkel Mitra',
-          namaPembimbing: st.namaPembimbing || 'Achmad Mackrus, S.T.',
-          createdAt: st.createdAt || new Date().toISOString().slice(0, 10),
-        }));
-        
-        const res = StorageService.addUsersBulk(newStudents);
-        pullCount = res.addedCount + res.updatedCount;
+      const res = await StorageService.pullStudentsFromCloud(scriptUrl.trim());
+      if (res.success) {
+        setAllStudents(StorageService.getUsers().filter(u => u.role === 'siswa'));
         confetti({ particleCount: 50, spread: 70 });
-        showToast(`Berhasil menarik ${pullCount} data siswa TKR dari sheet Data_Siswa_TKR!`);
+        showToast(res.message);
       } else {
-        alert(data.message || 'Gagal mengambil data siswa dari Google Spreadsheet.');
+        alert(res.message || 'Gagal mengambil data siswa dari Google Spreadsheet.');
       }
     } catch (err: any) {
       alert('Gagal terhubung ke Google Spreadsheet: ' + (err?.message || err.toString()));
@@ -425,9 +399,18 @@ export const AdminGasIntegration: React.FC = () => {
             {/* OPSI 2: VERCEL ENVIRONMENT VARIABLE */}
             <div className="p-3.5 rounded-xl bg-white border border-slate-200 shadow-sm space-y-2 flex flex-col justify-between">
               <div>
-                <span className="font-bold text-blue-700 block text-xs">Cara 2: Pasang di Vercel Environment Variables (Permanen)</span>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-bold text-blue-700 block text-xs">Cara 2: Pasang di Vercel Environment Variables (Permanen)</span>
+                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
+                    (import.meta as any).env?.VITE_GOOGLE_APPS_SCRIPT_URL
+                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                      : 'bg-amber-50 text-amber-800 border-amber-200'
+                  }`}>
+                    {(import.meta as any).env?.VITE_GOOGLE_APPS_SCRIPT_URL ? 'Env Terpasang' : 'Env Belum Diset'}
+                  </span>
+                </div>
                 <p className="text-[11px] text-slate-600 mt-1 leading-relaxed">
-                  Pasang variabel <code className="text-slate-900 font-mono font-bold bg-slate-100 border border-slate-200 px-1 py-0.5 rounded">VITE_GOOGLE_APPS_SCRIPT_URL</code> di Vercel. SEMUA pengunjung domain vercel.app Anda akan langsung terhubung tanpa parameter apa pun!
+                  Pasang variabel <code className="text-slate-900 font-mono font-bold bg-slate-100 border border-slate-200 px-1 py-0.5 rounded">VITE_GOOGLE_APPS_SCRIPT_URL</code> (dan opsional <code className="text-slate-900 font-mono font-bold bg-slate-100 border border-slate-200 px-1 py-0.5 rounded">GOOGLE_APPS_SCRIPT_URL</code>) di Vercel agar semua HP siswa otomatis tersambung permanen meski Server Vercel sedang cold start.
                 </p>
               </div>
 

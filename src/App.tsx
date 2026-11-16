@@ -40,7 +40,7 @@ export default function App() {
   const [cloudNotice, setCloudNotice] = useState<string | null>(null);
 
   React.useEffect(() => {
-    // If opened with ?gas=, storage.getGoogleSheetConfig already initialized it
+    // Immediately read local/query config
     const config = StorageService.getGoogleSheetConfig();
     setSheetConfig(config);
     if (config.connected && config.scriptUrl) {
@@ -49,6 +49,12 @@ export default function App() {
         setTimeout(() => setCloudNotice(null), 5000);
       }
     }
+
+    // Also wait for server sync so Admin/Student picks up server-configured GAS URL & theme
+    StorageService.initServerSync().then(() => {
+      setSheetConfig(StorageService.getGoogleSheetConfig());
+      setThemeConfig(StorageService.getAppThemeConfig());
+    });
   }, []);
 
   const handleLoginSuccess = (user: User) => {
@@ -450,7 +456,12 @@ export default function App() {
 
       {/* Google Spreadsheet Integration Modal */}
       {showGoogleSheetModal && (
-        <GoogleSheetIntegrationModal onClose={() => setShowGoogleSheetModal(false)} />
+        <GoogleSheetIntegrationModal
+          onClose={() => {
+            setShowGoogleSheetModal(false);
+            setSheetConfig(StorageService.getGoogleSheetConfig());
+          }}
+        />
       )}
 
       {/* Footer */}

@@ -86,9 +86,10 @@ export const LoginModal: React.FC<LoginModalProps> = ({
 
     let user = users.find(matchUserCredentials);
 
-    // If not found locally and cloud is connected, try pull from server/cloud
+    // If not found locally, pull latest students from server & Google Spreadsheet
     if (!user && isSiswa) {
       try {
+        await StorageService.ensureConfigSynced();
         await StorageService.fetchStudentsFromServer();
         if (StorageService.isGoogleSheetConnected()) {
           await StorageService.pullStudentsFromCloud();

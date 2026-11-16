@@ -24,18 +24,20 @@ import {
   Building2,
   Filter,
   UserCheck,
-  RotateCcw
+  RotateCcw,
+  RefreshCw
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 export const AdminStudentManagement: React.FC = () => {
-  const [users, setUsers] = useState<User[]>(StorageService.getUsers().filter(u => u.role === 'siswa'));
+  const [users, setUsers] = useState<User[]>(() => StorageService.getUsers().filter(u => u.role === 'siswa'));
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedMentor, setSelectedMentor] = useState<string>('all');
   const [selectedTahun, setSelectedTahun] = useState<string>('all');
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   const tahunConfig = StorageService.getTahunAjaranConfig();
 
@@ -71,8 +73,42 @@ export const AdminStudentManagement: React.FC = () => {
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 3000);
+    setTimeout(() => setToastMessage(null), 3500);
   };
+
+  const handleSyncStudents = async (notify: boolean = true) => {
+    setIsSyncing(true);
+    try {
+      await StorageService.ensureConfigSynced();
+      const serverUsers = await StorageService.fetchStudentsFromServer();
+      setUsers(serverUsers.filter(u => u.role === 'siswa'));
+
+      if (StorageService.isGoogleSheetConnected()) {
+        const res = await StorageService.pullStudentsFromCloud();
+        reloadUsers();
+        if (notify) {
+          showToast(res.message);
+        }
+      } else if (notify) {
+        const count = StorageService.getUsers().filter(u => u.role === 'siswa').length;
+        showToast(`Data siswa diperbarui dari server. Total: ${count} siswa.`);
+      }
+    } catch (err: any) {
+      if (notify) showToast('Gagal sinkronisasi data siswa: ' + (err?.message || 'Jaringan error'));
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  React.useEffect(() => {
+    handleSyncStudents(false);
+
+    const interval = setInterval(() => {
+      handleSyncStudents(false);
+    }, 15000);
+
+    return () => clearInterval(interval);
+  }, []);
 
   // Download official Excel template for student PKL data
   const handleDownloadTemplate = () => {
@@ -314,7 +350,7 @@ export const AdminStudentManagement: React.FC = () => {
     setShowAddModal(true);
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanUsername = (formData.username.trim() || formData.nis.trim()).toLowerCase().replace(/\s+/g, '');
     const cleanNis = formData.nis.trim();
@@ -342,7 +378,7 @@ export const AdminStudentManagement: React.FC = () => {
         password: formData.password || editingUser.password,
       };
       StorageService.updateUser(updated);
-      showToast(`Data siswa "${updated.nama}" berhasil diperbarui.`);
+      showToast(`Data siswa "${updated.nama}" berhasil diperbarui & disinkronkan.`);
     } else {
       const newUser: User = {
         id: `USR-SISWA-${Date.now()}`,
@@ -361,13 +397,13 @@ export const AdminStudentManagement: React.FC = () => {
         tahunAjaran: formData.tahunAjaran || StorageService.getActiveTahunAjaran(),
         createdAt: new Date().toISOString().slice(0, 10),
       };
-      const added = StorageService.addUser(newUser);
-      if (!added) {
-        alert('NIS atau Username tersebut sudah ada dalam sistem.');
-        return;
-      }
+      const res = await StorageService.registerStudent(newUser);
       confetti({ particleCount: 40, spread: 60 });
-      showToast(`Siswa "${newUser.nama}" berhasil ditambahkan.`);
+      showToast(
+        res.sheetSynced
+          ? `Siswa "${newUser.nama}" berhasil ditambahkan & tersinkron ke Google Spreadsheet!`
+          : `Siswa "${newUser.nama}" berhasil ditambahkan.`
+      );
     }
 
     setShowAddModal(false);
@@ -449,6 +485,17 @@ export const AdminStudentManagement: React.FC = () => {
         </div>
 
         <div className="flex flex-wrap items-center gap-2 self-start lg:self-auto">
+          {/* Sync from Spreadsheet/Server Button */}
+          <button
+            onClick={() => handleSyncStudents(true)}
+            disabled={isSyncing}
+            className="px-3 py-2 bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold rounded-xl text-xs flex items-center gap-1.5 border border-amber-200 transition cursor-pointer shadow-sm disabled:opacity-50"
+            title="Tarik data siswa terbaru yang baru mendaftar dari HP / Google Spreadsheet"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 text-amber-600 ${isSyncing ? 'animate-spin' : ''}`} />
+            <span>{isSyncing ? 'Menyinkronkan...' : 'Tarik Data Siswa'}</span>
+          </button>
+
           {/* Download Template Button */}
           <button
             onClick={handleDownloadTemplate}

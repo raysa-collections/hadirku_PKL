@@ -37,14 +37,21 @@ export const GoogleSheetIntegrationModal: React.FC<GoogleSheetIntegrationModalPr
   };
 
   const handleSaveUrl = () => {
+    const cleanUrl = scriptUrl.trim();
     const updated = {
       ...config,
-      scriptUrl: scriptUrl.trim(),
-      connected: !!scriptUrl.trim(),
+      scriptUrl: cleanUrl,
+      connected: cleanUrl.startsWith('http'),
     };
     StorageService.saveGoogleSheetConfig(updated);
     setConfig(updated);
-    alert('URL Google Apps Script berhasil disimpan!');
+    setTestingStatus({
+      loading: false,
+      success: cleanUrl.startsWith('http'),
+      message: cleanUrl.startsWith('http')
+        ? 'URL Google Apps Script berhasil disimpan & disinkronkan ke server.'
+        : 'URL dikosongkan. Koneksi Google Spreadsheet dinonaktifkan.'
+    });
   };
 
   const handleTestConnection = async () => {

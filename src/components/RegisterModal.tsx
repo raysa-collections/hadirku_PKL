@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { User, PEMBIMBING_TKR_LIST } from '../types/pkl';
 import { StorageService } from '../services/storage';
-import { UserPlus, ArrowLeft, CheckCircle2, AlertCircle } from 'lucide-react';
+import { UserPlus, ArrowLeft, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 interface RegisterModalProps {
@@ -26,9 +26,15 @@ export const RegisterModal: React.FC<RegisterModalProps> = ({ onSuccess, onBackT
   });
 
   const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    StorageService.ensureConfigSynced().catch(() => {});
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
     setError(null);
 
     const cleanUsername = formData.username.trim().toLowerCase().replace(/\s+/g, '');
@@ -57,61 +63,70 @@ export const RegisterModal: React.FC<RegisterModalProps> = ({ onSuccess, onBackT
       return;
     }
 
-    // Fetch fresh user list from server to ensure status is 100% accurate
-    let existingUsers: User[] = [];
+    setIsSubmitting(true);
+
     try {
-      existingUsers = await StorageService.fetchStudentsFromServer();
-    } catch {
-      existingUsers = StorageService.getUsers();
+      await StorageService.ensureConfigSynced();
+
+      // Fetch fresh user list from server & Google Spreadsheet to ensure duplicate checks are accurate
+      let existingUsers: User[] = [];
+      try {
+        existingUsers = await StorageService.fetchStudentsFromServer();
+        if (StorageService.isGoogleSheetConnected()) {
+          await StorageService.pullStudentsFromCloud();
+          existingUsers = StorageService.getUsers();
+        }
+      } catch {
+        existingUsers = StorageService.getUsers();
+      }
+
+      const existingWithSameUsername = existingUsers.find(
+        u => u.username && u.username.toLowerCase() === cleanUsername
+      );
+      const existingWithSameNis = existingUsers.find(
+        u => u.nis && u.nis.toLowerCase() === cleanNis.toLowerCase()
+      );
+
+      if (existingWithSameUsername && existingWithSameUsername.nis !== cleanNis) {
+        setError(`Username "${cleanUsername}" sudah digunakan akun lain. Silakan pilih username lain.`);
+        setIsSubmitting(false);
+        return;
+      }
+
+      if (existingWithSameNis && existingWithSameNis.password && existingWithSameNis.password !== 'siswa123' && existingWithSameNis.username !== cleanUsername) {
+        setError(`NIS "${cleanNis}" sudah terdaftar dengan username "${existingWithSameNis.username}". Silakan masuk menggunakan password Anda.`);
+        setIsSubmitting(false);
+        return;
+      }
+
+      const newUser: User = {
+        id: existingWithSameNis?.id || `USR-SISWA-${Date.now()}`,
+        username: cleanUsername,
+        password: cleanPassword,
+        role: 'siswa',
+        nama: cleanNama,
+        nis: cleanNis,
+        kelas: formData.kelas.trim() || 'XII TKR 1',
+        jenisKelamin: formData.jenisKelamin,
+        asalSekolah: formData.asalSekolah.trim() || 'SMKN 1 Tegalsari',
+        jurusan: formData.jurusan.trim(),
+        noHp: formData.noHp.trim(),
+        tempatPkl: formData.tempatPkl.trim() || 'Instansi PKL Mitra',
+        namaPembimbing: formData.namaPembimbing.trim() || 'Pembimbing Lapangan',
+        tahunAjaran: StorageService.getActiveTahunAjaran(),
+        createdAt: new Date().toISOString().slice(0, 10),
+      };
+
+      // Await single atomic registration + Server & Google Spreadsheet sync BEFORE navigating
+      const regRes = await StorageService.registerStudent(newUser);
+
+      StorageService.setCurrentUser(regRes.user);
+      confetti({ particleCount: 60, spread: 70 });
+      onSuccess(regRes.user);
+    } catch (err: any) {
+      setError('Terjadi kendala saat menyimpan pendaftaran: ' + (err?.message || 'Silakan coba lagi.'));
+      setIsSubmitting(false);
     }
-
-    const existingWithSameUsername = existingUsers.find(
-      u => u.username && u.username.toLowerCase() === cleanUsername
-    );
-    const existingWithSameNis = existingUsers.find(
-      u => u.nis && u.nis.toLowerCase() === cleanNis.toLowerCase()
-    );
-
-    if (existingWithSameUsername && existingWithSameUsername.nis !== cleanNis) {
-      setError(`Username "${cleanUsername}" sudah digunakan akun lain. Silakan pilih username lain.`);
-      return;
-    }
-
-    if (existingWithSameNis && existingWithSameNis.password && existingWithSameNis.password !== 'siswa123' && existingWithSameNis.username !== cleanUsername) {
-      setError(`NIS "${cleanNis}" sudah terdaftar dengan username "${existingWithSameNis.username}". Silakan masuk menggunakan password Anda.`);
-      return;
-    }
-
-    const newUser: User = {
-      id: existingWithSameNis?.id || `USR-SISWA-${Date.now()}`,
-      username: cleanUsername,
-      password: cleanPassword,
-      role: 'siswa',
-      nama: cleanNama,
-      nis: cleanNis,
-      kelas: formData.kelas.trim() || 'XII TKR 1',
-      jenisKelamin: formData.jenisKelamin,
-      asalSekolah: formData.asalSekolah.trim() || 'SMKN 1 Tegalsari',
-      jurusan: formData.jurusan.trim(),
-      noHp: formData.noHp.trim(),
-      tempatPkl: formData.tempatPkl.trim() || 'Instansi PKL Mitra',
-      namaPembimbing: formData.namaPembimbing.trim() || 'Pembimbing Lapangan',
-      tahunAjaran: StorageService.getActiveTahunAjaran(),
-      createdAt: new Date().toISOString().slice(0, 10),
-    };
-
-    const added = StorageService.addUser(newUser);
-    if (!added) {
-      setError('Akun dengan NIS atau Username tersebut sudah ada.');
-      return;
-    }
-
-    // Automatically sync registered student to Google Spreadsheet Data_Siswa_TKR sheet
-    StorageService.syncStudentToGoogleSheet(newUser);
-
-    StorageService.setCurrentUser(newUser);
-    confetti({ particleCount: 60, spread: 70 });
-    onSuccess(newUser);
   };
 
   return (
@@ -309,9 +324,17 @@ export const RegisterModal: React.FC<RegisterModalProps> = ({ onSuccess, onBackT
         <div className="pt-3">
           <button
             type="submit"
-            className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-md shadow-emerald-600/20 transition text-xs cursor-pointer"
+            disabled={isSubmitting}
+            className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white font-bold rounded-xl shadow-md shadow-emerald-600/20 transition text-xs cursor-pointer flex items-center justify-center gap-2"
           >
-            Daftarkan Akun & Masuk Sekarang
+            {isSubmitting ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Mendaftarkan &amp; Menyinkronkan ke Spreadsheet...</span>
+              </>
+            ) : (
+              <span>Daftarkan Akun &amp; Masuk Sekarang</span>
+            )}
           </button>
         </div>
       </form>

@@ -53,12 +53,13 @@ app.get('/api/attendance', (req: Request, res: Response) => {
 // POST attendance record (Check-In or Check-Out) from student phone
 app.post('/api/attendance', async (req: Request, res: Response) => {
   try {
-    const record = req.body;
+    const { scriptUrl: bodyScriptUrl, ...record } = req.body || {};
+    const overrideScriptUrl = bodyScriptUrl || (req.headers['x-gas-url'] as string | undefined);
     if (!record || !record.tanggal || !record.nis) {
       return res.status(400).json({ status: 'error', message: 'Data tanggal dan NIS siswa wajib diisi' });
     }
 
-    const result = await serverStore.saveAttendanceRecord(record);
+    const result = await serverStore.saveAttendanceRecord(record, overrideScriptUrl);
     res.json({
       status: 'success',
       message: result.sheetSynced
@@ -77,12 +78,15 @@ app.post('/api/attendance', async (req: Request, res: Response) => {
 // PUT update attendance record (e.g. teacher manual edit/approval)
 app.put('/api/attendance/:id', async (req: Request, res: Response) => {
   try {
-    const record = { ...req.body, id: req.params.id };
-    const result = await serverStore.saveAttendanceRecord(record);
+    const { scriptUrl: bodyScriptUrl, ...rest } = req.body || {};
+    const overrideScriptUrl = bodyScriptUrl || (req.headers['x-gas-url'] as string | undefined);
+    const record = { ...rest, id: req.params.id };
+    const result = await serverStore.saveAttendanceRecord(record, overrideScriptUrl);
     res.json({
       status: 'success',
       message: 'Presensi berhasil diperbarui di server',
       sheetSynced: result.sheetSynced,
+      sheetError: result.sheetError,
       data: result.record,
     });
   } catch (err: any) {
@@ -104,7 +108,7 @@ app.delete('/api/attendance/:id', (req: Request, res: Response) => {
   }
 });
 
-// Trigger pull from Google Spreadsheet
+// Trigger pull attendance from Google Spreadsheet
 app.post('/api/attendance/pull', async (req: Request, res: Response) => {
   try {
     const { url } = req.body || {};
@@ -126,6 +130,17 @@ app.post('/api/attendance/reset', (req: Request, res: Response) => {
   }
 });
 
+// Test Google Apps Script Web App connection via server (bypasses browser CORS)
+app.post('/api/gas/test', async (req: Request, res: Response) => {
+  try {
+    const { url } = req.body || {};
+    const result = await serverStore.testGASConnection(url);
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message || 'Gagal menguji koneksi GAS' });
+  }
+});
+
 // --- STUDENTS / USERS API ---
 app.get('/api/students', (req: Request, res: Response) => {
   const students = serverStore.getStudents();
@@ -134,15 +149,19 @@ app.get('/api/students', (req: Request, res: Response) => {
 
 app.post('/api/students', async (req: Request, res: Response) => {
   try {
-    const student = req.body;
+    const { scriptUrl: bodyScriptUrl, ...student } = req.body || {};
+    const overrideScriptUrl = bodyScriptUrl || (req.headers['x-gas-url'] as string | undefined);
     if (!student || !student.nis || !student.nama) {
       return res.status(400).json({ status: 'error', message: 'NIS dan nama siswa wajib diisi' });
     }
-    const result = await serverStore.saveUser(student);
+    const result = await serverStore.saveUser(student, overrideScriptUrl);
     res.json({
       status: 'success',
-      message: 'Siswa berhasil didaftarkan di server dan disinkronkan',
+      message: result.sheetSynced
+        ? 'Siswa berhasil didaftarkan di Server & Google Spreadsheet!'
+        : 'Siswa berhasil didaftarkan di server aplikasi',
       sheetSynced: result.sheetSynced,
+      sheetError: result.sheetError,
       data: result.user,
     });
   } catch (err: any) {
@@ -150,9 +169,38 @@ app.post('/api/students', async (req: Request, res: Response) => {
   }
 });
 
-app.delete('/api/students/:id', (req: Request, res: Response) => {
+app.post('/api/students/bulk', async (req: Request, res: Response) => {
   try {
-    const deleted = serverStore.deleteUser(req.params.id);
+    const { students, scriptUrl: bodyScriptUrl } = req.body || {};
+    const overrideScriptUrl = bodyScriptUrl || (req.headers['x-gas-url'] as string | undefined);
+    if (!Array.isArray(students)) {
+      return res.status(400).json({ status: 'error', message: 'Data students harus berupa array' });
+    }
+    const result = await serverStore.saveUsersBulk(students, overrideScriptUrl);
+    res.json({
+      status: 'success',
+      ...result,
+      data: serverStore.getStudents(),
+    });
+  } catch (err: any) {
+    res.status(500).json({ status: 'error', message: err.message });
+  }
+});
+
+app.post('/api/students/pull', async (req: Request, res: Response) => {
+  try {
+    const { url } = req.body || {};
+    const result = await serverStore.pullStudentsFromGAS(url);
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ success: false, count: 0, data: [], message: err.message || 'Gagal sinkron data siswa dari Google Spreadsheet' });
+  }
+});
+
+app.delete('/api/students/:id', async (req: Request, res: Response) => {
+  try {
+    const overrideScriptUrl = (req.query.scriptUrl as string | undefined) || req.body?.scriptUrl || (req.headers['x-gas-url'] as string | undefined);
+    const deleted = await serverStore.deleteUser(req.params.id, overrideScriptUrl);
     if (deleted) {
       res.json({ status: 'success', message: 'Siswa berhasil dihapus dari server' });
     } else {

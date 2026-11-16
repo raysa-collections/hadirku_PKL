@@ -89,7 +89,9 @@ function setupDatabase() {
     "No. WhatsApp / HP",
     "Tempat PKL / Bengkel",
     "Guru Pembimbing Sekolah",
-    "Tanggal Dibuat"
+    "Tanggal Dibuat",
+    "Tahun Ajaran",
+    "Password"
   ];
   
   if (sheetSiswa.getLastRow() === 0) {
@@ -103,13 +105,6 @@ function setupDatabase() {
     sheetSiswa.setRowHeight(1, 35);
     sheetSiswa.setFrozenRows(1);
     try { sheetSiswa.autoResizeColumns(1, headersSiswa.length); } catch(e) {}
-    
-    // Seed Sample Data Siswa TKR
-    sheetSiswa.appendRow([
-      "20240101", "ahmadrizki", "Ahmad Rizki Maulana", "XII TKR 1", "Laki-laki", "SMKN 1 Tegalsari", 
-      "Teknik Kendaraan Ringan Otomotif (TKR)", "085712345678", "PT Astra International Tbk - Auto2000", 
-      "Achmad Mackrus, S.T.", "2026-01-10"
-    ]);
   }
   
   // 3. SETUP SHEET KONFIGURASI SISTEM
@@ -224,40 +219,61 @@ function doPost(e) {
     if (action === "REGISTER_STUDENT" || action === "SYNC_STUDENT") {
       const ss = SpreadsheetApp.getActiveSpreadsheet();
       let sheetSiswa = ss.getSheetByName(SHEET_SISWA);
-      if (!sheetSiswa) {
+      if (!sheetSiswa || sheetSiswa.getLastRow() === 0) {
         setupDatabase();
         sheetSiswa = ss.getSheetByName(SHEET_SISWA);
       }
+      // Pastikan kolom Tahun Ajaran (12) dan Password (13) tersedia pada sheet lama
+      if (sheetSiswa.getLastColumn() < 13) {
+        try {
+          sheetSiswa.getRange(1, 12).setValue("Tahun Ajaran").setBackground("#065f46").setFontColor("#ffffff").setFontWeight("bold");
+          sheetSiswa.getRange(1, 13).setValue("Password").setBackground("#065f46").setFontColor("#ffffff").setFontWeight("bold");
+        } catch(e) {}
+      }
       
       const nisReg = String(data.nis || "").trim();
-      const usernameReg = String(data.username || nisReg).trim();
+      const usernameReg = String(data.username || nisReg).trim().toLowerCase();
       const namaReg = data.nama || data.namaSiswa || "-";
       const kelasReg = data.kelas || "XII TKR 1";
       const genderReg = data.jenisKelamin || "Laki-laki";
       const sekolahReg = data.asalSekolah || "SMKN 1 Tegalsari";
-      const jurusanReg = data.jurusan || "Teknik Kendaraan Ringan Otomotif (TKR)";
+      const jurusanReg = data.jurusan || "Teknik Kendaraan Ringan (TKR)";
       const hpReg = String(data.noHp || "-");
       const pklReg = data.tempatPkl || "-";
       const pembimbingReg = data.namaPembimbing || "-";
       const nowReg = Utilities.formatDate(new Date(), TIMEZONE, "yyyy-MM-dd HH:mm:ss");
+      const tahunReg = String(data.tahunAjaran || "2025/2026").trim();
+      const passReg = String(data.password || "siswa123").trim();
 
       const lastRowSiswa = sheetSiswa.getLastRow();
       let existingSiswaRow = -1;
+      let existingPassword = "";
+      let existingCreatedAt = nowReg;
 
       if (lastRowSiswa > 1) {
-        const nisValues = sheetSiswa.getRange(2, 1, lastRowSiswa - 1, 1).getValues();
-        for (let i = 0; i < nisValues.length; i++) {
-          if (String(nisValues[i][0]).trim().toLowerCase() === nisReg.toLowerCase()) {
+        const readCols = Math.max(13, sheetSiswa.getLastColumn());
+        const siswaValues = sheetSiswa.getRange(2, 1, lastRowSiswa - 1, readCols).getValues();
+        for (let i = 0; i < siswaValues.length; i++) {
+          const rowNis = String(siswaValues[i][0] || "").trim().toLowerCase();
+          const rowUsername = String(siswaValues[i][1] || "").trim().toLowerCase();
+          if ((nisReg && rowNis === nisReg.toLowerCase()) || (usernameReg && rowUsername === usernameReg)) {
             existingSiswaRow = i + 2;
+            existingCreatedAt = String(siswaValues[i][10] || nowReg);
+            existingPassword = String(siswaValues[i][12] || "").trim();
             break;
           }
         }
       }
 
+      const finalPass = (passReg && passReg !== "siswa123")
+        ? passReg
+        : (existingPassword || passReg || "siswa123");
+
       if (existingSiswaRow !== -1) {
         // Update baris siswa yang sudah ada
-        sheetSiswa.getRange(existingSiswaRow, 1, 1, 10).setValues([[
-          nisReg, usernameReg, namaReg, kelasReg, genderReg, sekolahReg, jurusanReg, hpReg, pklReg, pembimbingReg
+        sheetSiswa.getRange(existingSiswaRow, 1).setNumberFormat("@");
+        sheetSiswa.getRange(existingSiswaRow, 1, 1, 13).setValues([[
+          nisReg, usernameReg, namaReg, kelasReg, genderReg, sekolahReg, jurusanReg, hpReg, pklReg, pembimbingReg, existingCreatedAt, tahunReg, finalPass
         ]]);
         return createJsonResponse({
           status: "success",
@@ -267,9 +283,11 @@ function doPost(e) {
         });
       } else {
         // Append baris siswa baru
-        sheetSiswa.appendRow([
-          nisReg, usernameReg, namaReg, kelasReg, genderReg, sekolahReg, jurusanReg, hpReg, pklReg, pembimbingReg, nowReg
-        ]);
+        const targetRow = sheetSiswa.getLastRow() + 1;
+        sheetSiswa.getRange(targetRow, 1).setNumberFormat("@");
+        sheetSiswa.getRange(targetRow, 1, 1, 13).setValues([[
+          nisReg, usernameReg, namaReg, kelasReg, genderReg, sekolahReg, jurusanReg, hpReg, pklReg, pembimbingReg, nowReg, tahunReg, finalPass
+        ]]);
         return createJsonResponse({
           status: "success",
           message: "Registrasi siswa baru berhasil tersimpan ke Google Spreadsheet!",
@@ -277,6 +295,25 @@ function doPost(e) {
           nama: namaReg
         });
       }
+    }
+
+    // --- PROSES HAPUS SISWA ---
+    if (action === "DELETE_STUDENT") {
+      const ss = SpreadsheetApp.getActiveSpreadsheet();
+      const sheetSiswa = ss.getSheetByName(SHEET_SISWA);
+      const nisDel = String(data.nis || "").trim().toLowerCase();
+      const userDel = String(data.username || "").trim().toLowerCase();
+      if (sheetSiswa && sheetSiswa.getLastRow() > 1) {
+        const vals = sheetSiswa.getRange(2, 1, sheetSiswa.getLastRow() - 1, 2).getValues();
+        for (let i = vals.length - 1; i >= 0; i--) {
+          const rowNis = String(vals[i][0] || "").trim().toLowerCase();
+          const rowUser = String(vals[i][1] || "").trim().toLowerCase();
+          if ((nisDel && rowNis === nisDel) || (userDel && rowUser === userDel)) {
+            sheetSiswa.deleteRow(i + 2);
+          }
+        }
+      }
+      return createJsonResponse({ status: "success", message: "Data siswa dihapus dari Spreadsheet." });
     }
     
     // --- PROSES ABSENSI DATANG / PULANG / KOREKSI ---
@@ -464,7 +501,7 @@ function handleGetStudents() {
   if (!sheet || sheet.getLastRow() <= 1) {
     return createJsonResponse({ status: "success", total: 0, data: [] });
   }
-  const colCount = Math.max(11, sheet.getLastColumn());
+  const colCount = Math.max(13, sheet.getLastColumn());
   const rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, colCount).getValues();
   const results = rows.map(r => ({
     nis: String(r[0] || "").trim(),
@@ -477,7 +514,9 @@ function handleGetStudents() {
     noHp: String(r[7] || "-").trim(),
     tempatPkl: String(r[8] || "-").trim(),
     namaPembimbing: String(r[9] || "-").trim(),
-    createdAt: String(r[10] || "").trim()
+    createdAt: String(r[10] || "").trim(),
+    tahunAjaran: String(r[11] || "").trim(),
+    password: String(r[12] || "").trim()
   })).filter(s => s.nis);
   return createJsonResponse({ status: "success", total: results.length, data: results });
 }
