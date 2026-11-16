@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { User, AttendanceRecord, GoogleSheetConfig, AppThemeConfig, ReportPrintConfig, TahunAjaranConfig } from '../types/pkl';
-import { INITIAL_USERS, generateSeedAttendance, DEFAULT_THEME_CONFIG, DEFAULT_REPORT_CONFIG, DEFAULT_TAHUN_AJARAN_CONFIG } from '../services/storage';
+import { INITIAL_USERS, generateSeedAttendance, DEFAULT_THEME_CONFIG, DEFAULT_REPORT_CONFIG, DEFAULT_TAHUN_AJARAN_CONFIG } from '../constants/defaults';
 
 interface ServerDatabase {
   users: User[];
@@ -190,9 +190,27 @@ class ServerStore {
     return '';
   }
 
+  // --- HELPER: FETCH WITH TIMEOUT (PREVENT VERCEL 10s 504 TIMEOUTS) ---
+  private async fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs: number = 7500): Promise<globalThis.Response> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      return await fetch(url, {
+        ...options,
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   // --- ATTENDANCE METHODS ---
-  public getAttendance(): AttendanceRecord[] {
+  public getAttendance(filterNis?: string): AttendanceRecord[] {
     const data = this.load();
+    if (filterNis) {
+      const target = filterNis.trim().toLowerCase();
+      return data.attendance.filter(r => String(r.nis || '').trim().toLowerCase() === target);
+    }
     return data.attendance;
   }
 
@@ -201,8 +219,9 @@ class ServerStore {
     overrideScriptUrl?: string
   ): Promise<{ record: AttendanceRecord; sheetSynced: boolean; sheetError?: string }> {
     const data = this.load();
+    const normNis = String(record.nis || '').trim().toLowerCase();
     const existingIdx = data.attendance.findIndex(
-      r => r.id === record.id || (r.tanggal === record.tanggal && r.nis === record.nis)
+      r => r.id === record.id || (r.tanggal === record.tanggal && String(r.nis || '').trim().toLowerCase() === normNis)
     );
 
     let finalRecord: AttendanceRecord = { ...record };
@@ -239,7 +258,9 @@ class ServerStore {
           sheetError = res.message;
         }
       } catch (err: any) {
-        sheetError = err.message || 'Gagal forward ke Spreadsheet';
+        sheetError = err?.name === 'AbortError'
+          ? 'Google Apps Script sedang sibuk/lambat, dilanjutkan sinkronisasi latar belakang.'
+          : (err.message || 'Gagal forward ke Spreadsheet');
       }
     }
 
@@ -449,19 +470,19 @@ class ServerStore {
 
     try {
       const testUrl = targetUrl.includes('?') ? `${targetUrl}&action=TEST&_t=${Date.now()}` : `${targetUrl}?action=TEST&_t=${Date.now()}`;
-      const res = await fetch(testUrl, { redirect: 'follow' });
+      const res = await this.fetchWithTimeout(testUrl, { redirect: 'follow' }, 7500);
       const parsed = await this.parseGasResponse(res);
       if (parsed.ok) {
         return { success: true, message: parsed.message || 'Koneksi ke Google Apps Script Web App berhasil terverifikasi!' };
       }
 
       // If GET wasn't JSON (e.g., standalone HTML index served on GET without action=TEST handler), try POST TEST
-      const postRes = await fetch(targetUrl, {
+      const postRes = await this.fetchWithTimeout(targetUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body: JSON.stringify({ action: 'TEST' }),
         redirect: 'follow',
-      });
+      }, 7500);
       const postParsed = await this.parseGasResponse(postRes);
       if (postParsed.ok) {
         return { success: true, message: postParsed.message || 'Koneksi ke Google Apps Script Web App berhasil terverifikasi!' };
@@ -494,12 +515,12 @@ class ServerStore {
       mapsUrlPulang: record.mapsUrlPulang || '-',
     };
 
-    const res = await fetch(scriptUrl, {
+    const res = await this.fetchWithTimeout(scriptUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify(payload),
       redirect: 'follow',
-    });
+    }, 7500);
 
     const parsed = await this.parseGasResponse(res);
     return { success: parsed.ok, message: parsed.message };
@@ -522,24 +543,24 @@ class ServerStore {
       password: student.password || 'siswa123',
     };
 
-    const res = await fetch(scriptUrl, {
+    const res = await this.fetchWithTimeout(scriptUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify(payload),
       redirect: 'follow',
-    });
+    }, 7500);
 
     const parsed = await this.parseGasResponse(res);
     return { success: parsed.ok, message: parsed.message };
   }
 
   public async deleteStudentFromGAS(scriptUrl: string, nis: string, username?: string): Promise<{ success: boolean; message: string }> {
-    const res = await fetch(scriptUrl, {
+    const res = await this.fetchWithTimeout(scriptUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify({ action: 'DELETE_STUDENT', nis, username }),
       redirect: 'follow',
-    });
+    }, 7500);
     const parsed = await this.parseGasResponse(res);
     return { success: parsed.ok, message: parsed.message };
   }
@@ -555,7 +576,7 @@ class ServerStore {
       ? `${targetUrl}&action=GET_STUDENTS&_t=${Date.now()}`
       : `${targetUrl}?action=GET_STUDENTS&_t=${Date.now()}`;
 
-    const res = await fetch(fetchUrl, { redirect: 'follow' });
+    const res = await this.fetchWithTimeout(fetchUrl, { redirect: 'follow' }, 8000);
     const parsed = await this.parseGasResponse(res);
     if (!parsed.ok) {
       return { success: false, count: 0, data: this.getStudents(), message: parsed.message };
@@ -630,18 +651,19 @@ class ServerStore {
     return { success: false, count: 0, data: this.getStudents(), message: json?.message || 'Format data siswa GAS tidak dikenali' };
   }
 
-  public async pullAttendanceFromGAS(customUrl?: string): Promise<{ success: boolean; count: number; data?: AttendanceRecord[]; message: string }> {
+  public async pullAttendanceFromGAS(customUrl?: string, filterNis?: string): Promise<{ success: boolean; count: number; data?: AttendanceRecord[]; message: string }> {
     const data = this.load();
     const targetUrl = this.resolveAndCacheScriptUrl(customUrl);
     if (!targetUrl) {
       return { success: false, count: 0, message: 'URL Google Apps Script belum disetel' };
     }
 
+    const nisParam = filterNis ? `&nis=${encodeURIComponent(filterNis.trim())}` : '';
     const fetchUrl = targetUrl.includes('?')
-      ? `${targetUrl}&action=GET_ALL&_t=${Date.now()}`
-      : `${targetUrl}?action=GET_ALL&_t=${Date.now()}`;
+      ? `${targetUrl}&action=GET_ALL${nisParam}&_t=${Date.now()}`
+      : `${targetUrl}?action=GET_ALL${nisParam}&_t=${Date.now()}`;
 
-    const res = await fetch(fetchUrl, { redirect: 'follow' });
+    const res = await this.fetchWithTimeout(fetchUrl, { redirect: 'follow' }, 8000);
     const parsed = await this.parseGasResponse(res);
     if (!parsed.ok) {
       return { success: false, count: 0, message: parsed.message };
@@ -652,15 +674,16 @@ class ServerStore {
       let updated = 0;
       json.data.forEach((item: any) => {
         if (!item.tanggal || !item.nis) return;
-        const id = item.id || `ABS-${String(item.tanggal).replace(/-/g, '')}-${item.nis}`;
+        const itemNis = String(item.nis).trim();
+        const id = item.id || `ABS-${String(item.tanggal).replace(/-/g, '')}-${itemNis}`;
         const existingIdx = data.attendance.findIndex(
-          r => r.id === id || (r.tanggal === item.tanggal && String(r.nis).trim() === String(item.nis).trim())
+          r => r.id === id || (r.tanggal === item.tanggal && String(r.nis).trim().toLowerCase() === itemNis.toLowerCase())
         );
 
         const record: AttendanceRecord = {
           id,
           tanggal: item.tanggal,
-          nis: String(item.nis).trim(),
+          nis: itemNis,
           namaSiswa: item.namaSiswa || 'Siswa PKL',
           kelas: item.kelas || 'XII TKR 1',
           namaPembimbing: item.namaPembimbing || '-',
@@ -695,11 +718,13 @@ class ServerStore {
       data.config.googleSheet.connected = true;
       this.saveToDisk();
 
+      const returnData = filterNis ? this.getAttendance(filterNis) : data.attendance;
+
       return {
         success: true,
         count: updated,
-        data: data.attendance,
-        message: `Berhasil sinkron ${updated} data presensi dari Google Spreadsheet. Total: ${data.attendance.length}.`,
+        data: returnData,
+        message: `Berhasil sinkron ${updated} data presensi dari Google Spreadsheet. Total: ${returnData.length}.`,
       };
     }
 

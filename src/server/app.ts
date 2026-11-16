@@ -44,9 +44,10 @@ app.post('/api/config', (req: Request, res: Response) => {
 });
 
 // --- ATTENDANCE API ---
-// GET all attendance records from server
+// GET all attendance records from server (optionally filtered by ?nis=)
 app.get('/api/attendance', (req: Request, res: Response) => {
-  const records = serverStore.getAttendance();
+  const nis = typeof req.query.nis === 'string' ? req.query.nis : undefined;
+  const records = serverStore.getAttendance(nis);
   res.json({ status: 'success', total: records.length, data: records });
 });
 
@@ -111,8 +112,8 @@ app.delete('/api/attendance/:id', (req: Request, res: Response) => {
 // Trigger pull attendance from Google Spreadsheet
 app.post('/api/attendance/pull', async (req: Request, res: Response) => {
   try {
-    const { url } = req.body || {};
-    const result = await serverStore.pullAttendanceFromGAS(url);
+    const { url, nis } = req.body || {};
+    const result = await serverStore.pullAttendanceFromGAS(url, nis);
     res.json(result);
   } catch (err: any) {
     res.status(500).json({ status: 'error', message: err.message || 'Gagal sinkron dari Google Spreadsheet' });

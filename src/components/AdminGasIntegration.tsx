@@ -136,7 +136,12 @@ export const AdminGasIntegration: React.FC = () => {
     for (const rec of currentRecords) {
       const action = rec.jamPulang && rec.jamPulang !== '-' ? 'CHECK_OUT' : 'CHECK_IN';
       const res = await StorageService.syncToGoogleSheet(action, rec);
-      if (res.success) successCount++;
+      if (res.sheetSynced) {
+        rec.syncStatus = 'synced';
+        rec.syncedAt = new Date().toISOString();
+        StorageService.addOrUpdateAttendance(rec);
+        successCount++;
+      }
     }
 
     setSyncingAll(false);
@@ -377,12 +382,25 @@ export const AdminGasIntegration: React.FC = () => {
               <div>
                 <span className="font-bold text-emerald-700 block text-xs">1. Sinkronisasi Otomatis Server & Link WhatsApp</span>
                 <p className="text-[11px] text-slate-600 mt-1 leading-relaxed">
-                  Saat Anda menyimpan URL di sini, server aplikasi otomatis menyimpannya untuk semua HP. Siswa dapat langsung membuka aplikasi atau melalui link WhatsApp di bawah ini:
+                  Pastikan Anda klik <strong>Simpan URL</strong> dahulu di atas, lalu bagikan link WhatsApp resmi di bawah ini ke siswa agar setiap HP otomatis terhubung ke Spreadsheet:
                 </p>
+                {typeof window !== 'undefined' && window.location.hostname.includes('ais-dev') && (
+                  <p className="text-[10px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-2 mt-1.5 font-medium">
+                    ⚠️ Anda sedang membuka mode Preview (ais-dev). Untuk siswa, salin link dari alamat <strong>Vercel (.vercel.app)</strong> atau Shared App URL.
+                  </p>
+                )}
               </div>
 
               <button
                 onClick={() => {
+                  const cleanUrl = scriptUrl.trim();
+                  if (!cleanUrl || !cleanUrl.startsWith('http')) {
+                    alert('Harap isi & simpan URL Web App Google Apps Script terlebih dahulu di kolom atas.');
+                    return;
+                  }
+                  if (!config.scriptUrl || config.scriptUrl !== cleanUrl) {
+                    StorageService.saveGoogleSheetConfig({ ...config, scriptUrl: cleanUrl, connected: true });
+                  }
                   const shareUrl = StorageService.getStudentShareUrl();
                   const msg = `*PEMBERITAHUAN PRESENSI SISWA PKL SMKN 1 TEGALSARI*\nHalo seluruh siswa PKL, silakan catat absensi harian PKL melalui link resmi berikut:\n${shareUrl}\n\n*Catatan:* Link ini sudah otomatis terhubung ke sistem Google Spreadsheet sekolah. Pastikan izinkan Kamera & Lokasi GPS saat presensi.`;
                   navigator.clipboard.writeText(msg);

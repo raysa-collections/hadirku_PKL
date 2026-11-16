@@ -39,6 +39,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigateTab, o
   const sheetConfig = StorageService.getGoogleSheetConfig();
   const isConnected = StorageService.isGoogleSheetConnected();
   const studentShareUrl = StorageService.getStudentShareUrl();
+  const isDevPreviewHost = typeof window !== 'undefined' && window.location.hostname.includes('ais-dev');
 
   const handleCloudSync = async (notify = true) => {
     setIsSyncing(true);
@@ -85,6 +86,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigateTab, o
   }, []);
 
   const handleCopyWhatsAppText = () => {
+    if (!isConnected) {
+      alert('Harap hubungkan & simpan URL Web App Google Apps Script terlebih dahulu di menu Google Spreadsheet agar link WhatsApp siswa otomatis tersinkron.');
+      onOpenGoogleSheetConfig();
+      return;
+    }
     const text = `*PEMBERITAHUAN PRESENSI PKL SMKN 1 TEGALSARI*\nHalo seluruh siswa PKL, silakan catat absensi harian PKL (Datang 04.00-12.00 WIB & Pulang 15.00-23.59 WIB) melalui link resmi berikut:\n${studentShareUrl}\n\n*Catatan:* Tautan di atas sudah otomatis terhubung ke sistem rekap kehadiran Google Spreadsheet sekolah. Pastikan aktifkan izin Kamera & Lokasi GPS di HP Anda saat presensi.`;
     navigator.clipboard.writeText(text);
     setCopiedLink(true);
@@ -167,28 +173,45 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigateTab, o
       </div>
 
       {/* WHATSAPP SHARE CARD FOR STUDENTS (AUTO-CONNECT MULTI-USER) */}
-      <div className="p-4 sm:p-5 rounded-3xl bg-white border border-emerald-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <span className="w-7 h-7 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-600 flex items-center justify-center font-bold text-xs">
-              <Share2 className="w-4 h-4" />
-            </span>
-            <h3 className="text-xs sm:text-sm font-bold text-slate-900">
-              Tautan Presensi Siswa (Sudah Otomatis Terhubung Google Spreadsheet)
-            </h3>
+      <div className={`p-4 sm:p-5 rounded-3xl bg-white border shadow-sm space-y-3 ${
+        isConnected && !isDevPreviewHost ? 'border-emerald-200' : 'border-amber-300'
+      }`}>
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <span className={`w-7 h-7 rounded-lg border flex items-center justify-center font-bold text-xs ${
+                isConnected ? 'bg-emerald-50 border-emerald-200 text-emerald-600' : 'bg-amber-50 border-amber-200 text-amber-600'
+              }`}>
+                <Share2 className="w-4 h-4" />
+              </span>
+              <h3 className="text-xs sm:text-sm font-bold text-slate-900">
+                Tautan Presensi Siswa ({isConnected ? 'Otomatis Terhubung Google Spreadsheet' : 'Spreadsheet Belum Terpasang'})
+              </h3>
+            </div>
+            <p className="text-[11px] text-slate-600 max-w-2xl leading-relaxed">
+              Kirimkan tautan ini ke grup WhatsApp siswa PKL. Siswa yang membuka tautan ini di HP mereka akan <strong className="text-slate-900">langsung terhubung ke Google Spreadsheet sekolah tanpa perlu pengaturan apa pun</strong>.
+            </p>
           </div>
-          <p className="text-[11px] text-slate-600 max-w-2xl leading-relaxed">
-            Kirimkan tautan ini ke grup WhatsApp siswa PKL. Siswa yang membuka tautan ini di HP mereka akan <strong className="text-slate-900">langsung terhubung ke Google Spreadsheet sekolah tanpa perlu pengaturan apa pun</strong>.
-          </p>
+
+          <button
+            onClick={handleCopyWhatsAppText}
+            className={`px-4 py-2.5 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-2 shadow-sm transition cursor-pointer shrink-0 ${
+              isConnected ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-amber-500 hover:bg-amber-600'
+            }`}
+          >
+            {copiedLink ? <Check className="w-4 h-4 text-emerald-100" /> : <Copy className="w-4 h-4" />}
+            <span>{copiedLink ? 'Tersalin untuk WhatsApp!' : isConnected ? 'Salin Pesan & Link WhatsApp' : 'Hubungkan Spreadsheet Dulu'}</span>
+          </button>
         </div>
 
-        <button
-          onClick={handleCopyWhatsAppText}
-          className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-2 shadow-sm transition cursor-pointer shrink-0"
-        >
-          {copiedLink ? <Check className="w-4 h-4 text-emerald-100" /> : <Copy className="w-4 h-4" />}
-          <span>{copiedLink ? 'Tersalin untuk WhatsApp!' : 'Salin Pesan & Link WhatsApp'}</span>
-        </button>
+        {isDevPreviewHost && (
+          <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-[11px] text-amber-900 flex items-start gap-2">
+            <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+            <span>
+              <strong>Perhatian Host Developer:</strong> Anda sedang membuka URL pratinjau developer (<code className="font-mono font-bold">ais-dev</code>). Jangan bagikan link ini ke siswa karena siswa akan diminta login akun Google Developer Anda. Salin tautan siswa dari alamat publik <strong>Vercel (.vercel.app)</strong> atau <strong>Shared App URL</strong>.
+            </span>
+          </div>
+        )}
       </div>
 
       {/* 5 Main Stat Cards */}

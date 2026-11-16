@@ -46,10 +46,8 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onNavi
   const timeRule: AttendanceTimeRule = evaluateAttendanceTime();
 
   const [isCloudSyncing, setIsCloudSyncing] = useState(false);
-  const [sheetConfig, setSheetConfig] = useState(() => StorageService.getGoogleSheetConfig());
-  const [showConfigModal, setShowConfigModal] = useState(false);
-  const [manualUrlInput, setManualUrlInput] = useState('');
-  const isConnected = StorageService.isGoogleSheetConnected();
+  const [isConnected, setIsConnected] = useState(() => StorageService.isGoogleSheetConnected());
+  const [pendingSyncCount, setPendingSyncCount] = useState(() => StorageService.getPendingSyncCount());
 
   const [feedbackToast, setFeedbackToast] = useState<{
     type: 'success' | 'warning' | 'error';
@@ -57,13 +55,68 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onNavi
     message: string;
   } | null>(null);
 
-  // Load today's attendance record
+  // Load today's attendance record (case-insensitive NIS match)
   const refreshAttendance = () => {
     const allRecords = StorageService.getAttendance();
     const currDate = getJakartaDate();
+    const normNis = String(user.nis || '').trim().toLowerCase();
     setTodayDate(currDate);
-    const existing = allRecords.find(r => r.tanggal === currDate && r.nis === user.nis);
+    const existing = allRecords.find(
+      r => r.tanggal === currDate && String(r.nis || '').trim().toLowerCase() === normNis
+    );
     setTodayRecord(existing || null);
+    setIsConnected(StorageService.isGoogleSheetConnected());
+    setPendingSyncCount(StorageService.getPendingSyncCount());
+  };
+
+  const syncWithCloud = async (showToastOnResult = false) => {
+    setIsCloudSyncing(true);
+    try {
+      await StorageService.ensureConfigSynced();
+      const connectedNow = StorageService.isGoogleSheetConnected();
+      setIsConnected(connectedNow);
+
+      // Flush any offline/pending student or attendance outbox items first
+      const flushRes = await StorageService.flushPendingSyncQueue();
+      await StorageService.fetchAttendanceFromServer(user.nis);
+
+      if (StorageService.isGoogleSheetConnected()) {
+        await StorageService.pullAttendanceFromCloud(undefined, user.nis);
+      }
+
+      refreshAttendance();
+
+      if (showToastOnResult) {
+        const nowConnected = StorageService.isGoogleSheetConnected();
+        const remaining = StorageService.getPendingSyncCount();
+        if (nowConnected && remaining === 0) {
+          setFeedbackToast({
+            type: 'success',
+            title: 'Koneksi Cloud & Spreadsheet Terverifikasi',
+            message: flushRes.flushed > 0
+              ? `${flushRes.flushed} data antrean berhasil dikirim dan seluruh presensi tersinkron ke Spreadsheet.`
+              : 'Sistem absensi terhubung lancar dengan server & spreadsheet utama sekolah.',
+          });
+        } else if (nowConnected && remaining > 0) {
+          setFeedbackToast({
+            type: 'warning',
+            title: 'Sebagian Data Masih Dalam Antrean',
+            message: `${remaining} data presensi/akun masih menunggu jaringan stabil untuk tersinkron ke Spreadsheet.`,
+          });
+        } else {
+          setFeedbackToast({
+            type: 'warning',
+            title: 'Tautan Spreadsheet Belum Aktif di Perangkat Ini',
+            message: 'Presensi tetap tersimpan di HP & antrean kirim. Pastikan Anda membuka link resmi dari grup WhatsApp sekolah agar otomatis terhubung.',
+          });
+        }
+      }
+    } catch (err) {
+      console.warn('Background pull error:', err);
+      refreshAttendance();
+    } finally {
+      setIsCloudSyncing(false);
+    }
   };
 
   useEffect(() => {
@@ -72,47 +125,23 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onNavi
       setDigitalTime(getJakartaTime());
     }, 1000);
 
-    // Fetch from application server so today's status is preserved across devices
-    setIsCloudSyncing(true);
-    StorageService.fetchAttendanceFromServer()
-      .then(() => {
-        refreshAttendance();
-        if (StorageService.isGoogleSheetConnected()) {
-          return StorageService.pullAttendanceFromCloud();
-        }
-      })
-      .then(() => {
-        refreshAttendance();
-      })
-      .catch(err => console.warn('Background pull error:', err))
-      .finally(() => setIsCloudSyncing(false));
+    // Initial scoped sync & outbox flush
+    syncWithCloud(false);
 
-    return () => clearInterval(timer);
-  }, [user.nis]);
+    // Retry pending outbox automatically every 25 seconds when there are queued items
+    const queueRetryTimer = setInterval(() => {
+      if (StorageService.getPendingSyncCount() > 0) {
+        StorageService.flushPendingSyncQueue()
+          .then(() => refreshAttendance())
+          .catch(() => {});
+      }
+    }, 25000);
 
-  const handleManualConnect = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!manualUrlInput.trim().startsWith('http')) {
-      alert('Masukkan URL valid berawalan https://script.google.com/...');
-      return;
-    }
-    const updated = {
-      ...sheetConfig,
-      scriptUrl: manualUrlInput.trim(),
-      connected: true,
-      lastSync: new Date().toISOString(),
+    return () => {
+      clearInterval(timer);
+      clearInterval(queueRetryTimer);
     };
-    StorageService.saveGoogleSheetConfig(updated);
-    setSheetConfig(updated);
-    setShowConfigModal(false);
-    setFeedbackToast({
-      type: 'success',
-      title: 'Google Spreadsheet Terhubung!',
-      message: 'Aplikasi Anda kini terhubung ke Google Spreadsheet sekolah. Presensi Anda akan otomatis masuk ke rekap.',
-    });
-    // Trigger pull
-    StorageService.pullAttendanceFromCloud(manualUrlInput.trim()).then(refreshAttendance);
-  };
+  }, [user.nis]);
 
   const hasCheckedIn = Boolean(todayRecord);
   const hasCheckedOut = Boolean(todayRecord && todayRecord.jamPulang && todayRecord.jamPulang !== '-');
@@ -208,10 +237,12 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onNavi
       StorageService.addOrUpdateAttendance(newRecord);
       setTodayRecord(newRecord);
 
-      // Sync to Google Spreadsheet
+      // Sync to Server & Google Spreadsheet
       const syncRes = await StorageService.syncToGoogleSheet('CHECK_IN', newRecord);
-      if (syncRes.success) {
+      const isSheetSynced = Boolean(syncRes.sheetSynced);
+      if (isSheetSynced) {
         newRecord.syncStatus = 'synced';
+        newRecord.syncedAt = new Date().toISOString();
         StorageService.addOrUpdateAttendance(newRecord);
         setTodayRecord({ ...newRecord });
         confetti({ particleCount: 70, spread: 80 });
@@ -226,10 +257,13 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onNavi
         setTodayRecord({ ...newRecord });
         setFeedbackToast({
           type: 'warning',
-          title: syncRes.isUnconfigured ? 'Tersimpan di HP (Spreadsheet Belum Terhubung)' : 'Tersimpan Lokal di HP',
-          message: syncRes.message || 'Presensi tersimpan di HP Anda, tetapi belum masuk ke rekap Google Spreadsheet sekolah.',
+          title: syncRes.serverSynced
+            ? 'Tersimpan di Server (Menunggu Sync Spreadsheet)'
+            : 'Tersimpan Aman di Antrean Perangkat',
+          message: syncRes.message || 'Presensi tersimpan dan akan otomatis dikirim ke Spreadsheet saat koneksi & tautan sekolah aktif.',
         });
       }
+      refreshAttendance();
 
       setIsSubmitting(false);
     } else if (action === 'CHECK_OUT') {
@@ -270,8 +304,10 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onNavi
       setTodayRecord(updatedRecord);
 
       const syncRes = await StorageService.syncToGoogleSheet('CHECK_OUT', updatedRecord);
-      if (syncRes.success) {
+      const isSheetSynced = Boolean(syncRes.sheetSynced);
+      if (isSheetSynced) {
         updatedRecord.syncStatus = 'synced';
+        updatedRecord.syncedAt = new Date().toISOString();
         StorageService.addOrUpdateAttendance(updatedRecord);
         setTodayRecord({ ...updatedRecord });
         confetti({ particleCount: 80, spread: 90 });
@@ -286,10 +322,13 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onNavi
         setTodayRecord({ ...updatedRecord });
         setFeedbackToast({
           type: 'warning',
-          title: syncRes.isUnconfigured ? 'Tersimpan di HP (Spreadsheet Belum Terhubung)' : 'Tersimpan Lokal di HP',
-          message: syncRes.message || 'Presensi kepulangan tersimpan di HP Anda.',
+          title: syncRes.serverSynced
+            ? 'Tersimpan di Server (Menunggu Sync Spreadsheet)'
+            : 'Tersimpan Aman di Antrean Perangkat',
+          message: syncRes.message || 'Presensi kepulangan tersimpan di antrean perangkat dan akan otomatis terkirim.',
         });
       }
+      refreshAttendance();
 
       setIsSubmitting(false);
     }
@@ -338,44 +377,64 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onNavi
       )}
 
       {/* CLOUD REAL-TIME SPREADSHEET AUTOMATIC CONNECTION CARD */}
-      <div className="p-4 rounded-2xl bg-white border border-emerald-200 text-slate-700 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm relative overflow-hidden">
-        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-500 via-blue-600 to-amber-500" />
+      <div className={`p-4 rounded-2xl bg-white border text-slate-700 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm relative overflow-hidden ${
+        isConnected && pendingSyncCount === 0 ? 'border-emerald-200' : 'border-amber-200'
+      }`}>
+        <div className={`absolute top-0 left-0 right-0 h-1 ${
+          isConnected && pendingSyncCount === 0
+            ? 'bg-gradient-to-r from-emerald-500 via-blue-600 to-amber-500'
+            : 'bg-gradient-to-r from-amber-500 via-red-500 to-blue-600'
+        }`} />
         <div className="flex items-center gap-3 pt-0.5">
-          <div className="w-8 h-8 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-center shrink-0">
-            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+          <div className={`w-8 h-8 rounded-xl border flex items-center justify-center shrink-0 ${
+            isConnected && pendingSyncCount === 0
+              ? 'bg-emerald-50 border-emerald-200'
+              : 'bg-amber-50 border-amber-200'
+          }`}>
+            {isConnected && pendingSyncCount === 0 ? (
+              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+            ) : (
+              <AlertCircle className="w-4 h-4 text-amber-600" />
+            )}
           </div>
           <div>
             <p className="font-bold text-slate-900 flex items-center gap-1.5">
-              <span>Sistem Absensi Terhubung Otomatis ke Cloud & Spreadsheet Sekolah</span>
+              <span>
+                {isConnected && pendingSyncCount === 0
+                  ? 'Sistem Absensi Terhubung Otomatis ke Cloud & Spreadsheet Sekolah'
+                  : isConnected && pendingSyncCount > 0
+                  ? `${pendingSyncCount} Data Menunggu Pengiriman Ulang ke Spreadsheet`
+                  : 'Menghubungkan Otomatis ke Tautan Cloud Sekolah'}
+              </span>
             </p>
             <p className="text-[11px] text-slate-600 mt-0.5">
-              Presensi Anda langsung tersimpan dan terekap otomatis ke server utama & rekapan sekolah tanpa perlu input URL manual.
+              {isConnected && pendingSyncCount === 0
+                ? 'Presensi Anda langsung tersimpan dan terekap otomatis ke server utama & rekapan sekolah tanpa perlu input URL manual.'
+                : isConnected && pendingSyncCount > 0
+                ? 'Presensi aman tersimpan di perangkat ini dan akan otomatis terkirim begitu sinyal internet stabil.'
+                : 'Pastikan Anda membuka link presensi resmi dari grup WhatsApp PKL sekolah agar data otomatis masuk ke Spreadsheet Administrator.'}
             </p>
           </div>
         </div>
         <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
-          <span className="text-[11px] text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200 font-semibold">
-            Terhubung Otomatis
+          <span className={`text-[11px] px-2.5 py-1 rounded-lg border font-semibold ${
+            isConnected && pendingSyncCount === 0
+              ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
+              : 'text-amber-800 bg-amber-50 border-amber-200'
+          }`}>
+            {isConnected && pendingSyncCount === 0
+              ? 'Terhubung Otomatis'
+              : isConnected && pendingSyncCount > 0
+              ? `Antrean: ${pendingSyncCount}`
+              : 'Mode Antrean Lokal'}
           </span>
           <button
-            onClick={() => {
-              setIsCloudSyncing(true);
-              StorageService.pullAttendanceFromCloud()
-                .then(() => {
-                  refreshAttendance();
-                  setFeedbackToast({
-                    type: 'success',
-                    title: 'Koneksi Cloud Terverifikasi',
-                    message: 'Sistem absensi terhubung lancar dengan server & spreadsheet utama sekolah.',
-                  });
-                })
-                .finally(() => setIsCloudSyncing(false));
-            }}
+            onClick={() => syncWithCloud(true)}
             disabled={isCloudSyncing}
             className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-xl text-[11px] font-semibold border border-blue-200 transition flex items-center gap-1.5 cursor-pointer"
           >
             <span className={isCloudSyncing ? 'animate-spin inline-block' : ''}>🔄</span>
-            <span>{isCloudSyncing ? 'Memeriksa...' : 'Cek Status Cloud'}</span>
+            <span>{isCloudSyncing ? 'Menyinkronkan...' : pendingSyncCount > 0 ? 'Kirim & Cek Status' : 'Cek Status Cloud'}</span>
           </button>
         </div>
       </div>
@@ -764,62 +823,6 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onNavi
           onConfirm={handleConfirmVerification}
           onClose={() => setActiveModalAction(null)}
         />
-      )}
-
-      {/* Manual Connection Modal for Student */}
-      {showConfigModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
-          <div className="w-full max-w-md bg-white border border-slate-200 rounded-3xl p-6 shadow-2xl relative text-slate-700 animate-in fade-in zoom-in-95 space-y-4 overflow-hidden">
-            <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-red-600 via-amber-500 via-blue-600 to-emerald-600" />
-            <div className="flex items-center justify-between border-b border-slate-200 pb-3 pt-1">
-              <h4 className="font-bold text-slate-900 text-sm">Hubungkan Google Spreadsheet Sekolah</h4>
-              <button
-                onClick={() => setShowConfigModal(false)}
-                className="text-slate-500 hover:text-slate-900 p-1 rounded-lg hover:bg-slate-100 cursor-pointer"
-              >
-                ✕
-              </button>
-            </div>
-
-            <p className="text-xs text-slate-600 leading-relaxed">
-              Masukkan <strong>URL Web App Google Apps Script</strong> yang diberikan oleh Administrator PKL agar presensi harian langsung terkirim ke Spreadsheet sekolah:
-            </p>
-
-            <form onSubmit={handleManualConnect} className="space-y-3 text-xs">
-              <div>
-                <label className="block text-slate-700 mb-1 font-medium">URL Web App Apps Script:</label>
-                <input
-                  type="url"
-                  required
-                  value={manualUrlInput}
-                  onChange={(e) => setManualUrlInput(e.target.value)}
-                  placeholder="https://script.google.com/macros/s/AKfycb.../exec"
-                  className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-slate-900 font-mono text-xs focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20"
-                />
-              </div>
-
-              <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-[11px] text-amber-900">
-                💡 <strong>Tips:</strong> Anda juga bisa membuka <em>"Tautan Presensi Siswa Otomatis"</em> dari Administrator untuk langsung menghubungkan HP Anda tanpa mengetik URL.
-              </div>
-
-              <div className="flex justify-end gap-2 pt-2 border-t border-slate-200">
-                <button
-                  type="button"
-                  onClick={() => setShowConfigModal(false)}
-                  className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-medium cursor-pointer"
-                >
-                  Batal
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-sm cursor-pointer"
-                >
-                  Simpan & Hubungkan
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
       )}
 
     </div>

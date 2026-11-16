@@ -228,13 +228,23 @@ export const AttendanceVerificationModal: React.FC<AttendanceVerificationModalPr
     ctx.fillText(`${user.nama} (${user.nis}) • ${user.tempatPkl}`, 14, height - 14);
   };
 
-  // Snap photo from live video feed
+  // Snap photo from live video feed (compressed for fast multi-device upload)
   const handleSnapPhoto = () => {
     if (!videoRef.current || !canvasRef.current) return;
     const video = videoRef.current;
     const canvas = canvasRef.current;
-    const width = video.videoWidth || 640;
-    const height = video.videoHeight || 480;
+    let width = video.videoWidth || 640;
+    let height = video.videoHeight || 480;
+    const maxDim = 720;
+    if (width > maxDim || height > maxDim) {
+      if (width > height) {
+        height = Math.round((height * maxDim) / width);
+        width = maxDim;
+      } else {
+        width = Math.round((width * maxDim) / height);
+        height = maxDim;
+      }
+    }
     canvas.width = width;
     canvas.height = height;
 
@@ -244,7 +254,7 @@ export const AttendanceVerificationModal: React.FC<AttendanceVerificationModalPr
     ctx.drawImage(video, 0, 0, width, height);
     drawWatermark(ctx, width, height);
 
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.65);
     setCapturedPhoto(dataUrl);
 
     if (cameraStream) {
@@ -265,10 +275,10 @@ export const AttendanceVerificationModal: React.FC<AttendanceVerificationModalPr
         if (!canvasRef.current) return;
         const canvas = canvasRef.current;
 
-        // Scale photo properly for mobile memory efficiency
+        // Scale photo properly for fast mobile upload & localStorage quota safety
         let width = img.width;
         let height = img.height;
-        const maxDim = 1280;
+        const maxDim = 720;
         if (width > maxDim || height > maxDim) {
           if (width > height) {
             height = Math.round((height * maxDim) / width);
@@ -287,7 +297,7 @@ export const AttendanceVerificationModal: React.FC<AttendanceVerificationModalPr
         ctx.drawImage(img, 0, 0, width, height);
         drawWatermark(ctx, width, height);
 
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.65);
         setCapturedPhoto(dataUrl);
 
         if (cameraStream) {

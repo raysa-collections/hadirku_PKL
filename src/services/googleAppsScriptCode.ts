@@ -144,10 +144,11 @@ function setupDatabase() {
  */
 function doGet(e) {
   const action = (e && e.parameter && e.parameter.action) ? e.parameter.action : "";
+  const filterNis = (e && e.parameter && e.parameter.nis) ? String(e.parameter.nis).trim() : "";
   
   // Jika dipanggil via API JSON untuk sinkronisasi
   if (action === "GET_ALL" || action === "GET_ATTENDANCE") {
-    return handleGetAttendance();
+    return handleGetAttendance(filterNis);
   }
   if (action === "GET_STUDENTS") {
     return handleGetStudents();
@@ -179,8 +180,10 @@ function doGet(e) {
 function doPost(e) {
   const lock = LockService.getScriptLock();
   try {
-    lock.tryLock(15000);
-  } catch(e) {}
+    lock.waitLock(25000);
+  } catch(lockErr) {
+    return createJsonResponse({ status: "error", message: "Server Spreadsheet sedang sibuk, silakan coba sesaat lagi." });
+  }
   
   try {
     let data;
@@ -209,7 +212,7 @@ function doPost(e) {
 
     // Jika permintaan ambil data dikirim via POST
     if (action === "GET_ALL" || action === "GET_ATTENDANCE") {
-      return handleGetAttendance();
+      return handleGetAttendance(data.nis ? String(data.nis).trim() : "");
     }
     if (action === "GET_STUDENTS") {
       return handleGetStudents();
@@ -344,8 +347,8 @@ function doPost(e) {
       const rows = sheet.getRange(2, 1, lastRow - 1, 3).getValues();
       for (let i = 0; i < rows.length; i++) {
         const rowDate = formatSheetDate(rows[i][1]);
-        const rowNis = String(rows[i][2]).trim();
-        if (rowDate === tanggal && rowNis === nis) {
+        const rowNis = String(rows[i][2] || "").trim().toLowerCase();
+        if (rowDate === tanggal && rowNis === nis.toLowerCase()) {
           existingRowIndex = i + 2;
           break;
         }
@@ -364,10 +367,13 @@ function doPost(e) {
       const mergedGpsPulang = (koordinatPulang && koordinatPulang !== "-") ? koordinatPulang : (current[15] || "-");
       const mergedMapPulang = (mapsUrlPulang && mapsUrlPulang !== "-") ? mapsUrlPulang : (current[16] || "-");
 
+      // Kunci format teks pada kolom Tanggal, NIS, Jam Datang & Jam Pulang agar nol depan tidak hilang
+      sheet.getRange(existingRowIndex, 2, 1, 2).setNumberFormat("@");
+      sheet.getRange(existingRowIndex, 10, 1, 2).setNumberFormat("@");
       sheet.getRange(existingRowIndex, 1, 1, 18).setValues([[
         id || current[0],
         tanggal || formatSheetDate(current[1]),
-        nis || current[2],
+        nis || String(current[2] || "").trim(),
         namaSiswa || current[3],
         kelas || current[4],
         namaPembimbing || current[5],
@@ -392,8 +398,11 @@ function doPost(e) {
         rowIndex: existingRowIndex
       });
     } else {
-      // TAMBAH BARIS ABSENSI BARU
-      sheet.appendRow([
+      // TAMBAH BARIS ABSENSI BARU DENGAN FORMAT TEKS AMAN
+      const targetRow = sheet.getLastRow() + 1;
+      sheet.getRange(targetRow, 2, 1, 2).setNumberFormat("@");
+      sheet.getRange(targetRow, 10, 1, 2).setNumberFormat("@");
+      sheet.getRange(targetRow, 1, 1, 18).setValues([[
         id,
         tanggal,
         nis,
@@ -412,7 +421,7 @@ function doPost(e) {
         koordinatPulang,
         mapsUrlPulang,
         nowWib
-      ]);
+      ]]);
 
       return createJsonResponse({
         status: "success",
@@ -460,7 +469,7 @@ function formatSheetTime(val) {
   return String(val).trim();
 }
 
-function handleGetAttendance() {
+function handleGetAttendance(filterNis) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getSheetByName(SHEET_ABSENSI) || setupSheetAbsensi();
   const lastRow = sheet.getLastRow();
@@ -471,10 +480,11 @@ function handleGetAttendance() {
   
   const colCount = Math.max(18, sheet.getLastColumn());
   const rows = sheet.getRange(2, 1, lastRow - 1, colCount).getValues();
+  const targetNis = filterNis ? String(filterNis).trim().toLowerCase() : "";
   const results = rows.map(r => ({
     id: String(r[0] || ""),
     tanggal: formatSheetDate(r[1]),
-    nis: String(r[2] || ""),
+    nis: String(r[2] || "").trim(),
     namaSiswa: String(r[3] || ""),
     kelas: String(r[4] || "XII TKR 1"),
     namaPembimbing: String(r[5] || ""),
@@ -490,7 +500,7 @@ function handleGetAttendance() {
     koordinatPulang: String(r[15] || "-"),
     mapsUrlPulang: String(r[16] || "-"),
     syncedAt: String(r[17] || "")
-  })).filter(item => item.nis && item.tanggal);
+  })).filter(item => item.nis && item.tanggal && (!targetNis || item.nis.toLowerCase() === targetNis));
   
   return createJsonResponse({ status: "success", total: results.length, data: results });
 }

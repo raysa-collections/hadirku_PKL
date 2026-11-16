@@ -27,9 +27,14 @@ export const RegisterModal: React.FC<RegisterModalProps> = ({ onSuccess, onBackT
 
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isCloudReady, setIsCloudReady] = useState(() => StorageService.isGoogleSheetConnected());
 
   useEffect(() => {
-    StorageService.ensureConfigSynced().catch(() => {});
+    StorageService.ensureConfigSynced()
+      .then(() => {
+        setIsCloudReady(StorageService.isGoogleSheetConnected());
+      })
+      .catch(() => {});
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -119,6 +124,11 @@ export const RegisterModal: React.FC<RegisterModalProps> = ({ onSuccess, onBackT
 
       // Await single atomic registration + Server & Google Spreadsheet sync BEFORE navigating
       const regRes = await StorageService.registerStudent(newUser);
+      if (!regRes.isUnconfigured && !regRes.sheetSynced && regRes.message.toLowerCase().includes('anyone')) {
+        setError(regRes.message);
+        setIsSubmitting(false);
+        return;
+      }
 
       StorageService.setCurrentUser(regRes.user);
       confetti({ particleCount: 60, spread: 70 });
@@ -149,6 +159,15 @@ export const RegisterModal: React.FC<RegisterModalProps> = ({ onSuccess, onBackT
           <ArrowLeft className="w-3.5 h-3.5" /> Kembali
         </button>
       </div>
+
+      {!isCloudReady && (
+        <div className="mb-4 p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-[11px] flex items-start gap-2 font-medium">
+          <AlertCircle className="w-4 h-4 shrink-0 text-amber-600 mt-0.5" />
+          <span>
+            Agar data registrasi Anda langsung masuk ke Spreadsheet Administrator sekolah, pastikan Anda membuka tautan resmi dari grup WhatsApp PKL sekolah. Pendaftaran di sini tetap tersimpan aman dalam antrean sinkronisasi.
+          </span>
+        </div>
+      )}
 
       {error && (
         <div className="mb-4 p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs flex items-center gap-2 font-medium">

@@ -1,4 +1,19 @@
 import { User, AttendanceRecord, GoogleSheetConfig, AppThemeConfig, ReportPrintConfig, TahunAjaranConfig } from '../types/pkl';
+import {
+  DEFAULT_TAHUN_AJARAN_CONFIG,
+  DEFAULT_THEME_CONFIG,
+  DEFAULT_REPORT_CONFIG,
+  INITIAL_USERS,
+  generateSeedAttendance,
+} from '../constants/defaults';
+
+export {
+  DEFAULT_TAHUN_AJARAN_CONFIG,
+  DEFAULT_THEME_CONFIG,
+  DEFAULT_REPORT_CONFIG,
+  INITIAL_USERS,
+  generateSeedAttendance,
+};
 
 const USERS_KEY = 'pkl_users_v1';
 const ATTENDANCE_KEY = 'pkl_attendance_v1';
@@ -7,65 +22,42 @@ const GOOGLE_SHEET_KEY = 'pkl_google_sheet_v1';
 const THEME_KEY = 'pkl_theme_config_v1';
 const REPORT_CONFIG_KEY = 'pkl_report_config_v1';
 const TAHUN_AJARAN_KEY = 'pkl_tahun_ajaran_v1';
+const SYNC_QUEUE_KEY = 'pkl_sync_queue_v1';
+const GAS_COOKIE_NAME = 'pkl_gas_url';
 
-export const DEFAULT_TAHUN_AJARAN_CONFIG: TahunAjaranConfig = {
-  tahunAktif: '2025/2026',
-  daftarTahun: ['2024/2025', '2025/2026', '2026/2027', '2027/2028'],
-};
+interface SyncQueueItem {
+  type: 'STUDENT' | 'ATTENDANCE';
+  key: string;
+  action?: 'CHECK_IN' | 'CHECK_OUT';
+  queuedAt: string;
+}
 
-export const DEFAULT_THEME_CONFIG: AppThemeConfig = {
-  appTitle: 'Absensi Siswa PKL',
-  appSubtitle: 'SMK Negeri 1 Tegalsari • Jurusan Teknik Kendaraan Ringan (TKR)',
-  logoPreset: 'school',
-  headerColor: 'cyan',
-  borderStyle: 'subtle',
-};
+function getCookieValue(name: string): string {
+  if (typeof document === 'undefined') return '';
+  try {
+    const match = document.cookie.match(new RegExp('(?:^|; )' + name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '=([^;]*)'));
+    return match ? decodeURIComponent(match[1]) : '';
+  } catch {
+    return '';
+  }
+}
 
-export const DEFAULT_REPORT_CONFIG: ReportPrintConfig = {
-  kopBaris1: 'PEMERINTAH PROVINSI JAWA TIMUR • DINAS PENDIDIKAN',
-  kopBaris2: 'SMK NEGERI 1 TEGALSARI — KELOMPOK TEKNOLOGI & REKAYASA',
-  kopBaris3: 'PROGRAM KEAHLIAN TEKNIK KENDARAAN RINGAN (TKR)',
-  kopAlamat: "Jl. KH. Syafa'at No. 01 Blokagung, Tegalsari, Banyuwangi - Telp. (0333) 845678",
-  logoKiriUrl: '',
-  logoKananUrl: '',
-  showLogoKiri: true,
-  showLogoKanan: true,
-  ttdKiriLabel: 'Mengetahui,\nSekretaris Jurusan TKR',
-  ttdKiriNama: 'Andrik Wiyono, S.T., M.Pd., Gr.',
-  ttdKiriJabatan: 'NIP. 19820415 201101 1 005',
-  ttdKananKota: 'Tegalsari',
-  ttdKananLabel: 'Kepala Program Keahlian TKR',
-  ttdKananNama: 'Achmad Mackrus, S.T.',
-  ttdKananNip: 'NIP. 19790820 200801 1 012',
-  showKop: true,
-  showTtd: true,
-  paperSize: 'A4',
-  paperOrientation: 'landscape',
-  paperMargin: 'normal',
-  tableFontSize: 'normal',
-};
+function setCookieValue(name: string, value: string, maxAgeSeconds: number = 31536000) {
+  if (typeof document === 'undefined') return;
+  try {
+    document.cookie = `${name}=${encodeURIComponent(value)}; max-age=${maxAgeSeconds}; path=/; SameSite=Lax`;
+  } catch {}
+}
 
-// Initial system accounts (Only official administrator account; student accounts register dynamically or via import)
-export const INITIAL_USERS: User[] = [
-  {
-    id: 'USR-ADMIN-1',
-    username: 'admin123',
-    password: 'admin123',
-    role: 'admin',
-    nama: 'Administrator PKL TKR',
-    nis: '197805122005011003',
-    nip: '197805122005011003',
-    jabatan: 'Koordinator BKK & Hubin PKL',
-    jenisKelamin: 'Laki-laki',
-    asalSekolah: 'SMKN 1 Tegalsari',
-    jurusan: 'Koordinator PKL Sekolah',
-    kelas: 'Guru/Koordinator',
-    noHp: '081234567890',
-    tempatPkl: 'Kantor BKK & Hubin Sekolah',
-    namaPembimbing: 'Kepala Sekolah SMKN 1 Tegalsari',
-    createdAt: '2026-01-01',
-  },
-];
+async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs: number = 8500): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 // Helper for formatted dates in Asia/Jakarta
 export function getJakartaDate(): string {
@@ -179,10 +171,7 @@ export function evaluateAttendanceTime(overrideHour?: number, overrideMinute?: n
   };
 }
 
-// Generate initial attendance records (Clean start, attendance records populate as students check in)
-export function generateSeedAttendance(): AttendanceRecord[] {
-  return [];
-}
+
 
 /**
  * Membedakan status presensi datang dan status presensi pulang
@@ -467,12 +456,42 @@ export const StorageService = {
   },
 
   saveAttendance(records: AttendanceRecord[]) {
-    localStorage.setItem(ATTENDANCE_KEY, JSON.stringify(records));
+    try {
+      localStorage.setItem(ATTENDANCE_KEY, JSON.stringify(records));
+    } catch (err) {
+      // QuotaExceededError recovery: strip heavy base64 photos from older already-synced records
+      console.warn('localStorage quota reached in saveAttendance, compacting older photos:', err);
+      const compacted = records.map((r, idx) => {
+        if (idx >= 8 && r.syncStatus === 'synced') {
+          const { fotoBukti, fotoPulang, ...rest } = r;
+          return rest;
+        }
+        return r;
+      });
+      try {
+        localStorage.setItem(ATTENDANCE_KEY, JSON.stringify(compacted));
+      } catch {
+        // Last resort: strip photos on all synced records
+        const stripped = records.map((r) => {
+          if (r.syncStatus === 'synced') {
+            const { fotoBukti, fotoPulang, ...rest } = r;
+            return rest;
+          }
+          return r;
+        });
+        try {
+          localStorage.setItem(ATTENDANCE_KEY, JSON.stringify(stripped));
+        } catch {}
+      }
+    }
   },
 
   addOrUpdateAttendance(record: AttendanceRecord) {
     const records = this.getAttendance();
-    const existingIndex = records.findIndex(r => r.id === record.id || (r.tanggal === record.tanggal && r.nis === record.nis));
+    const normNis = String(record.nis || '').trim().toLowerCase();
+    const existingIndex = records.findIndex(
+      r => r.id === record.id || (r.tanggal === record.tanggal && String(r.nis || '').trim().toLowerCase() === normNis)
+    );
     if (existingIndex >= 0) {
       records[existingIndex] = { ...records[existingIndex], ...record };
     } else {
@@ -480,6 +499,117 @@ export const StorageService = {
     }
     this.saveAttendance(records);
     return record;
+  },
+
+  // --- OUTBOX / PENDING SYNC QUEUE ---
+  getSyncQueue(): SyncQueueItem[] {
+    if (typeof window === 'undefined') return [];
+    try {
+      const raw = localStorage.getItem(SYNC_QUEUE_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+  },
+
+  saveSyncQueue(queue: SyncQueueItem[]) {
+    if (typeof window === 'undefined') return;
+    try {
+      localStorage.setItem(SYNC_QUEUE_KEY, JSON.stringify(queue));
+    } catch {}
+  },
+
+  enqueuePendingSync(item: Omit<SyncQueueItem, 'queuedAt'>) {
+    const queue = this.getSyncQueue();
+    const existsIdx = queue.findIndex(q => q.type === item.type && q.key.toLowerCase() === item.key.toLowerCase());
+    const entry: SyncQueueItem = { ...item, queuedAt: new Date().toISOString() };
+    if (existsIdx >= 0) {
+      queue[existsIdx] = entry;
+    } else {
+      queue.push(entry);
+    }
+    this.saveSyncQueue(queue);
+  },
+
+  dequeuePendingSync(type: 'STUDENT' | 'ATTENDANCE', key: string) {
+    const queue = this.getSyncQueue().filter(
+      q => !(q.type === type && q.key.toLowerCase() === key.toLowerCase())
+    );
+    this.saveSyncQueue(queue);
+  },
+
+  getPendingSyncCount(): number {
+    const qCount = this.getSyncQueue().length;
+    const pendingAtt = this.getAttendance().filter(r => r.syncStatus === 'pending').length;
+    return Math.max(qCount, pendingAtt);
+  },
+
+  _flushPromise: null as Promise<{ flushed: number; remaining: number }> | null,
+
+  async flushPendingSyncQueue(): Promise<{ flushed: number; remaining: number }> {
+    if (typeof window === 'undefined') return { flushed: 0, remaining: 0 };
+    if (this._flushPromise) return this._flushPromise;
+
+    this._flushPromise = (async () => {
+      let flushed = 0;
+      try {
+        await this.ensureConfigSynced();
+        const queue = this.getSyncQueue();
+        const users = this.getUsers();
+        const attendance = this.getAttendance();
+
+        // Also include any attendance record marked syncStatus === 'pending' even if not in queue
+        const attendanceIdsInQueue = new Set(queue.filter(q => q.type === 'ATTENDANCE').map(q => q.key));
+        const extraPending = attendance
+          .filter(r => r.syncStatus === 'pending' && !attendanceIdsInQueue.has(r.id))
+          .map(r => ({
+            type: 'ATTENDANCE' as const,
+            key: r.id,
+            action: (r.jamPulang && r.jamPulang !== '-' ? 'CHECK_OUT' : 'CHECK_IN') as 'CHECK_IN' | 'CHECK_OUT',
+            queuedAt: new Date().toISOString(),
+          }));
+
+        const allItems = [...queue, ...extraPending];
+        for (const item of allItems) {
+          if (item.type === 'STUDENT') {
+            const student = users.find(
+              u => u.role === 'siswa' && (u.nis.toLowerCase() === item.key.toLowerCase() || u.id === item.key)
+            );
+            if (!student) {
+              this.dequeuePendingSync('STUDENT', item.key);
+              continue;
+            }
+            const res = await this.syncStudentToGoogleSheet(student, false, true);
+            if (res.sheetSynced) {
+              this.dequeuePendingSync('STUDENT', item.key);
+              flushed++;
+            }
+          } else if (item.type === 'ATTENDANCE') {
+            const rec = attendance.find(r => r.id === item.key);
+            if (!rec) {
+              this.dequeuePendingSync('ATTENDANCE', item.key);
+              continue;
+            }
+            const action = item.action || (rec.jamPulang && rec.jamPulang !== '-' ? 'CHECK_OUT' : 'CHECK_IN');
+            const res = await this.syncToGoogleSheet(action, rec, true);
+            if (res.sheetSynced) {
+              rec.syncStatus = 'synced';
+              rec.syncedAt = new Date().toISOString();
+              this.addOrUpdateAttendance(rec);
+              this.dequeuePendingSync('ATTENDANCE', item.key);
+              flushed++;
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('flushPendingSyncQueue warning:', err);
+      } finally {
+        this._flushPromise = null;
+      }
+      return { flushed, remaining: this.getPendingSyncCount() };
+    })();
+
+    return this._flushPromise;
   },
 
   // Deduplicated initial server sync promise
@@ -492,7 +622,7 @@ export const StorageService = {
       return current;
     }
     try {
-      const cfgRes = await fetch(`/api/config?_t=${Date.now()}`);
+      const cfgRes = await fetchWithTimeout(`/api/config?_t=${Date.now()}`, {}, 5000);
       if (cfgRes.ok) {
         const json = await cfgRes.json();
         if (json && json.status === 'success' && json.data?.googleSheet?.scriptUrl) {
@@ -510,16 +640,20 @@ export const StorageService = {
 
     this._initSyncPromise = (async () => {
       try {
+        const localConfig = this.getGoogleSheetConfig();
+
         // 1. Fetch server config to pick up global Google Apps Script URL set by Admin
-        const cfgRes = await fetch(`/api/config?_t=${Date.now()}`);
+        const cfgRes = await fetchWithTimeout(`/api/config?_t=${Date.now()}`, {}, 5000);
         if (cfgRes.ok) {
           const json = await cfgRes.json();
           if (json && json.status === 'success' && json.data) {
             if (json.data.googleSheet?.scriptUrl) {
-              const current = this.getGoogleSheetConfig();
-              if (!current.scriptUrl || current.scriptUrl !== json.data.googleSheet.scriptUrl) {
+              if (!localConfig.scriptUrl || localConfig.scriptUrl !== json.data.googleSheet.scriptUrl) {
                 this.saveGoogleSheetConfig(json.data.googleSheet, false);
               }
+            } else if (localConfig.scriptUrl && localConfig.scriptUrl.startsWith('http')) {
+              // Warm a cold server instance with our valid scriptUrl
+              this.saveGoogleSheetConfig(localConfig, true);
             }
             if (json.data.appTheme) {
               localStorage.setItem(THEME_KEY, JSON.stringify(json.data.appTheme));
@@ -528,15 +662,18 @@ export const StorageService = {
               localStorage.setItem(TAHUN_AJARAN_KEY, JSON.stringify(json.data.tahunAjaran));
             }
             if (json.data.reportConfig) {
-              localStorage.setItem(REPORT_CONFIG_KEY, JSON.stringify(json.data.reportConfig));
+              this.saveReportPrintConfig(json.data.reportConfig, false);
             }
           }
         }
 
-        // 2. Fetch server attendance
-        await this.fetchAttendanceFromServer();
+        // 2. Flush any pending student/attendance records from prior offline session
+        await this.flushPendingSyncQueue();
 
-        // 3. Fetch server students
+        // 3. Fetch server attendance & students (scoped to current user if student is logged in)
+        const curUser = this.getCurrentUser();
+        const scopeNis = curUser && curUser.role === 'siswa' ? curUser.nis : undefined;
+        await this.fetchAttendanceFromServer(scopeNis);
         await this.fetchStudentsFromServer();
       } catch (e) {
         console.warn('Initial server sync warning (running offline fallback):', e);
@@ -546,10 +683,11 @@ export const StorageService = {
     return this._initSyncPromise;
   },
 
-  async fetchAttendanceFromServer(): Promise<AttendanceRecord[]> {
+  async fetchAttendanceFromServer(filterNis?: string): Promise<AttendanceRecord[]> {
     if (typeof window === 'undefined') return this.getAttendance();
     try {
-      const res = await fetch(`/api/attendance?_t=${Date.now()}`);
+      const nisQuery = filterNis ? `&nis=${encodeURIComponent(filterNis.trim())}` : '';
+      const res = await fetchWithTimeout(`/api/attendance?_t=${Date.now()}${nisQuery}`, {}, 6500);
       if (res.ok) {
         const json = await res.json();
         if (json && json.status === 'success' && Array.isArray(json.data)) {
@@ -557,35 +695,63 @@ export const StorageService = {
           const localRecords = this.getAttendance();
           const remoteRecords: AttendanceRecord[] = json.data;
           const map = new Map<string, AttendanceRecord>();
-          remoteRecords.forEach(r => map.set(r.id || `${r.tanggal}-${r.nis}`, r));
+          const remoteKeys = new Set<string>();
+
+          remoteRecords.forEach(r => {
+            const key = `${r.tanggal}::${String(r.nis || '').trim().toLowerCase()}`;
+            remoteKeys.add(key);
+            map.set(key, r);
+          });
+
           localRecords.forEach(lr => {
-            const key = lr.id || `${lr.tanggal}-${lr.nis}`;
-            if (!map.has(key)) {
+            const key = `${lr.tanggal}::${String(lr.nis || '').trim().toLowerCase()}`;
+            const ex = map.get(key);
+            if (!ex) {
               map.set(key, lr);
+              if (lr.syncStatus === 'pending') {
+                this.enqueuePendingSync({
+                  type: 'ATTENDANCE',
+                  key: lr.id,
+                  action: lr.jamPulang && lr.jamPulang !== '-' ? 'CHECK_OUT' : 'CHECK_IN',
+                });
+              }
             } else {
-              const ex = map.get(key)!;
+              // Preserve local newer Jam Pulang if remote doesn't have it yet
+              const localHasPulang = lr.jamPulang && lr.jamPulang !== '-';
+              const remoteHasPulang = ex.jamPulang && ex.jamPulang !== '-';
               map.set(key, {
                 ...ex,
+                jamPulang: remoteHasPulang ? ex.jamPulang : (lr.jamPulang || '-'),
+                statusPulang: remoteHasPulang ? ex.statusPulang : (lr.statusPulang || ex.statusPulang),
+                koordinatPulang: ex.koordinatPulang && ex.koordinatPulang !== '-' ? ex.koordinatPulang : lr.koordinatPulang,
+                mapsUrlPulang: ex.mapsUrlPulang && ex.mapsUrlPulang !== '-' ? ex.mapsUrlPulang : lr.mapsUrlPulang,
                 fotoBukti: ex.fotoBukti || lr.fotoBukti,
                 fotoPulang: ex.fotoPulang || lr.fotoPulang,
+                syncStatus: localHasPulang && !remoteHasPulang ? 'pending' : ex.syncStatus,
               });
             }
           });
+
           const merged = Array.from(map.values());
           this.saveAttendance(merged);
-          return merged;
+          return filterNis
+            ? merged.filter(r => String(r.nis || '').trim().toLowerCase() === filterNis.trim().toLowerCase())
+            : merged;
         }
       }
     } catch (err) {
       console.warn('fetchAttendanceFromServer failed, using local cache:', err);
     }
-    return this.getAttendance();
+    const local = this.getAttendance();
+    return filterNis
+      ? local.filter(r => String(r.nis || '').trim().toLowerCase() === filterNis.trim().toLowerCase())
+      : local;
   },
 
   async fetchStudentsFromServer(): Promise<User[]> {
     if (typeof window === 'undefined') return this.getUsers();
     try {
-      const res = await fetch(`/api/students?_t=${Date.now()}`);
+      const res = await fetchWithTimeout(`/api/students?_t=${Date.now()}`, {}, 6500);
       if (res.ok) {
         const json = await res.json();
         if (json && json.status === 'success' && Array.isArray(json.data)) {
@@ -598,11 +764,11 @@ export const StorageService = {
           // Merge server students with local students so no newly registered local student is lost!
           const studentMap = new Map<string, User>();
           remoteStudents.forEach(s => {
-            const key = (s.nis || s.username || s.id).toLowerCase();
+            const key = (s.nis || s.username || s.id).trim().toLowerCase();
             studentMap.set(key, s);
           });
           localStudents.forEach(s => {
-            const key = (s.nis || s.username || s.id).toLowerCase();
+            const key = (s.nis || s.username || s.id).trim().toLowerCase();
             const existingRemote = studentMap.get(key);
             if (existingRemote) {
               const effectivePass = (s.password && s.password !== 'siswa123')
@@ -637,24 +803,30 @@ export const StorageService = {
   },
 
   getGoogleSheetConfig(): GoogleSheetConfig {
-    // 1. Check if URL has query parameter for automatic configuration (?gas=... or ?scriptUrl=...)
+    // 1. Check URL query parameter or hash fragment (?gas=... / ?scriptUrl=... / #gas=...)
     if (typeof window !== 'undefined' && window.location) {
       try {
         const urlParams = new URLSearchParams(window.location.search);
-        const queryGas = urlParams.get('gas') || urlParams.get('scriptUrl') || urlParams.get('sheetUrl');
-        if (queryGas && queryGas.startsWith('http')) {
+        const hashStr = window.location.hash || '';
+        const hashParams = new URLSearchParams(hashStr.startsWith('#') ? hashStr.slice(1) : hashStr);
+        const queryGas =
+          urlParams.get('gas') ||
+          urlParams.get('scriptUrl') ||
+          urlParams.get('sheetUrl') ||
+          hashParams.get('gas') ||
+          hashParams.get('scriptUrl');
+
+        if (queryGas && queryGas.trim().startsWith('http')) {
+          const cleanGas = queryGas.trim();
           const autoConfig: GoogleSheetConfig = {
-            scriptUrl: queryGas.trim(),
+            scriptUrl: cleanGas,
             sheetName: 'Data_Absensi_PKL',
             connected: true,
             autoSync: true,
             lastSync: new Date().toISOString(),
           };
           this.saveGoogleSheetConfig(autoConfig, true);
-          
-          // Clean the query parameter from URL bar without page refresh
-          const cleanUrl = window.location.pathname + window.location.hash;
-          window.history.replaceState({}, document.title, cleanUrl);
+          // Do NOT strip ?gas= from URL bar so PWA install, bookmarks, and "Open in Chrome" keep the auto-connect link!
           return autoConfig;
         }
       } catch (e) {
@@ -672,7 +844,22 @@ export const StorageService = {
       }
     }
 
-    // 2. Check if environment variable VITE_GOOGLE_APPS_SCRIPT_URL or VITE_SCRIPT_URL is provided
+    // 2. Fallback to Cookie (helps survive isolated WebView / tab resets)
+    if (!parsed || !parsed.scriptUrl) {
+      const cookieUrl = getCookieValue(GAS_COOKIE_NAME);
+      if (cookieUrl && cookieUrl.startsWith('http')) {
+        const cookieConfig: GoogleSheetConfig = {
+          scriptUrl: cookieUrl.trim(),
+          sheetName: 'Data_Absensi_PKL',
+          connected: true,
+          autoSync: true,
+        };
+        this.saveGoogleSheetConfig(cookieConfig, false);
+        return cookieConfig;
+      }
+    }
+
+    // 3. Fallback to build-time environment variable VITE_GOOGLE_APPS_SCRIPT_URL or VITE_SCRIPT_URL
     const envUrl = (import.meta as any).env?.VITE_GOOGLE_APPS_SCRIPT_URL || (import.meta as any).env?.VITE_SCRIPT_URL;
     if (!parsed || !parsed.scriptUrl) {
       if (envUrl && typeof envUrl === 'string' && envUrl.startsWith('http')) {
@@ -705,7 +892,14 @@ export const StorageService = {
       scriptUrl: cleanUrl,
       connected: Boolean(cleanUrl && cleanUrl.startsWith('http')),
     };
-    localStorage.setItem(GOOGLE_SHEET_KEY, JSON.stringify(normalized));
+    try {
+      localStorage.setItem(GOOGLE_SHEET_KEY, JSON.stringify(normalized));
+    } catch {}
+    if (normalized.connected) {
+      setCookieValue(GAS_COOKIE_NAME, cleanUrl);
+    } else {
+      setCookieValue(GAS_COOKIE_NAME, '', 0);
+    }
     if (syncServer && typeof window !== 'undefined') {
       fetch('/api/config', {
         method: 'POST',
@@ -730,8 +924,11 @@ export const StorageService = {
     return origin;
   },
 
-  // Pull all attendance from Google Spreadsheet and merge into local database
-  async pullAttendanceFromCloud(customUrl?: string): Promise<{ success: boolean; newCount: number; total: number; message: string }> {
+  // Pull attendance from Google Spreadsheet and merge into local database (preserves pending & photos)
+  async pullAttendanceFromCloud(
+    customUrl?: string,
+    filterNis?: string
+  ): Promise<{ success: boolean; newCount: number; total: number; message: string }> {
     const config = await this.ensureConfigSynced();
     const targetUrl = (customUrl || config.scriptUrl || '').trim();
     if (!targetUrl || !targetUrl.startsWith('http')) {
@@ -743,27 +940,80 @@ export const StorageService = {
       };
     }
 
+    const mergeRemoteRecords = (remoteList: AttendanceRecord[]): number => {
+      const localRecords = this.getAttendance();
+      const map = new Map<string, AttendanceRecord>();
+      let changedCount = 0;
+
+      localRecords.forEach(lr => {
+        const key = `${lr.tanggal}::${String(lr.nis || '').trim().toLowerCase()}`;
+        map.set(key, lr);
+      });
+
+      remoteList.forEach(rem => {
+        if (!rem || !rem.tanggal || !rem.nis) return;
+        const normNis = String(rem.nis).trim().toLowerCase();
+        const key = `${rem.tanggal}::${normNis}`;
+        const existing = map.get(key);
+
+        if (!existing) {
+          map.set(key, { ...rem, syncStatus: 'synced' });
+          changedCount++;
+        } else {
+          const localHasPulang = Boolean(existing.jamPulang && existing.jamPulang !== '-');
+          const remoteHasPulang = Boolean(rem.jamPulang && rem.jamPulang !== '-');
+          const isLocalPending = existing.syncStatus === 'pending' && localHasPulang && !remoteHasPulang;
+
+          map.set(key, {
+            ...rem,
+            jamDatang: (rem.jamDatang && rem.jamDatang !== '-') ? rem.jamDatang : (existing.jamDatang || '-'),
+            jamPulang: remoteHasPulang ? rem.jamPulang : (existing.jamPulang || '-'),
+            statusDatang: rem.statusDatang || existing.statusDatang || rem.status,
+            statusPulang: remoteHasPulang
+              ? (rem.statusPulang || 'Sudah Pulang')
+              : (existing.statusPulang || 'Belum Pulang'),
+            koordinatGps: (rem.koordinatGps && rem.koordinatGps !== '-') ? rem.koordinatGps : (existing.koordinatGps || '-'),
+            mapsUrl: (rem.mapsUrl && rem.mapsUrl !== '-') ? rem.mapsUrl : (existing.mapsUrl || '-'),
+            koordinatPulang: (rem.koordinatPulang && rem.koordinatPulang !== '-') ? rem.koordinatPulang : (existing.koordinatPulang || '-'),
+            mapsUrlPulang: (rem.mapsUrlPulang && rem.mapsUrlPulang !== '-') ? rem.mapsUrlPulang : (existing.mapsUrlPulang || '-'),
+            fotoBukti: existing.fotoBukti || rem.fotoBukti,
+            fotoPulang: existing.fotoPulang || rem.fotoPulang,
+            syncStatus: isLocalPending ? 'pending' : 'synced',
+          });
+          changedCount++;
+        }
+      });
+
+      const merged = Array.from(map.values());
+      this.saveAttendance(merged);
+      return changedCount;
+    };
+
     // 1. Try server pull first (server forwards directly, bypassing CORS)
     try {
-      const serverRes = await fetch('/api/attendance/pull', {
+      const serverRes = await fetchWithTimeout('/api/attendance/pull', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: targetUrl }),
-      });
+        body: JSON.stringify({ url: targetUrl, nis: filterNis ? filterNis.trim() : undefined }),
+      }, 9000);
       if (serverRes.ok) {
         const json = await serverRes.json();
         if (json && json.success) {
+          let changed = json.count || 0;
           if (Array.isArray(json.data)) {
-            this.saveAttendance(json.data);
+            changed = mergeRemoteRecords(json.data);
           } else {
-            await this.fetchAttendanceFromServer();
+            await this.fetchAttendanceFromServer(filterNis);
           }
+          config.lastSync = new Date().toISOString();
+          config.connected = true;
+          this.saveGoogleSheetConfig(config, false);
           const updatedRecords = this.getAttendance();
           return {
             success: true,
-            newCount: json.count,
+            newCount: changed,
             total: updatedRecords.length,
-            message: json.message,
+            message: json.message || `Berhasil sinkron ${changed} presensi dari Google Spreadsheet.`,
           };
         }
       }
@@ -771,12 +1021,14 @@ export const StorageService = {
       console.warn('Server attendance pull fallback to client:', e);
     }
 
+    // 2. Direct browser GET fallback
     try {
-      const fetchUrl = targetUrl.includes('?') 
-        ? `${targetUrl}&action=GET_ALL&_t=${Date.now()}` 
-        : `${targetUrl}?action=GET_ALL&_t=${Date.now()}`;
+      const nisParam = filterNis ? `&nis=${encodeURIComponent(filterNis.trim())}` : '';
+      const fetchUrl = targetUrl.includes('?')
+        ? `${targetUrl}&action=GET_ALL${nisParam}&_t=${Date.now()}`
+        : `${targetUrl}?action=GET_ALL${nisParam}&_t=${Date.now()}`;
 
-      const response = await fetch(fetchUrl, { redirect: 'follow' });
+      const response = await fetchWithTimeout(fetchUrl, { redirect: 'follow' }, 9000);
       const rawText = await response.text();
       if (rawText.includes('accounts.google.com') || rawText.trim().startsWith('<')) {
         throw new Error('Akses Google Apps Script belum disetel ke Anyone (Siapa saja).');
@@ -787,52 +1039,39 @@ export const StorageService = {
 
       const data = JSON.parse(rawText);
       if (data && data.status === 'success' && Array.isArray(data.data)) {
-        const localRecords = this.getAttendance();
-        let addedOrUpdated = 0;
-
-        data.data.forEach((item: any) => {
-          if (!item.tanggal || !item.nis) return;
-          const recordId = item.id || `ABS-${item.tanggal.replace(/-/g, '')}-${item.nis}`;
-          const existingIdx = localRecords.findIndex(
-            r => r.id === recordId || (r.tanggal === item.tanggal && String(r.nis).trim() === String(item.nis).trim())
-          );
-
-          const remoteRecord: AttendanceRecord = {
-            id: recordId,
-            tanggal: item.tanggal,
-            nis: String(item.nis).trim(),
-            namaSiswa: item.namaSiswa || 'Siswa PKL',
-            kelas: item.kelas || 'XII TKR 1',
-            namaPembimbing: item.namaPembimbing || '-',
-            asalSekolah: item.asalSekolah || 'SMKN 1 Tegalsari',
-            jurusan: item.jurusan || 'Teknik Kendaraan Ringan (TKR)',
-            jamDatang: item.jamDatang || '-',
-            jamPulang: item.jamPulang || '-',
-            status: item.status || 'Hadir',
-            keterangan: item.keterangan || '-',
-            tempatPkl: item.tempatPkl || '-',
-            koordinatGps: item.koordinatGps || '-',
-            mapsUrl: item.mapsUrl || (item.koordinatGps && item.koordinatGps !== '-' ? `https://www.google.com/maps?q=${encodeURIComponent(item.koordinatGps)}` : '-'),
-            koordinatPulang: item.koordinatPulang || '-',
-            mapsUrlPulang: item.mapsUrlPulang || (item.koordinatPulang && item.koordinatPulang !== '-' ? `https://www.google.com/maps?q=${encodeURIComponent(item.koordinatPulang)}` : '-'),
-            syncStatus: 'synced',
-            syncedAt: item.syncedAt || new Date().toISOString(),
-          };
-
-          if (existingIdx >= 0) {
-            localRecords[existingIdx] = {
-              ...remoteRecord,
-              fotoBukti: localRecords[existingIdx].fotoBukti || remoteRecord.fotoBukti,
-              fotoPulang: localRecords[existingIdx].fotoPulang || remoteRecord.fotoPulang,
+        const mapped: AttendanceRecord[] = data.data
+          .filter((item: any) => item && item.tanggal && item.nis)
+          .map((item: any) => {
+            const cleanNis = String(item.nis).trim();
+            const recordId = item.id || `ABS-${String(item.tanggal).replace(/-/g, '')}-${cleanNis}`;
+            const hasOut = Boolean(item.jamPulang && item.jamPulang !== '-');
+            return {
+              id: recordId,
+              tanggal: item.tanggal,
+              nis: cleanNis,
+              namaSiswa: item.namaSiswa || 'Siswa PKL',
+              kelas: item.kelas || 'XII TKR 1',
+              namaPembimbing: item.namaPembimbing || '-',
+              asalSekolah: item.asalSekolah || 'SMKN 1 Tegalsari',
+              jurusan: item.jurusan || 'Teknik Kendaraan Ringan (TKR)',
+              jamDatang: item.jamDatang || '-',
+              jamPulang: item.jamPulang || '-',
+              status: item.status || 'Hadir',
+              statusDatang: item.statusDatang || item.status || 'Hadir',
+              statusPulang: item.statusPulang || (hasOut ? 'Sudah Pulang' : 'Belum Pulang'),
+              keterangan: item.keterangan || '-',
+              tempatPkl: item.tempatPkl || '-',
+              koordinatGps: item.koordinatGps || '-',
+              mapsUrl: item.mapsUrl || (item.koordinatGps && item.koordinatGps !== '-' ? `https://www.google.com/maps?q=${encodeURIComponent(item.koordinatGps)}` : '-'),
+              koordinatPulang: item.koordinatPulang || '-',
+              mapsUrlPulang: item.mapsUrlPulang || (item.koordinatPulang && item.koordinatPulang !== '-' ? `https://www.google.com/maps?q=${encodeURIComponent(item.koordinatPulang)}` : '-'),
+              syncStatus: 'synced' as const,
+              syncedAt: item.syncedAt || new Date().toISOString(),
             };
-            addedOrUpdated++;
-          } else {
-            localRecords.unshift(remoteRecord);
-            addedOrUpdated++;
-          }
-        });
+          });
 
-        this.saveAttendance(localRecords);
+        const addedOrUpdated = mergeRemoteRecords(mapped);
+        const total = this.getAttendance().length;
         config.lastSync = new Date().toISOString();
         config.connected = true;
         this.saveGoogleSheetConfig(config, false);
@@ -840,8 +1079,8 @@ export const StorageService = {
         return {
           success: true,
           newCount: addedOrUpdated,
-          total: localRecords.length,
-          message: `Berhasil menarik ${addedOrUpdated} catatan presensi dari Google Spreadsheet. Total: ${localRecords.length} presensi.`,
+          total,
+          message: `Berhasil menarik ${addedOrUpdated} catatan presensi dari Google Spreadsheet. Total: ${total} presensi.`,
         };
       } else {
         throw new Error(data.message || 'Format data Google Spreadsheet tidak sesuai.');
@@ -949,26 +1188,28 @@ export const StorageService = {
   // Sync Student Registration to Application Server & Google Spreadsheet (Data_Siswa_TKR sheet)
   async syncStudentToGoogleSheet(
     student: User,
-    skipServerApi: boolean = false
+    skipServerApi: boolean = false,
+    _isRetry: boolean = false
   ): Promise<{ success: boolean; serverSynced?: boolean; sheetSynced?: boolean; isUnconfigured?: boolean; message: string }> {
     const config = await this.ensureConfigSynced();
     const targetUrl = (config.scriptUrl || '').trim();
+    const queueKey = student.nis || student.id;
     let serverSynced = false;
 
     // 1. Try sending to application server API first (passing scriptUrl so stateless Vercel lambdas can forward cleanly)
     if (!skipServerApi && typeof window !== 'undefined') {
       try {
-        const serverRes = await fetch('/api/students', {
+        const serverRes = await fetchWithTimeout('/api/students', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ ...student, scriptUrl: targetUrl }),
-        });
+        }, 8500);
         if (serverRes.ok) {
           const json = await serverRes.json();
           if (json && json.status === 'success') {
             serverSynced = true;
-            // ONLY return early if the server CONFIRMED it synced to Google Spreadsheet!
             if (json.sheetSynced === true) {
+              this.dequeuePendingSync('STUDENT', queueKey);
               config.lastSync = new Date().toISOString();
               config.connected = true;
               this.saveGoogleSheetConfig(config, false);
@@ -986,16 +1227,17 @@ export const StorageService = {
       }
     }
 
-    // 2. If server didn't sync to Spreadsheet (e.g. cold Vercel /tmp without env var, or static deploy), push directly from browser
+    // 2. If server didn't sync to Spreadsheet, push directly from browser
     if (!targetUrl || !targetUrl.startsWith('http')) {
+      this.enqueuePendingSync({ type: 'STUDENT', key: queueKey });
       return {
         success: serverSynced,
         serverSynced,
         sheetSynced: false,
         isUnconfigured: true,
         message: serverSynced
-          ? 'Tersimpan di server lokal. URL Google Spreadsheet belum dikonfigurasi pada perangkat ini.'
-          : 'Tersimpan di perangkat. URL Google Spreadsheet belum dikonfigurasi.',
+          ? 'Tersimpan di server aplikasi & masuk antrean sinkronisasi Spreadsheet.'
+          : 'Tersimpan di HP & masuk antrean sinkronisasi saat koneksi/tautan sekolah aktif.',
       };
     }
 
@@ -1016,17 +1258,18 @@ export const StorageService = {
     };
 
     try {
-      const response = await fetch(targetUrl, {
+      const response = await fetchWithTimeout(targetUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'text/plain;charset=utf-8',
         },
         body: JSON.stringify(payload),
         redirect: 'follow',
-      });
+      }, 9000);
 
       const rawText = await response.text();
       if (rawText.includes('accounts.google.com') || rawText.trim().startsWith('<')) {
+        this.enqueuePendingSync({ type: 'STUDENT', key: queueKey });
         return {
           success: false,
           serverSynced,
@@ -1041,6 +1284,7 @@ export const StorageService = {
           parsed = JSON.parse(rawText);
         } catch {}
         if (parsed && parsed.status === 'error') {
+          this.enqueuePendingSync({ type: 'STUDENT', key: queueKey });
           return {
             success: false,
             serverSynced,
@@ -1048,6 +1292,7 @@ export const StorageService = {
             message: parsed.message || 'Gagal menyimpan data siswa di Google Apps Script.',
           };
         }
+        this.dequeuePendingSync('STUDENT', queueKey);
         config.lastSync = new Date().toISOString();
         config.connected = true;
         this.saveGoogleSheetConfig(config, false);
@@ -1062,14 +1307,15 @@ export const StorageService = {
     } catch (err: any) {
       // Fallback with mode: 'no-cors' when CORS blocks reading the GAS redirect response
       try {
-        await fetch(targetUrl, {
+        await fetchWithTimeout(targetUrl, {
           method: 'POST',
           mode: 'no-cors',
           headers: {
             'Content-Type': 'text/plain;charset=utf-8',
           },
           body: JSON.stringify(payload),
-        });
+        }, 8500);
+        this.dequeuePendingSync('STUDENT', queueKey);
         config.lastSync = new Date().toISOString();
         config.connected = true;
         this.saveGoogleSheetConfig(config, false);
@@ -1079,19 +1325,24 @@ export const StorageService = {
           sheetSynced: true,
           message: 'Data siswa terkirim ke Google Spreadsheet via background sync.',
         };
-      } catch (fallbackErr: any) {
+      } catch {
+        this.enqueuePendingSync({ type: 'STUDENT', key: queueKey });
         return {
           success: false,
           serverSynced,
           sheetSynced: false,
-          message: 'Tersimpan lokal di HP. Pengiriman ke Spreadsheet tertunda jaringan.',
+          message: 'Tersimpan lokal di HP & masuk antrean sinkronisasi otomatis.',
         };
       }
     }
   },
 
   // Sync Attendance Record to Application Server & Google Sheets
-  async syncToGoogleSheet(action: 'CHECK_IN' | 'CHECK_OUT', record: AttendanceRecord): Promise<{ success: boolean; isUnconfigured?: boolean; message: string }> {
+  async syncToGoogleSheet(
+    action: 'CHECK_IN' | 'CHECK_OUT',
+    record: AttendanceRecord,
+    _isRetry: boolean = false
+  ): Promise<{ success: boolean; serverSynced?: boolean; sheetSynced?: boolean; isUnconfigured?: boolean; message: string }> {
     const config = await this.ensureConfigSynced();
     const targetUrl = (config.scriptUrl || '').trim();
     let serverSynced = false;
@@ -1099,23 +1350,25 @@ export const StorageService = {
     // 1. Send to Application Server API first (passing scriptUrl so stateless Vercel functions can forward cleanly)
     if (typeof window !== 'undefined') {
       try {
-        const serverRes = await fetch('/api/attendance', {
+        const serverRes = await fetchWithTimeout('/api/attendance', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ ...record, scriptUrl: targetUrl }),
-        });
+        }, 8500);
 
         if (serverRes.ok) {
           const json = await serverRes.json();
           if (json && json.status === 'success') {
             serverSynced = true;
-            // ONLY return early if the server ACTUALLY synced to Google Spreadsheet!
             if (json.sheetSynced === true) {
+              this.dequeuePendingSync('ATTENDANCE', record.id);
               config.lastSync = new Date().toISOString();
               config.connected = true;
               this.saveGoogleSheetConfig(config, false);
               return {
                 success: true,
+                serverSynced: true,
+                sheetSynced: true,
                 message: 'Presensi berhasil dicatat di Server Aplikasi & tersinkronisasi ke Google Spreadsheet!',
               };
             }
@@ -1127,20 +1380,26 @@ export const StorageService = {
     }
 
     if (!targetUrl || !targetUrl.startsWith('http')) {
+      this.enqueuePendingSync({ type: 'ATTENDANCE', key: record.id, action });
       return {
         success: serverSynced,
+        serverSynced,
+        sheetSynced: false,
         isUnconfigured: true,
         message: serverSynced
-          ? 'Presensi tersimpan di Server Aplikasi.'
-          : 'Google Spreadsheet belum terhubung. Presensi hanya tersimpan di perangkat ini.',
+          ? 'Presensi tersimpan di Server Aplikasi & menunggu tautan Spreadsheet sekolah.'
+          : 'Tersimpan di HP & masuk antrean kirim otomatis saat perangkat terhubung.',
       };
     }
 
-    const studentObj = this.getUsers().find(u => u.nis === record.nis);
-    const namaPembimbing = record.namaPembimbing || studentObj?.namaPembimbing || 'Achmad Mackrus, S.T.';
+    const studentObj = this.getUsers().find(
+      u => u.nis && record.nis && u.nis.trim().toLowerCase() === record.nis.trim().toLowerCase()
+    );
+    const namaPembimbing = record.namaPembimbing || studentObj?.namaPembimbing || '-';
     const tempatPkl = record.tempatPkl || studentObj?.tempatPkl || 'Bengkel Mitra TKR';
     const kelas = record.kelas || studentObj?.kelas || 'XII TKR 1';
 
+    // Strip base64 photos for GAS payload (GAS only records metadata & GPS Maps links)
     const payload = {
       action,
       id: record.id,
@@ -1155,6 +1414,8 @@ export const StorageService = {
       jamDatang: record.jamDatang || '-',
       jamPulang: record.jamPulang || '-',
       status: record.status || 'Hadir',
+      statusDatang: record.statusDatang || record.status || 'Hadir',
+      statusPulang: record.statusPulang || (record.jamPulang && record.jamPulang !== '-' ? 'Sudah Pulang' : 'Belum Pulang'),
       keterangan: record.keterangan || '-',
       koordinatGps: record.koordinatGps || '-',
       mapsUrl: record.mapsUrl || '-',
@@ -1163,29 +1424,48 @@ export const StorageService = {
     };
 
     try {
-      const response = await fetch(targetUrl, {
+      const response = await fetchWithTimeout(targetUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'text/plain;charset=utf-8',
         },
         body: JSON.stringify(payload),
         redirect: 'follow',
-      });
+      }, 9000);
 
       const rawText = await response.text();
       if (rawText.includes('accounts.google.com') || rawText.trim().startsWith('<')) {
+        this.enqueuePendingSync({ type: 'ATTENDANCE', key: record.id, action });
         return {
           success: false,
+          serverSynced,
+          sheetSynced: false,
           message: 'Akses Google Apps Script belum disetel ke Anyone (Siapa saja).',
         };
       }
 
       if (response.ok) {
+        let parsed: any = null;
+        try {
+          parsed = JSON.parse(rawText);
+        } catch {}
+        if (parsed && parsed.status === 'error') {
+          this.enqueuePendingSync({ type: 'ATTENDANCE', key: record.id, action });
+          return {
+            success: false,
+            serverSynced,
+            sheetSynced: false,
+            message: parsed.message || 'Gagal mencatat presensi di Google Apps Script.',
+          };
+        }
+        this.dequeuePendingSync('ATTENDANCE', record.id);
         config.lastSync = new Date().toISOString();
         config.connected = true;
         this.saveGoogleSheetConfig(config, false);
         return {
           success: true,
+          serverSynced,
+          sheetSynced: true,
           message: 'Sinkronisasi ke Google Spreadsheet berhasil!',
         };
       }
@@ -1193,26 +1473,32 @@ export const StorageService = {
     } catch (err: any) {
       console.warn('Standard fetch to Google Apps Script failed, trying no-cors fallback:', err);
       try {
-        await fetch(targetUrl, {
+        await fetchWithTimeout(targetUrl, {
           method: 'POST',
           mode: 'no-cors',
           headers: {
             'Content-Type': 'text/plain;charset=utf-8',
           },
           body: JSON.stringify(payload),
-        });
+        }, 8500);
+        this.dequeuePendingSync('ATTENDANCE', record.id);
         config.lastSync = new Date().toISOString();
         config.connected = true;
         this.saveGoogleSheetConfig(config, false);
         return {
           success: true,
+          serverSynced,
+          sheetSynced: true,
           message: 'Presensi berhasil dikirim ke Google Spreadsheet via background dispatch!',
         };
       } catch (fallbackErr: any) {
         console.warn('No-cors fallback failed:', fallbackErr);
+        this.enqueuePendingSync({ type: 'ATTENDANCE', key: record.id, action });
         return {
           success: false,
-          message: 'Tersimpan lokal di HP. Pengiriman ke Spreadsheet tertunda jaringan.',
+          serverSynced,
+          sheetSynced: false,
+          message: 'Tersimpan lokal di HP & masuk antrean kirim otomatis saat sinyal membaik.',
         };
       }
     }
@@ -1491,9 +1777,13 @@ export const StorageService = {
   },
 };
 
-// Auto-sync with application server upon app initialization
+// Auto-sync with application server upon app initialization and when device regains network
 if (typeof window !== 'undefined') {
   setTimeout(() => {
     StorageService.initServerSync().catch(err => console.warn('Auto server sync init warning:', err));
   }, 50);
+
+  window.addEventListener('online', () => {
+    StorageService.flushPendingSyncQueue().catch(err => console.warn('Online outbox flush warning:', err));
+  });
 }
