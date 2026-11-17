@@ -75,13 +75,19 @@ export const AdminAttendanceManagement: React.FC = () => {
 
   // Auto-sync on mount and poll server + Google Spreadsheet every 12s for live attendance from student phones
   React.useEffect(() => {
+    const onSyncUpdate = () => reloadData();
+    window.addEventListener('pkl-sync-updated', onSyncUpdate);
+
     handleCloudPull(true);
 
     const interval = setInterval(() => {
       handleCloudPull(true);
     }, 12000);
 
-    return () => clearInterval(interval);
+    return () => {
+      window.removeEventListener('pkl-sync-updated', onSyncUpdate);
+      clearInterval(interval);
+    };
   }, []);
 
   const handleEditClick = (record: AttendanceRecord) => {

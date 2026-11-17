@@ -49,6 +49,47 @@ function setCookieValue(name: string, value: string, maxAgeSeconds: number = 315
   } catch {}
 }
 
+const GAS_CACHE_NAME = 'pkl-cloud-config-v1';
+const GAS_CACHE_KEY = '/__pkl_gas_config.json';
+
+async function saveGasUrlToCache(scriptUrl: string): Promise<void> {
+  if (typeof window === 'undefined' || !('caches' in window)) return;
+  try {
+    const cache = await caches.open(GAS_CACHE_NAME);
+    if (scriptUrl && scriptUrl.startsWith('http')) {
+      const res = new Response(JSON.stringify({ scriptUrl }), {
+        headers: { 'Content-Type': 'application/json' },
+      });
+      await cache.put(GAS_CACHE_KEY, res);
+    } else {
+      await cache.delete(GAS_CACHE_KEY);
+    }
+  } catch {}
+}
+
+async function readGasUrlFromCache(): Promise<string> {
+  if (typeof window === 'undefined' || !('caches' in window)) return '';
+  try {
+    const cache = await caches.open(GAS_CACHE_NAME);
+    const match = await cache.match(GAS_CACHE_KEY);
+    if (!match) return '';
+    const json = await match.json();
+    const url = typeof json?.scriptUrl === 'string' ? json.scriptUrl.trim() : '';
+    return url.startsWith('http') ? url : '';
+  } catch {
+    return '';
+  }
+}
+
+function writeServerMeta(patch: Record<string, any>) {
+  if (typeof sessionStorage === 'undefined') return;
+  try {
+    const raw = sessionStorage.getItem('pkl_server_meta_v1');
+    const prev = raw ? JSON.parse(raw) : {};
+    sessionStorage.setItem('pkl_server_meta_v1', JSON.stringify({ ...prev, ...patch }));
+  } catch {}
+}
+
 async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs: number = 10000): Promise<Response> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -418,11 +459,15 @@ export const StorageService = {
     let sheetSyncedCount = 0;
 
     try {
-      const res = await fetch('/api/students/bulk', {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (config.scriptUrl && config.scriptUrl.startsWith('http')) {
+        headers['x-gas-url'] = config.scriptUrl;
+      }
+      const res = await fetchWithTimeout('/api/students/bulk', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ students, scriptUrl: config.scriptUrl || '' }),
-      });
+      }, 15000);
       if (res.ok) {
         const json = await res.json();
         sheetSyncedCount = json?.sheetSyncedCount || 0;
@@ -598,9 +643,15 @@ export const StorageService = {
     return Math.max(qCount, pendingAtt);
   },
 
-  getServerDiagnostics(): { isVercel: boolean; hasEnvScriptUrl: boolean } {
+  getServerDiagnostics(): {
+    isVercel: boolean;
+    hasEnvScriptUrl: boolean;
+    serverReachable: boolean | null;
+    serverHasScriptUrl: boolean;
+    serverError?: string;
+  } {
     if (typeof window === 'undefined') {
-      return { isVercel: false, hasEnvScriptUrl: false };
+      return { isVercel: false, hasEnvScriptUrl: false, serverReachable: null, serverHasScriptUrl: false };
     }
     const envUrl = (import.meta as any).env?.VITE_GOOGLE_APPS_SCRIPT_URL || (import.meta as any).env?.VITE_SCRIPT_URL;
     let storedMeta: any = null;
@@ -611,7 +662,74 @@ export const StorageService = {
     return {
       isVercel: Boolean(storedMeta?.isVercel || window.location.hostname.includes('vercel.app')),
       hasEnvScriptUrl: Boolean((envUrl && String(envUrl).startsWith('http')) || storedMeta?.hasEnvScriptUrl),
+      serverReachable: typeof storedMeta?.serverReachable === 'boolean' ? storedMeta.serverReachable : null,
+      serverHasScriptUrl: Boolean(storedMeta?.serverHasScriptUrl),
+      serverError: storedMeta?.serverError,
     };
+  },
+
+  async pingServerHealth(): Promise<{
+    ok: boolean;
+    isVercel: boolean;
+    hasEnvScriptUrl: boolean;
+    serverHasScriptUrl: boolean;
+    totalAttendance: number;
+    totalStudents: number;
+    error?: string;
+  }> {
+    if (typeof window === 'undefined') {
+      return { ok: false, isVercel: false, hasEnvScriptUrl: false, serverHasScriptUrl: false, totalAttendance: 0, totalStudents: 0 };
+    }
+    try {
+      const res = await fetchWithTimeout(`/api/health?_t=${Date.now()}`, {}, 7000);
+      if (!res.ok) {
+        const errMsg = `HTTP ${res.status}`;
+        writeServerMeta({ serverReachable: false, serverError: errMsg });
+        notifySyncUpdate();
+        return {
+          ok: false,
+          isVercel: window.location.hostname.includes('vercel.app'),
+          hasEnvScriptUrl: false,
+          serverHasScriptUrl: false,
+          totalAttendance: 0,
+          totalStudents: 0,
+          error: errMsg,
+        };
+      }
+      const json = await res.json();
+      if (json && json.status === 'ok') {
+        writeServerMeta({
+          isVercel: Boolean(json.isVercel || window.location.hostname.includes('vercel.app')),
+          hasEnvScriptUrl: Boolean(json.hasEnvScriptUrl),
+          serverHasScriptUrl: Boolean(json.serverHasScriptUrl),
+          serverReachable: true,
+          serverError: undefined,
+        });
+        notifySyncUpdate();
+        return {
+          ok: true,
+          isVercel: Boolean(json.isVercel || window.location.hostname.includes('vercel.app')),
+          hasEnvScriptUrl: Boolean(json.hasEnvScriptUrl),
+          serverHasScriptUrl: Boolean(json.serverHasScriptUrl),
+          totalAttendance: Number(json.totalAttendance || 0),
+          totalStudents: Number(json.totalStudents || 0),
+        };
+      }
+      throw new Error('Respon server tidak valid');
+    } catch (err: any) {
+      const errMsg = err?.message || 'Tidak dapat menghubungi /api/health';
+      writeServerMeta({ serverReachable: false, serverError: errMsg });
+      notifySyncUpdate();
+      return {
+        ok: false,
+        isVercel: window.location.hostname.includes('vercel.app'),
+        hasEnvScriptUrl: false,
+        serverHasScriptUrl: false,
+        totalAttendance: 0,
+        totalStudents: 0,
+        error: errMsg,
+      };
+    }
   },
 
   _flushPromise: null as Promise<{ flushed: number; remaining: number }> | null,
@@ -689,20 +807,41 @@ export const StorageService = {
     if (typeof window === 'undefined') return this.getGoogleSheetConfig();
     const current = this.getGoogleSheetConfig();
     if (current.scriptUrl && current.scriptUrl.startsWith('http')) {
+      saveGasUrlToCache(current.scriptUrl).catch(() => {});
       return current;
     }
+
+    // Check shared PWA CacheStorage before hitting server (handles standalone WebAPK launches where ?gas= was stripped)
+    const cachedUrl = await readGasUrlFromCache();
+    if (cachedUrl && cachedUrl.startsWith('http')) {
+      const restored: GoogleSheetConfig = {
+        scriptUrl: cachedUrl,
+        sheetName: 'Data_Absensi_PKL',
+        connected: true,
+        autoSync: true,
+      };
+      this.saveGoogleSheetConfig(restored, true);
+      return this.getGoogleSheetConfig();
+    }
+
     try {
-      const cfgRes = await fetchWithTimeout(`/api/config?_t=${Date.now()}`, {}, 6000);
+      const cfgRes = await fetchWithTimeout(`/api/config?_t=${Date.now()}`, {}, 7000);
       if (cfgRes.ok) {
         const json = await cfgRes.json();
-        if (json?.meta) {
-          try { sessionStorage.setItem('pkl_server_meta_v1', JSON.stringify(json.meta)); } catch {}
-        }
+        writeServerMeta({
+          ...(json?.meta || {}),
+          serverReachable: true,
+          serverError: undefined,
+        });
         if (json && json.status === 'success' && json.data?.googleSheet?.scriptUrl) {
           this.saveGoogleSheetConfig(json.data.googleSheet, false);
         }
+      } else {
+        writeServerMeta({ serverReachable: false, serverError: `HTTP ${cfgRes.status}` });
       }
-    } catch {}
+    } catch (err: any) {
+      writeServerMeta({ serverReachable: false, serverError: err?.message || 'Koneksi server gagal' });
+    }
     return this.getGoogleSheetConfig();
   },
 
@@ -713,15 +852,33 @@ export const StorageService = {
 
     this._initSyncPromise = (async () => {
       try {
-        const localConfig = this.getGoogleSheetConfig();
+        let localConfig = this.getGoogleSheetConfig();
+        if (!localConfig.scriptUrl) {
+          const cachedUrl = await readGasUrlFromCache();
+          if (cachedUrl) {
+            localConfig = {
+              scriptUrl: cachedUrl,
+              sheetName: 'Data_Absensi_PKL',
+              connected: true,
+              autoSync: true,
+            };
+            this.saveGoogleSheetConfig(localConfig, false);
+          }
+        }
 
         // 1. Fetch server config to pick up global Google Apps Script URL set by Admin
-        const cfgRes = await fetchWithTimeout(`/api/config?_t=${Date.now()}`, {}, 6000);
+        const cfgHeaders: Record<string, string> = {};
+        if (localConfig.scriptUrl && localConfig.scriptUrl.startsWith('http')) {
+          cfgHeaders['x-gas-url'] = localConfig.scriptUrl;
+        }
+        const cfgRes = await fetchWithTimeout(`/api/config?_t=${Date.now()}`, { headers: cfgHeaders }, 7000);
         if (cfgRes.ok) {
           const json = await cfgRes.json();
-          if (json?.meta) {
-            try { sessionStorage.setItem('pkl_server_meta_v1', JSON.stringify(json.meta)); } catch {}
-          }
+          writeServerMeta({
+            ...(json?.meta || {}),
+            serverReachable: true,
+            serverError: undefined,
+          });
           if (json && json.status === 'success' && json.data) {
             if (json.data.googleSheet?.scriptUrl) {
               if (!localConfig.scriptUrl || localConfig.scriptUrl !== json.data.googleSheet.scriptUrl) {
@@ -741,6 +898,8 @@ export const StorageService = {
               this.saveReportPrintConfig(json.data.reportConfig, false);
             }
           }
+        } else {
+          writeServerMeta({ serverReachable: false, serverError: `HTTP ${cfgRes.status}` });
         }
 
         // 2. Flush any pending student/attendance records from prior offline session
@@ -769,8 +928,9 @@ export const StorageService = {
       if (cfg.scriptUrl && cfg.scriptUrl.startsWith('http')) {
         headers['x-gas-url'] = cfg.scriptUrl;
       }
-      const res = await fetchWithTimeout(`/api/attendance?_t=${Date.now()}${nisQuery}`, { headers }, 8000);
+      const res = await fetchWithTimeout(`/api/attendance?_t=${Date.now()}${nisQuery}`, { headers }, 12000);
       if (res.ok) {
+        writeServerMeta({ serverReachable: true, serverError: undefined });
         const json = await res.json();
         if (json && json.status === 'success' && Array.isArray(json.data)) {
           // Merge remote records with any unsynced local records so nothing on this device is lost
@@ -838,8 +998,9 @@ export const StorageService = {
       if (cfg.scriptUrl && cfg.scriptUrl.startsWith('http')) {
         headers['x-gas-url'] = cfg.scriptUrl;
       }
-      const res = await fetchWithTimeout(`/api/students?_t=${Date.now()}`, { headers }, 8000);
+      const res = await fetchWithTimeout(`/api/students?_t=${Date.now()}`, { headers }, 12000);
       if (res.ok) {
+        writeServerMeta({ serverReachable: true, serverError: undefined });
         const json = await res.json();
         if (json && json.status === 'success' && Array.isArray(json.data)) {
           const localUsers = this.getUsers();
@@ -984,8 +1145,10 @@ export const StorageService = {
     } catch {}
     if (normalized.connected) {
       setCookieValue(GAS_COOKIE_NAME, cleanUrl);
+      saveGasUrlToCache(cleanUrl).catch(() => {});
     } else {
       setCookieValue(GAS_COOKIE_NAME, '', 0);
+      saveGasUrlToCache('').catch(() => {});
     }
     if (syncServer && typeof window !== 'undefined') {
       fetch('/api/config', {
@@ -1081,9 +1244,9 @@ export const StorageService = {
     try {
       const serverRes = await fetchWithTimeout('/api/attendance/pull', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'x-gas-url': targetUrl },
         body: JSON.stringify({ url: targetUrl, nis: filterNis ? filterNis.trim() : undefined }),
-      }, 9000);
+      }, 14000);
       if (serverRes.ok) {
         const json = await serverRes.json();
         if (json && json.success) {
@@ -1194,11 +1357,11 @@ export const StorageService = {
 
     // 1. Try server proxy pull first (bypasses browser CORS and merges into server database cleanly)
     try {
-      const serverRes = await fetch('/api/students/pull', {
+      const serverRes = await fetchWithTimeout('/api/students/pull', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'x-gas-url': targetUrl },
         body: JSON.stringify({ url: targetUrl }),
-      });
+      }, 14000);
       if (serverRes.ok) {
         const json = await serverRes.json();
         if (json && json.success && Array.isArray(json.data)) {
@@ -1287,12 +1450,15 @@ export const StorageService = {
     // 1. Try sending to application server API first (passing scriptUrl so stateless Vercel lambdas can forward cleanly)
     if (!skipServerApi && typeof window !== 'undefined') {
       try {
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (targetUrl) headers['x-gas-url'] = targetUrl;
         const serverRes = await fetchWithTimeout('/api/students', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers,
           body: JSON.stringify({ ...student, scriptUrl: targetUrl }),
-        }, 8500);
+        }, 15000);
         if (serverRes.ok) {
+          writeServerMeta({ serverReachable: true, serverError: undefined });
           const json = await serverRes.json();
           if (json && json.status === 'success') {
             serverSynced = true;
@@ -1452,14 +1618,28 @@ export const StorageService = {
 
     // 1. Send to Application Server API first (passing scriptUrl so stateless Vercel functions can forward cleanly)
     if (typeof window !== 'undefined') {
-      try {
-        const serverRes = await fetchWithTimeout('/api/attendance', {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (targetUrl) headers['x-gas-url'] = targetUrl;
+
+      const tryServerPost = async (payloadObj: Record<string, any>) => {
+        const res = await fetchWithTimeout('/api/attendance', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...record, scriptUrl: targetUrl }),
-        }, 8500);
+          headers,
+          body: JSON.stringify(payloadObj),
+        }, 15000);
+        return res;
+      };
+
+      try {
+        let serverRes = await tryServerPost({ ...record, scriptUrl: targetUrl });
+        // If payload rejected as 413 (large camera image), immediately retry metadata + GPS without base64 photos
+        if (serverRes.status === 413) {
+          const { fotoBukti: _f1, fotoPulang: _f2, ...lightRecord } = record;
+          serverRes = await tryServerPost({ ...lightRecord, scriptUrl: targetUrl });
+        }
 
         if (serverRes.ok) {
+          writeServerMeta({ serverReachable: true, serverError: undefined });
           const json = await serverRes.json();
           if (json && json.status === 'success') {
             serverSynced = true;
@@ -1476,8 +1656,11 @@ export const StorageService = {
               };
             }
           }
+        } else {
+          writeServerMeta({ serverReachable: false, serverError: `HTTP ${serverRes.status}` });
         }
-      } catch (err) {
+      } catch (err: any) {
+        writeServerMeta({ serverReachable: false, serverError: err?.message || 'Koneksi server timeout/error' });
         console.warn('Server POST /api/attendance failed, falling back to direct client sync:', err);
       }
     }

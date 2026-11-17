@@ -5,10 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
-    "build": "vite build",
+    "build:api": "esbuild src/server/app.ts --bundle --platform=node --format=esm --packages=external --outfile=api/_handler.mjs",
+    "build": "npm run build:api && vite build",
     "start": "tsx server.ts",
     "preview": "vite preview",
-    "clean": "rm -rf dist server.js",
+    "clean": "rm -rf dist server.js api/_handler.mjs",
     "lint": "tsc --noEmit"
   },
   "dependencies": {

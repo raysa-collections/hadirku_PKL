@@ -15,14 +15,22 @@ app.use((req, res, next) => {
   if (req.method === 'OPTIONS') {
     return res.sendStatus(200);
   }
-  // Normalize Vercel /api/index.ts rewrite or stripped /api prefix edge cases
-  if (req.url && !req.url.startsWith('/api') && req.url !== '/') {
-    req.url = `/api${req.url.startsWith('/') ? '' : '/'}${req.url}`;
-  }
   next();
 });
 
 // Health check
+app.get('/api', (req: Request, res: Response) => {
+  const diag = serverStore.getDiagnostics();
+  res.json({
+    status: 'ok',
+    app: 'HADIRKU PKL TKR Server API',
+    time: new Date().toISOString(),
+    totalAttendance: serverStore.getAttendance().length,
+    totalStudents: serverStore.getStudents().length,
+    ...diag,
+  });
+});
+
 app.get('/api/health', (req: Request, res: Response) => {
   const diag = serverStore.getDiagnostics();
   res.json({
@@ -51,7 +59,7 @@ app.get('/api/config', (req: Request, res: Response) => {
 app.post('/api/config', (req: Request, res: Response) => {
   try {
     const updated = serverStore.saveConfig(req.body);
-    res.json({ status: 'success', message: 'Konfigurasi server berhasil diperbarui', data: updated });
+    res.json({ status: 'success', message: 'Konfigurasi server berhasil diperbarui', data: updated, meta: serverStore.getDiagnostics() });
   } catch (err: any) {
     res.status(500).json({ status: 'error', message: err.message || 'Gagal menyimpan konfigurasi' });
   }
@@ -79,11 +87,13 @@ app.post('/api/attendance', async (req: Request, res: Response) => {
     const result = await serverStore.saveAttendanceRecord(record, overrideScriptUrl);
     res.json({
       status: 'success',
+      serverSaved: true,
       message: result.sheetSynced
         ? 'Presensi berhasil dicatat di Server Aplikasi & tersinkronisasi ke Google Spreadsheet!'
         : 'Presensi berhasil dicatat di Server Aplikasi!',
       sheetSynced: result.sheetSynced,
       sheetError: result.sheetError,
+      timedOut: result.timedOut,
       data: result.record,
     });
   } catch (err: any) {

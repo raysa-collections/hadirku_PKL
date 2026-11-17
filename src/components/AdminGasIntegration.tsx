@@ -53,10 +53,12 @@ export const AdminGasIntegration: React.FC = () => {
   const [testingStatus, setTestingStatus] = useState<{ loading: boolean; success?: boolean; message?: string } | null>(null);
   const [syncingAll, setSyncingAll] = useState(false);
 
-  const diagnostics = StorageService.getServerDiagnostics();
+  const [diagnostics, setDiagnostics] = useState(() => StorageService.getServerDiagnostics());
 
   const refreshCloudView = async () => {
+    await StorageService.pingServerHealth();
     const cfg = await StorageService.ensureConfigSynced();
+    setDiagnostics(StorageService.getServerDiagnostics());
     setConfig(cfg);
     if (cfg.scriptUrl) {
       setScriptUrl(prev => prev || cfg.scriptUrl);
@@ -264,6 +266,24 @@ export const AdminGasIntegration: React.FC = () => {
             }`}>
               <Wifi className="w-3 h-3" />
               <span>{config.connected ? 'Spreadsheet Terhubung Realtime' : 'Spreadsheet Belum Terhubung'}</span>
+            </span>
+            <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold flex items-center gap-1 border ${
+              diagnostics.serverReachable === true
+                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                : diagnostics.serverReachable === false
+                ? 'bg-red-50 text-red-700 border-red-200'
+                : 'bg-slate-50 text-slate-600 border-slate-200'
+            }`}>
+              <span className={`w-2 h-2 rounded-full ${
+                diagnostics.serverReachable === true ? 'bg-emerald-500' : diagnostics.serverReachable === false ? 'bg-red-500' : 'bg-slate-400'
+              }`} />
+              <span>
+                {diagnostics.serverReachable === true
+                  ? 'Server API (/api) Aktif'
+                  : diagnostics.serverReachable === false
+                  ? 'Server API (/api) Gangguan'
+                  : 'Memeriksa Server API...'}
+              </span>
             </span>
           </div>
 

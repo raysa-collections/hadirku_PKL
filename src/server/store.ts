@@ -204,19 +204,24 @@ class ServerStore {
     }
   }
 
-  private hasHydratedFromGas = false;
+  private lastHydratedAt = 0;
   private hydratePromise: Promise<void> | null = null;
 
   public getDiagnostics() {
     const envUrl = (process.env.VITE_GOOGLE_APPS_SCRIPT_URL || process.env.GOOGLE_APPS_SCRIPT_URL || '').trim();
+    const data = this.load();
+    const cfgUrl = (data.config.googleSheet?.scriptUrl || '').trim();
     return {
       isVercel: Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME),
       hasEnvScriptUrl: Boolean(envUrl && envUrl.startsWith('http')),
+      serverHasScriptUrl: Boolean((cfgUrl && cfgUrl.startsWith('http')) || (envUrl && envUrl.startsWith('http'))),
     };
   }
 
   public async hydrateFromGasIfCold(overrideScriptUrl?: string): Promise<void> {
-    if (this.hasHydratedFromGas) return;
+    const now = Date.now();
+    // Throttle automatic re-hydration to once every 15 seconds so warm lambdas stay up-to-date without spamming GAS
+    if (this.lastHydratedAt > 0 && now - this.lastHydratedAt < 15000) return;
     if (this.hydratePromise) return this.hydratePromise;
 
     const targetUrl = this.resolveAndCacheScriptUrl(overrideScriptUrl);
@@ -228,7 +233,7 @@ class ServerStore {
           this.pullStudentsFromGAS(targetUrl).catch(() => {}),
           this.pullAttendanceFromGAS(targetUrl).catch(() => {}),
         ]);
-        this.hasHydratedFromGas = true;
+        this.lastHydratedAt = Date.now();
       } finally {
         this.hydratePromise = null;
       }
@@ -250,7 +255,7 @@ class ServerStore {
   public async saveAttendanceRecord(
     record: AttendanceRecord,
     overrideScriptUrl?: string
-  ): Promise<{ record: AttendanceRecord; sheetSynced: boolean; sheetError?: string }> {
+  ): Promise<{ record: AttendanceRecord; sheetSynced: boolean; sheetError?: string; timedOut?: boolean }> {
     const data = this.load();
     const normNis = String(record.nis || '').trim().toLowerCase();
     const existingIdx = data.attendance.findIndex(
@@ -276,6 +281,7 @@ class ServerStore {
     // Forward to Google Apps Script if configured
     let sheetSynced = false;
     let sheetError: string | undefined;
+    let timedOut = false;
 
     const scriptUrl = this.resolveAndCacheScriptUrl(overrideScriptUrl);
     if (scriptUrl) {
@@ -291,13 +297,16 @@ class ServerStore {
           sheetError = res.message;
         }
       } catch (err: any) {
-        sheetError = err?.name === 'AbortError'
-          ? 'Google Apps Script sedang sibuk/lambat, dilanjutkan sinkronisasi latar belakang.'
-          : (err.message || 'Gagal forward ke Spreadsheet');
+        if (err?.name === 'AbortError') {
+          timedOut = true;
+          sheetError = 'Google Apps Script lambat (>6.5 detik), browser akan melanjutkan verifikasi otomatis.';
+        } else {
+          sheetError = err.message || 'Gagal forward ke Spreadsheet';
+        }
       }
     }
 
-    return { record: finalRecord, sheetSynced, sheetError };
+    return { record: finalRecord, sheetSynced, sheetError, timedOut };
   }
 
   public deleteAttendanceRecord(id: string): boolean {
@@ -541,6 +550,8 @@ class ServerStore {
       jamDatang: record.jamDatang || '-',
       jamPulang: record.jamPulang || '-',
       status: record.status || 'Hadir',
+      statusDatang: record.statusDatang || record.status || 'Hadir',
+      statusPulang: record.statusPulang || (record.jamPulang && record.jamPulang !== '-' ? 'Sudah Pulang' : 'Belum Pulang'),
       keterangan: record.keterangan || '-',
       koordinatGps: record.koordinatGps || '-',
       mapsUrl: record.mapsUrl || '-',
@@ -553,7 +564,7 @@ class ServerStore {
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify(payload),
       redirect: 'follow',
-    }, 8500);
+    }, 6500);
 
     const parsed = await this.parseGasResponse(res);
     return { success: parsed.ok, message: parsed.message };
@@ -581,7 +592,7 @@ class ServerStore {
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify(payload),
       redirect: 'follow',
-    }, 8500);
+    }, 6500);
 
     const parsed = await this.parseGasResponse(res);
     return { success: parsed.ok, message: parsed.message };
@@ -609,7 +620,7 @@ class ServerStore {
       ? `${targetUrl}&action=GET_STUDENTS&_t=${Date.now()}`
       : `${targetUrl}?action=GET_STUDENTS&_t=${Date.now()}`;
 
-    const res = await this.fetchWithTimeout(fetchUrl, { redirect: 'follow' }, 8000);
+    const res = await this.fetchWithTimeout(fetchUrl, { redirect: 'follow' }, 6500);
     const parsed = await this.parseGasResponse(res);
     if (!parsed.ok) {
       return { success: false, count: 0, data: this.getStudents(), message: parsed.message };
@@ -696,7 +707,7 @@ class ServerStore {
       ? `${targetUrl}&action=GET_ALL${nisParam}&_t=${Date.now()}`
       : `${targetUrl}?action=GET_ALL${nisParam}&_t=${Date.now()}`;
 
-    const res = await this.fetchWithTimeout(fetchUrl, { redirect: 'follow' }, 8000);
+    const res = await this.fetchWithTimeout(fetchUrl, { redirect: 'follow' }, 6500);
     const parsed = await this.parseGasResponse(res);
     if (!parsed.ok) {
       return { success: false, count: 0, message: parsed.message };

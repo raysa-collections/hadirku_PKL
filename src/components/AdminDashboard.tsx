@@ -37,17 +37,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigateTab, o
   const [syncToast, setSyncToast] = useState<string | null>(null);
   const [copiedLink, setCopiedLink] = useState(false);
   const [showQrShare, setShowQrShare] = useState(false);
+  const [diagnostics, setDiagnostics] = useState(() => StorageService.getServerDiagnostics());
 
   const todayDate = getJakartaDate();
   const sheetConfig = StorageService.getGoogleSheetConfig();
   const isConnected = StorageService.isGoogleSheetConnected();
   const studentShareUrl = StorageService.getStudentShareUrl();
   const isDevPreviewHost = typeof window !== 'undefined' && window.location.hostname.includes('ais-dev');
-  const diagnostics = StorageService.getServerDiagnostics();
 
   const handleCloudSync = async (notify = true) => {
     setIsSyncing(true);
     try {
+      await StorageService.pingServerHealth();
+      setDiagnostics(StorageService.getServerDiagnostics());
+
       // 1. Fetch latest from Application Server
       const serverRecords = await StorageService.fetchAttendanceFromServer();
       const serverStudents = await StorageService.fetchStudentsFromServer();
@@ -77,6 +80,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigateTab, o
   };
 
   useEffect(() => {
+    const onSyncUpdate = () => {
+      setAllAttendance(StorageService.getAttendance());
+      setAllUsers(StorageService.getUsers().filter(u => u.role === 'siswa'));
+      setDiagnostics(StorageService.getServerDiagnostics());
+    };
+    window.addEventListener('pkl-sync-updated', onSyncUpdate);
+
     // 1. Immediate fetch from server & Google Spreadsheet
     handleCloudSync(false);
 
@@ -86,7 +96,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigateTab, o
       handleCloudSync(false);
     }, 12000);
 
-    return () => clearInterval(interval);
+    return () => {
+      window.removeEventListener('pkl-sync-updated', onSyncUpdate);
+      clearInterval(interval);
+    };
   }, []);
 
   const handleCopyWhatsAppText = () => {
@@ -224,11 +237,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigateTab, o
           <QrShareBox url={studentShareUrl} />
         )}
 
-        {diagnostics.isVercel && !diagnostics.hasEnvScriptUrl && !isDevPreviewHost && (
-          <div className="p-3 rounded-xl bg-blue-50 border border-blue-200 text-[11px] text-blue-950 flex items-start gap-2">
-            <AlertCircle className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+        {diagnostics.serverReachable === false && (
+          <div className="p-3 rounded-xl bg-red-50 border border-red-300 text-[11px] text-red-950 flex items-start gap-2">
+            <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
             <span>
-              <strong>Info Mode Vercel Multi-Perangkat:</strong> Variabel <code className="font-mono font-bold bg-white px-1 rounded border border-blue-200">VITE_GOOGLE_APPS_SCRIPT_URL</code> belum disetel di Vercel Settings. Pastikan siswa membuka <strong>Link WhatsApp / QR Code</strong> di atas (jangan link polos tanpa <code className="font-mono font-bold">?gas=</code>), ATAU pasang variabel tersebut di <strong>Vercel &gt; Settings &gt; Environment Variables</strong> lalu Redeploy agar link polos langsung tersambung ke Spreadsheet untuk semua HP!
+              <strong>Server API (`/api`) Tidak Merespons{diagnostics.serverError ? ` (${diagnostics.serverError})` : ''}:</strong> Pastikan serverless API sudah aktif pada deployment terbaru. Saat server API terputus, pengiriman data siswa tetap diteruskan langsung melalui tautan Google Spreadsheet (<code className="font-mono font-bold">?gas=</code>) atau QR Code di atas.
+            </span>
+          </div>
+        )}
+
+        {diagnostics.isVercel && !diagnostics.hasEnvScriptUrl && !isDevPreviewHost && (
+          <div className="p-3 rounded-xl bg-amber-50 border border-amber-300 text-[11px] text-amber-950 flex items-start gap-2">
+            <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+            <span>
+              <strong>Penting untuk Multi-Perangkat di Vercel:</strong> Variabel <code className="font-mono font-bold bg-white px-1 rounded border border-amber-200">VITE_GOOGLE_APPS_SCRIPT_URL</code> &amp; <code className="font-mono font-bold bg-white px-1 rounded border border-amber-200">GOOGLE_APPS_SCRIPT_URL</code> belum disetel di Vercel Settings. Tanpa variabel tersebut, HP siswa yang membuka link polos (tanpa <code className="font-mono font-bold">?gas=</code>) tidak akan tahu alamat Spreadsheet Anda! Wajib bagikan <strong>Link WhatsApp / QR Code</strong> di atas ke siswa, ATAU pasang kedua variabel tersebut di <strong>Vercel &gt; Settings &gt; Environment Variables</strong> lalu Redeploy.
             </span>
           </div>
         )}

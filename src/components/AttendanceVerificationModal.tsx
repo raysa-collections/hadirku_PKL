@@ -235,7 +235,7 @@ export const AttendanceVerificationModal: React.FC<AttendanceVerificationModalPr
     const canvas = canvasRef.current;
     let width = video.videoWidth || 640;
     let height = video.videoHeight || 480;
-    const maxDim = 720;
+    const maxDim = 560;
     if (width > maxDim || height > maxDim) {
       if (width > height) {
         height = Math.round((height * maxDim) / width);
@@ -254,7 +254,7 @@ export const AttendanceVerificationModal: React.FC<AttendanceVerificationModalPr
     ctx.drawImage(video, 0, 0, width, height);
     drawWatermark(ctx, width, height);
 
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.65);
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.55);
     setCapturedPhoto(dataUrl);
 
     if (cameraStream) {
@@ -278,7 +278,7 @@ export const AttendanceVerificationModal: React.FC<AttendanceVerificationModalPr
         // Scale photo properly for fast mobile upload & localStorage quota safety
         let width = img.width;
         let height = img.height;
-        const maxDim = 720;
+        const maxDim = 560;
         if (width > maxDim || height > maxDim) {
           if (width > height) {
             height = Math.round((height * maxDim) / width);
@@ -297,7 +297,7 @@ export const AttendanceVerificationModal: React.FC<AttendanceVerificationModalPr
         ctx.drawImage(img, 0, 0, width, height);
         drawWatermark(ctx, width, height);
 
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.65);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.55);
         setCapturedPhoto(dataUrl);
 
         if (cameraStream) {

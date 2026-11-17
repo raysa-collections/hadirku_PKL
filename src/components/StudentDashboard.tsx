@@ -120,6 +120,9 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onNavi
   };
 
   useEffect(() => {
+    const onSyncUpdate = () => refreshAttendance();
+    window.addEventListener('pkl-sync-updated', onSyncUpdate);
+
     refreshAttendance();
     const timer = setInterval(() => {
       setDigitalTime(getJakartaTime());
@@ -138,6 +141,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onNavi
     }, 25000);
 
     return () => {
+      window.removeEventListener('pkl-sync-updated', onSyncUpdate);
       clearInterval(timer);
       clearInterval(queueRetryTimer);
     };
@@ -257,10 +261,14 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onNavi
         setTodayRecord({ ...newRecord });
         setFeedbackToast({
           type: 'warning',
-          title: syncRes.serverSynced
-            ? 'Tersimpan di Server (Menunggu Sync Spreadsheet)'
-            : 'Tersimpan Aman di Antrean Perangkat',
-          message: syncRes.message || 'Presensi tersimpan dan akan otomatis dikirim ke Spreadsheet saat koneksi & tautan sekolah aktif.',
+          title: syncRes.isUnconfigured
+            ? 'Belum Terhubung ke Tautan Sekolah (Masuk Antrean HP)'
+            : syncRes.serverSynced
+            ? 'Tersimpan di Server (Menunggu Konfirmasi Spreadsheet)'
+            : 'Gagal Mengirim ke Server Admin — Masuk Antrean HP',
+          message: syncRes.isUnconfigured
+            ? 'Perangkat Anda belum memiliki tautan Spreadsheet sekolah. Buka kembali Link Presensi resmi (?gas=...) atau scan QR Code dari Pembimbing PKL agar presensi ini otomatis terkirim ke server Administrator.'
+            : (syncRes.message || 'Presensi tersimpan di antrean HP. Klik "Kirim & Cek Status" saat internet stabil agar masuk ke data Administrator.'),
         });
       }
       refreshAttendance();
@@ -322,10 +330,14 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onNavi
         setTodayRecord({ ...updatedRecord });
         setFeedbackToast({
           type: 'warning',
-          title: syncRes.serverSynced
-            ? 'Tersimpan di Server (Menunggu Sync Spreadsheet)'
-            : 'Tersimpan Aman di Antrean Perangkat',
-          message: syncRes.message || 'Presensi kepulangan tersimpan di antrean perangkat dan akan otomatis terkirim.',
+          title: syncRes.isUnconfigured
+            ? 'Belum Terhubung ke Tautan Sekolah (Masuk Antrean HP)'
+            : syncRes.serverSynced
+            ? 'Tersimpan di Server (Menunggu Konfirmasi Spreadsheet)'
+            : 'Gagal Mengirim ke Server Admin — Masuk Antrean HP',
+          message: syncRes.isUnconfigured
+            ? 'Perangkat Anda belum memiliki tautan Spreadsheet sekolah. Buka kembali Link Presensi resmi (?gas=...) atau scan QR Code dari Pembimbing PKL agar presensi pulang ini otomatis terkirim ke Administrator.'
+            : (syncRes.message || 'Presensi pulang tersimpan di antrean HP. Klik "Kirim & Cek Status" saat internet stabil.'),
         });
       }
       refreshAttendance();
