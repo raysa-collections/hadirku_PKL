@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { User, AttendanceRecord, AttendanceStatus } from '../types/pkl';
 import { 
   StorageService, 
@@ -55,8 +55,11 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onNavi
     message: string;
   } | null>(null);
 
+  const isMountedRef = useRef(true);
+
   // Load today's attendance record (case-insensitive NIS match)
   const refreshAttendance = () => {
+    if (!isMountedRef.current) return;
     const allRecords = StorageService.getAttendance();
     const currDate = getJakartaDate();
     const normNis = String(user.nis || '').trim().toLowerCase();
@@ -70,9 +73,11 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onNavi
   };
 
   const syncWithCloud = async (showToastOnResult = false) => {
+    if (!isMountedRef.current) return;
     setIsCloudSyncing(true);
     try {
       await StorageService.ensureConfigSynced();
+      if (!isMountedRef.current) return;
       const connectedNow = StorageService.isGoogleSheetConnected();
       setIsConnected(connectedNow);
 
@@ -84,6 +89,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onNavi
         await StorageService.pullAttendanceFromCloud(undefined, user.nis);
       }
 
+      if (!isMountedRef.current) return;
       refreshAttendance();
 
       if (showToastOnResult) {
@@ -115,17 +121,22 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onNavi
       console.warn('Background pull error:', err);
       refreshAttendance();
     } finally {
-      setIsCloudSyncing(false);
+      if (isMountedRef.current) {
+        setIsCloudSyncing(false);
+      }
     }
   };
 
   useEffect(() => {
+    isMountedRef.current = true;
     const onSyncUpdate = () => refreshAttendance();
     window.addEventListener('pkl-sync-updated', onSyncUpdate);
 
     refreshAttendance();
     const timer = setInterval(() => {
-      setDigitalTime(getJakartaTime());
+      if (isMountedRef.current) {
+        setDigitalTime(getJakartaTime());
+      }
     }, 1000);
 
     // Initial scoped sync & outbox flush
@@ -141,6 +152,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onNavi
     }, 25000);
 
     return () => {
+      isMountedRef.current = false;
       window.removeEventListener('pkl-sync-updated', onSyncUpdate);
       clearInterval(timer);
       clearInterval(queueRetryTimer);
@@ -205,144 +217,170 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onNavi
     isFakeGps?: boolean;
     accuracy?: number;
   }) => {
+    if (isSubmitting) return;
     setIsSubmitting(true);
     const timeNow = digitalTime;
     const dateNow = todayDate;
     const action = activeModalAction;
     setActiveModalAction(null);
 
-    if (action === 'CHECK_IN') {
-      const recordId = `ABS-${dateNow.replace(/-/g, '')}-${user.nis}`;
-      const status: AttendanceStatus = timeRule.checkInStatus === 'Terlambat' ? 'Terlambat' : 'Hadir';
+    const safeConfetti = (count: number, spread: number) => {
+      try {
+        confetti({ particleCount: count, spread, disableForReducedMotion: true });
+      } catch {}
+    };
 
-      const newRecord: AttendanceRecord = {
-        id: recordId,
-        tanggal: dateNow,
-        nis: user.nis,
-        namaSiswa: user.nama,
-        kelas: user.kelas || 'XII TKR 1',
-        namaPembimbing: user.namaPembimbing,
-        asalSekolah: user.asalSekolah,
-        jurusan: user.jurusan,
-        jamDatang: timeNow,
-        jamPulang: '-',
-        status: status,
-        statusDatang: status,
-        statusPulang: 'Belum Pulang',
-        keterangan: data.notes || (status === 'Terlambat' ? 'Presensi masuk terlambat di bengkel' : 'Presensi datang tepat waktu di bengkel'),
-        tempatPkl: user.tempatPkl,
-        koordinatGps: data.coordinates,
-        mapsUrl: data.mapsUrl,
-        fotoBukti: data.photo,
-        tahunAjaran: user.tahunAjaran || StorageService.getActiveTahunAjaran(),
-        syncStatus: 'pending',
-      };
+    try {
+      if (action === 'CHECK_IN') {
+        const recordId = `ABS-${dateNow.replace(/-/g, '')}-${user.nis}`;
+        const status: AttendanceStatus = timeRule.checkInStatus === 'Terlambat' ? 'Terlambat' : 'Hadir';
 
-      StorageService.addOrUpdateAttendance(newRecord);
-      setTodayRecord(newRecord);
+        const newRecord: AttendanceRecord = {
+          id: recordId,
+          tanggal: dateNow,
+          nis: user.nis,
+          namaSiswa: user.nama,
+          kelas: user.kelas || 'XII TKR 1',
+          namaPembimbing: user.namaPembimbing,
+          asalSekolah: user.asalSekolah,
+          jurusan: user.jurusan,
+          jamDatang: timeNow,
+          jamPulang: '-',
+          status: status,
+          statusDatang: status,
+          statusPulang: 'Belum Pulang',
+          keterangan: data.notes || (status === 'Terlambat' ? 'Presensi masuk terlambat di bengkel' : 'Presensi datang tepat waktu di bengkel'),
+          tempatPkl: user.tempatPkl,
+          koordinatGps: data.coordinates,
+          mapsUrl: data.mapsUrl,
+          fotoBukti: data.photo,
+          tahunAjaran: user.tahunAjaran || StorageService.getActiveTahunAjaran(),
+          syncStatus: 'pending',
+        };
 
-      // Sync to Server & Google Spreadsheet
-      const syncRes = await StorageService.syncToGoogleSheet('CHECK_IN', newRecord);
-      const isSheetSynced = Boolean(syncRes.sheetSynced);
-      if (isSheetSynced) {
-        newRecord.syncStatus = 'synced';
-        newRecord.syncedAt = new Date().toISOString();
         StorageService.addOrUpdateAttendance(newRecord);
-        setTodayRecord({ ...newRecord });
-        confetti({ particleCount: 70, spread: 80 });
-        setFeedbackToast({
-          type: 'success',
-          title: 'Presensi Datang Berhasil Terkirim!',
-          message: `Waktu: ${timeNow} WIB (${status}). Bukti foto bengkel & titik GPS native terverifikasi berhasil disimpan dan terkirim langsung ke Google Spreadsheet!`,
-        });
-      } else {
-        newRecord.syncStatus = 'pending';
-        StorageService.addOrUpdateAttendance(newRecord);
-        setTodayRecord({ ...newRecord });
+        if (isMountedRef.current) setTodayRecord(newRecord);
+
+        // Sync to Server & Google Spreadsheet
+        const syncRes = await StorageService.syncToGoogleSheet('CHECK_IN', newRecord);
+        const isSheetSynced = Boolean(syncRes.sheetSynced);
+        if (isSheetSynced) {
+          newRecord.syncStatus = 'synced';
+          newRecord.syncedAt = new Date().toISOString();
+          StorageService.addOrUpdateAttendance(newRecord);
+          if (isMountedRef.current) {
+            setTodayRecord({ ...newRecord });
+            safeConfetti(70, 80);
+            setFeedbackToast({
+              type: 'success',
+              title: 'Presensi Datang Berhasil Terkirim!',
+              message: `Waktu: ${timeNow} WIB (${status}). Bukti foto bengkel & titik GPS native terverifikasi berhasil disimpan dan terkirim langsung ke Google Spreadsheet!`,
+            });
+          }
+        } else {
+          newRecord.syncStatus = 'pending';
+          StorageService.addOrUpdateAttendance(newRecord);
+          if (isMountedRef.current) {
+            setTodayRecord({ ...newRecord });
+            setFeedbackToast({
+              type: 'warning',
+              title: syncRes.isUnconfigured
+                ? 'Belum Terhubung ke Tautan Sekolah (Masuk Antrean HP)'
+                : syncRes.serverSynced
+                ? 'Tersimpan di Server (Menunggu Konfirmasi Spreadsheet)'
+                : 'Gagal Mengirim ke Server Admin — Masuk Antrean HP',
+              message: syncRes.isUnconfigured
+                ? 'Perangkat Anda belum memiliki tautan Spreadsheet sekolah. Buka kembali Link Presensi resmi (?gas=...) atau scan QR Code dari Pembimbing PKL agar presensi ini otomatis terkirim ke server Administrator.'
+                : (syncRes.message || 'Presensi tersimpan di antrean HP. Klik "Kirim & Cek Status" saat internet stabil agar masuk ke data Administrator.'),
+            });
+          }
+        }
+        refreshAttendance();
+      } else if (action === 'CHECK_OUT') {
+        const recordId = `ABS-${dateNow.replace(/-/g, '')}-${user.nis}`;
+        const baseRecord: AttendanceRecord = todayRecord || {
+          id: recordId,
+          tanggal: dateNow,
+          nis: user.nis,
+          namaSiswa: user.nama,
+          kelas: user.kelas || 'XII TKR 1',
+          namaPembimbing: user.namaPembimbing,
+          asalSekolah: user.asalSekolah,
+          jurusan: user.jurusan,
+          jamDatang: '-',
+          jamPulang: timeNow,
+          status: 'Hadir',
+          statusDatang: 'Belum Datang',
+          statusPulang: 'Sudah Pulang',
+          keterangan: data.notes || 'Presensi kepulangan (tanpa presensi datang)',
+          tempatPkl: user.tempatPkl,
+          tahunAjaran: user.tahunAjaran || StorageService.getActiveTahunAjaran(),
+          syncStatus: 'pending',
+        };
+
+        const updatedRecord: AttendanceRecord = {
+          ...baseRecord,
+          jamPulang: timeNow,
+          statusDatang: baseRecord.statusDatang || (baseRecord.jamDatang && baseRecord.jamDatang !== '-' ? baseRecord.status : 'Belum Datang'),
+          statusPulang: 'Sudah Pulang',
+          keterangan: data.notes || baseRecord.keterangan || 'Presensi kepulangan siswa PKL',
+          koordinatPulang: data.coordinates,
+          mapsUrlPulang: data.mapsUrl,
+          fotoPulang: data.photo,
+          syncStatus: 'pending',
+        };
+
+        StorageService.addOrUpdateAttendance(updatedRecord);
+        if (isMountedRef.current) setTodayRecord(updatedRecord);
+
+        const syncRes = await StorageService.syncToGoogleSheet('CHECK_OUT', updatedRecord);
+        const isSheetSynced = Boolean(syncRes.sheetSynced);
+        if (isSheetSynced) {
+          updatedRecord.syncStatus = 'synced';
+          updatedRecord.syncedAt = new Date().toISOString();
+          StorageService.addOrUpdateAttendance(updatedRecord);
+          if (isMountedRef.current) {
+            setTodayRecord({ ...updatedRecord });
+            safeConfetti(80, 90);
+            setFeedbackToast({
+              type: 'success',
+              title: 'Presensi Pulang Berhasil Terkirim!',
+              message: `Waktu kepulangan tercatat: ${timeNow} WIB. Bukti foto & GPS kepulangan berhasil diperbarui di Google Spreadsheet!`,
+            });
+          }
+        } else {
+          updatedRecord.syncStatus = 'pending';
+          StorageService.addOrUpdateAttendance(updatedRecord);
+          if (isMountedRef.current) {
+            setTodayRecord({ ...updatedRecord });
+            setFeedbackToast({
+              type: 'warning',
+              title: syncRes.isUnconfigured
+                ? 'Belum Terhubung ke Tautan Sekolah (Masuk Antrean HP)'
+                : syncRes.serverSynced
+                ? 'Tersimpan di Server (Menunggu Konfirmasi Spreadsheet)'
+                : 'Gagal Mengirim ke Server Admin — Masuk Antrean HP',
+              message: syncRes.isUnconfigured
+                ? 'Perangkat Anda belum memiliki tautan Spreadsheet sekolah. Buka kembali Link Presensi resmi (?gas=...) atau scan QR Code dari Pembimbing PKL agar presensi pulang ini otomatis terkirim ke Administrator.'
+                : (syncRes.message || 'Presensi pulang tersimpan di antrean HP. Klik "Kirim & Cek Status" saat internet stabil.'),
+            });
+          }
+        }
+        refreshAttendance();
+      }
+    } catch (err: any) {
+      console.error('Attendance confirm error:', err);
+      if (isMountedRef.current) {
         setFeedbackToast({
           type: 'warning',
-          title: syncRes.isUnconfigured
-            ? 'Belum Terhubung ke Tautan Sekolah (Masuk Antrean HP)'
-            : syncRes.serverSynced
-            ? 'Tersimpan di Server (Menunggu Konfirmasi Spreadsheet)'
-            : 'Gagal Mengirim ke Server Admin — Masuk Antrean HP',
-          message: syncRes.isUnconfigured
-            ? 'Perangkat Anda belum memiliki tautan Spreadsheet sekolah. Buka kembali Link Presensi resmi (?gas=...) atau scan QR Code dari Pembimbing PKL agar presensi ini otomatis terkirim ke server Administrator.'
-            : (syncRes.message || 'Presensi tersimpan di antrean HP. Klik "Kirim & Cek Status" saat internet stabil agar masuk ke data Administrator.'),
+          title: 'Presensi Disimpan di Perangkat',
+          message: 'Terjadi gangguan jaringan saat mengirim presensi (' + (err?.message || 'Coba kirim ulang') + '). Data Anda aman di antrean perangkat.',
         });
       }
-      refreshAttendance();
-
-      setIsSubmitting(false);
-    } else if (action === 'CHECK_OUT') {
-      const recordId = `ABS-${dateNow.replace(/-/g, '')}-${user.nis}`;
-      const baseRecord: AttendanceRecord = todayRecord || {
-        id: recordId,
-        tanggal: dateNow,
-        nis: user.nis,
-        namaSiswa: user.nama,
-        kelas: user.kelas || 'XII TKR 1',
-        namaPembimbing: user.namaPembimbing,
-        asalSekolah: user.asalSekolah,
-        jurusan: user.jurusan,
-        jamDatang: '-',
-        jamPulang: timeNow,
-        status: 'Hadir',
-        statusDatang: 'Belum Datang',
-        statusPulang: 'Sudah Pulang',
-        keterangan: data.notes || 'Presensi kepulangan (tanpa presensi datang)',
-        tempatPkl: user.tempatPkl,
-        tahunAjaran: user.tahunAjaran || StorageService.getActiveTahunAjaran(),
-        syncStatus: 'pending',
-      };
-
-      const updatedRecord: AttendanceRecord = {
-        ...baseRecord,
-        jamPulang: timeNow,
-        statusDatang: baseRecord.statusDatang || (baseRecord.jamDatang && baseRecord.jamDatang !== '-' ? baseRecord.status : 'Belum Datang'),
-        statusPulang: 'Sudah Pulang',
-        keterangan: data.notes || baseRecord.keterangan || 'Presensi kepulangan siswa PKL',
-        koordinatPulang: data.coordinates,
-        mapsUrlPulang: data.mapsUrl,
-        fotoPulang: data.photo,
-        syncStatus: 'pending',
-      };
-
-      StorageService.addOrUpdateAttendance(updatedRecord);
-      setTodayRecord(updatedRecord);
-
-      const syncRes = await StorageService.syncToGoogleSheet('CHECK_OUT', updatedRecord);
-      const isSheetSynced = Boolean(syncRes.sheetSynced);
-      if (isSheetSynced) {
-        updatedRecord.syncStatus = 'synced';
-        updatedRecord.syncedAt = new Date().toISOString();
-        StorageService.addOrUpdateAttendance(updatedRecord);
-        setTodayRecord({ ...updatedRecord });
-        confetti({ particleCount: 80, spread: 90 });
-        setFeedbackToast({
-          type: 'success',
-          title: 'Presensi Pulang Berhasil Terkirim!',
-          message: `Waktu kepulangan tercatat: ${timeNow} WIB. Bukti foto & GPS kepulangan berhasil diperbarui di Google Spreadsheet!`,
-        });
-      } else {
-        updatedRecord.syncStatus = 'pending';
-        StorageService.addOrUpdateAttendance(updatedRecord);
-        setTodayRecord({ ...updatedRecord });
-        setFeedbackToast({
-          type: 'warning',
-          title: syncRes.isUnconfigured
-            ? 'Belum Terhubung ke Tautan Sekolah (Masuk Antrean HP)'
-            : syncRes.serverSynced
-            ? 'Tersimpan di Server (Menunggu Konfirmasi Spreadsheet)'
-            : 'Gagal Mengirim ke Server Admin — Masuk Antrean HP',
-          message: syncRes.isUnconfigured
-            ? 'Perangkat Anda belum memiliki tautan Spreadsheet sekolah. Buka kembali Link Presensi resmi (?gas=...) atau scan QR Code dari Pembimbing PKL agar presensi pulang ini otomatis terkirim ke Administrator.'
-            : (syncRes.message || 'Presensi pulang tersimpan di antrean HP. Klik "Kirim & Cek Status" saat internet stabil.'),
-        });
+    } finally {
+      if (isMountedRef.current) {
+        setIsSubmitting(false);
       }
-      refreshAttendance();
-
-      setIsSubmitting(false);
     }
   };
 

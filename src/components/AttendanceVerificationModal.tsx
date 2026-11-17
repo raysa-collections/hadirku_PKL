@@ -45,13 +45,30 @@ export const AttendanceVerificationModal: React.FC<AttendanceVerificationModalPr
   onClose,
 }) => {
   // Camera states
-  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
   const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const isMountedRef = useRef(true);
+
+  const stopCameraStream = () => {
+    try {
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(t => {
+          try {
+            t.stop();
+          } catch {}
+        });
+        streamRef.current = null;
+      }
+      if (videoRef.current && videoRef.current.srcObject) {
+        videoRef.current.srcObject = null;
+      }
+    } catch {}
+  };
 
   // GPS & Anti-Cheat states
   const [gpsSecurity, setGpsSecurity] = useState<GpsSecurityResult | null>(null);
@@ -73,15 +90,15 @@ export const AttendanceVerificationModal: React.FC<AttendanceVerificationModalPr
 
   // Start Camera Stream with resilient progressive fallbacks
   const startCamera = async (mode = facingMode) => {
+    if (!isMountedRef.current) return;
     setCameraError(null);
     try {
-      if (cameraStream) {
-        cameraStream.getTracks().forEach(t => t.stop());
-        setCameraStream(null);
-      }
+      stopCameraStream();
 
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        setCameraError('Kamera langsung di browser dibatasi. Silakan gunakan tombol "Buka Kamera HP" di bawah.');
+        if (isMountedRef.current) {
+          setCameraError('Kamera langsung di browser dibatasi. Silakan gunakan tombol "Buka Kamera HP" di bawah.');
+        }
         return;
       }
 
@@ -92,14 +109,14 @@ export const AttendanceVerificationModal: React.FC<AttendanceVerificationModalPr
           video: { facingMode: { ideal: mode }, width: { ideal: 1280 }, height: { ideal: 720 } },
           audio: false,
         });
-      } catch (e1) {
+      } catch {
         // Step 2: Try basic facingMode
         try {
           stream = await navigator.mediaDevices.getUserMedia({
             video: { facingMode: mode },
             audio: false,
           });
-        } catch (e2) {
+        } catch {
           // Step 3: Try any available video track on the device
           stream = await navigator.mediaDevices.getUserMedia({
             video: true,
@@ -108,18 +125,32 @@ export const AttendanceVerificationModal: React.FC<AttendanceVerificationModalPr
         }
       }
 
+      if (!isMountedRef.current) {
+        // Modal closed while getUserMedia was pending — release hardware camera immediately
+        if (stream) {
+          stream.getTracks().forEach(t => {
+            try { t.stop(); } catch {}
+          });
+        }
+        return;
+      }
+
       if (stream) {
-        setCameraStream(stream);
+        streamRef.current = stream;
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
           videoRef.current.onloadedmetadata = () => {
-            videoRef.current?.play().catch(() => {});
+            if (isMountedRef.current) {
+              videoRef.current?.play().catch(() => {});
+            }
           };
         }
       }
     } catch (err: any) {
       console.warn('Camera live stream error:', err);
-      setCameraError('Kamera browser belum dapat dibuka langsung. Anda tetap dapat memotret dengan menekan tombol "Buka Kamera HP" di bawah.');
+      if (isMountedRef.current) {
+        setCameraError('Kamera browser belum dapat dibuka langsung. Anda tetap dapat memotret dengan menekan tombol "Buka Kamera HP" di bawah.');
+      }
     }
   };
 
@@ -158,6 +189,7 @@ export const AttendanceVerificationModal: React.FC<AttendanceVerificationModalPr
 
     navigator.geolocation.getCurrentPosition(
       (pos) => {
+        if (!isMountedRef.current) return;
         const security = analyzeHardwareGps(pos);
         setGpsSecurity(security);
         setLocation({
@@ -169,6 +201,7 @@ export const AttendanceVerificationModal: React.FC<AttendanceVerificationModalPr
         });
       },
       (err) => {
+        if (!isMountedRef.current) return;
         const fallbackResult: GpsSecurityResult = {
           isFakeGps: false,
           accuracy: 12,
@@ -194,13 +227,13 @@ export const AttendanceVerificationModal: React.FC<AttendanceVerificationModalPr
   };
 
   useEffect(() => {
+    isMountedRef.current = true;
     startCamera();
     fetchLocation();
 
     return () => {
-      if (cameraStream) {
-        cameraStream.getTracks().forEach(t => t.stop());
-      }
+      isMountedRef.current = false;
+      stopCameraStream();
     };
   }, []);
 
@@ -230,36 +263,41 @@ export const AttendanceVerificationModal: React.FC<AttendanceVerificationModalPr
 
   // Snap photo from live video feed (compressed for fast multi-device upload)
   const handleSnapPhoto = () => {
-    if (!videoRef.current || !canvasRef.current) return;
-    const video = videoRef.current;
-    const canvas = canvasRef.current;
-    let width = video.videoWidth || 640;
-    let height = video.videoHeight || 480;
-    const maxDim = 560;
-    if (width > maxDim || height > maxDim) {
-      if (width > height) {
-        height = Math.round((height * maxDim) / width);
-        width = maxDim;
-      } else {
-        width = Math.round((width * maxDim) / height);
-        height = maxDim;
+    try {
+      if (!videoRef.current || !canvasRef.current) return;
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+      let width = video.videoWidth || 640;
+      let height = video.videoHeight || 480;
+      if (width === 0 || height === 0) {
+        setCameraError('Kamera belum siap. Tunggu 1 detik atau gunakan tombol "Buka Kamera Bawaan HP".');
+        return;
       }
-    }
-    canvas.width = width;
-    canvas.height = height;
+      const maxDim = 560;
+      if (width > maxDim || height > maxDim) {
+        if (width > height) {
+          height = Math.round((height * maxDim) / width);
+          width = maxDim;
+        } else {
+          width = Math.round((width * maxDim) / height);
+          height = maxDim;
+        }
+      }
+      canvas.width = width;
+      canvas.height = height;
 
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
 
-    ctx.drawImage(video, 0, 0, width, height);
-    drawWatermark(ctx, width, height);
+      ctx.drawImage(video, 0, 0, width, height);
+      drawWatermark(ctx, width, height);
 
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.55);
-    setCapturedPhoto(dataUrl);
-
-    if (cameraStream) {
-      cameraStream.getTracks().forEach(t => t.stop());
-      setCameraStream(null);
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.55);
+      setCapturedPhoto(dataUrl);
+      stopCameraStream();
+    } catch (err) {
+      console.warn('Snap photo warning:', err);
+      setCameraError('Gagal mengambil gambar dari live kamera. Gunakan tombol "Buka Kamera Bawaan HP".');
     }
   };
 
@@ -272,40 +310,55 @@ export const AttendanceVerificationModal: React.FC<AttendanceVerificationModalPr
     reader.onload = (event) => {
       const img = new Image();
       img.onload = () => {
-        if (!canvasRef.current) return;
-        const canvas = canvasRef.current;
+        try {
+          if (!isMountedRef.current || !canvasRef.current) return;
+          const canvas = canvasRef.current;
 
-        // Scale photo properly for fast mobile upload & localStorage quota safety
-        let width = img.width;
-        let height = img.height;
-        const maxDim = 560;
-        if (width > maxDim || height > maxDim) {
-          if (width > height) {
-            height = Math.round((height * maxDim) / width);
-            width = maxDim;
-          } else {
-            width = Math.round((width * maxDim) / height);
-            height = maxDim;
+          // Scale photo properly for fast mobile upload & localStorage quota safety
+          let width = img.width || 640;
+          let height = img.height || 480;
+          const maxDim = 560;
+          if (width > maxDim || height > maxDim) {
+            if (width > height) {
+              height = Math.round((height * maxDim) / width);
+              width = maxDim;
+            } else {
+              width = Math.round((width * maxDim) / height);
+              height = maxDim;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) return;
+
+          ctx.drawImage(img, 0, 0, width, height);
+          drawWatermark(ctx, width, height);
+
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.55);
+          if (isMountedRef.current) {
+            setCapturedPhoto(dataUrl);
+            stopCameraStream();
+          }
+        } catch (err) {
+          console.warn('Native camera compression warning:', err);
+          if (isMountedRef.current) {
+            setCameraError('Gagal memproses foto kamera HP. Silakan coba potret ulang.');
           }
         }
-
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return;
-
-        ctx.drawImage(img, 0, 0, width, height);
-        drawWatermark(ctx, width, height);
-
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.55);
-        setCapturedPhoto(dataUrl);
-
-        if (cameraStream) {
-          cameraStream.getTracks().forEach(t => t.stop());
-          setCameraStream(null);
+      };
+      img.onerror = () => {
+        if (isMountedRef.current) {
+          setCameraError('Format foto tidak terbaca. Silakan ambil foto ulang.');
         }
       };
       img.src = event.target?.result as string;
+    };
+    reader.onerror = () => {
+      if (isMountedRef.current) {
+        setCameraError('Gagal membaca file foto dari perangkat.');
+      }
     };
     reader.readAsDataURL(file);
     if (fileInputRef.current) fileInputRef.current.value = '';
@@ -316,12 +369,18 @@ export const AttendanceVerificationModal: React.FC<AttendanceVerificationModalPr
     startCamera();
   };
 
+  const handleCloseModal = () => {
+    stopCameraStream();
+    onClose();
+  };
+
   const handleSubmit = () => {
     if (!capturedPhoto) {
-      alert('Harap ambil foto bukti keberadaan di bengkel terlebih dahulu.');
+      setCameraError('Harap ambil foto bukti keberadaan di bengkel terlebih dahulu.');
       return;
     }
 
+    stopCameraStream();
     const coordStr = `${location.lat}, ${location.lng}`;
     const mapsUrl = `https://www.google.com/maps?q=${location.lat},${location.lng}`;
 
@@ -359,7 +418,7 @@ export const AttendanceVerificationModal: React.FC<AttendanceVerificationModalPr
             </div>
           </div>
           <button
-            onClick={onClose}
+            onClick={handleCloseModal}
             className="text-slate-400 hover:text-slate-900 p-1 rounded-lg hover:bg-slate-100 cursor-pointer"
           >
             <X className="w-4 h-4" />
@@ -598,7 +657,7 @@ export const AttendanceVerificationModal: React.FC<AttendanceVerificationModalPr
         <div className="mt-6 pt-4 border-t border-slate-200 flex items-center justify-end gap-2">
           <button
             type="button"
-            onClick={onClose}
+            onClick={handleCloseModal}
             className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition cursor-pointer"
           >
             Batal

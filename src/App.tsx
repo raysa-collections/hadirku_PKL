@@ -42,8 +42,16 @@ export default function App() {
 
   React.useEffect(() => {
     const refreshSyncBadges = () => {
-      setSheetConfig(StorageService.getGoogleSheetConfig());
-      setPendingCount(StorageService.getPendingSyncCount());
+      const nextCfg = StorageService.getGoogleSheetConfig();
+      const nextPending = StorageService.getPendingSyncCount();
+      setSheetConfig(prev =>
+        prev.scriptUrl === nextCfg.scriptUrl &&
+        prev.connected === nextCfg.connected &&
+        prev.lastSync === nextCfg.lastSync
+          ? prev
+          : nextCfg
+      );
+      setPendingCount(prev => (prev === nextPending ? prev : nextPending));
     };
 
     refreshSyncBadges();
@@ -78,6 +86,11 @@ export default function App() {
   };
 
   const handleLogout = () => {
+    try {
+      if (typeof document !== 'undefined' && document.activeElement instanceof HTMLElement) {
+        document.activeElement.blur();
+      }
+    } catch {}
     StorageService.setCurrentUser(null);
     setCurrentUser(null);
     setSelectedRole(null);

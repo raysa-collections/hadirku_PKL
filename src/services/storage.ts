@@ -100,10 +100,18 @@ async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutM
   }
 }
 
+let _notifySyncTimer: ReturnType<typeof setTimeout> | null = null;
+let _lastServerSyncedGasUrl = '';
+
 function notifySyncUpdate() {
-  if (typeof window !== 'undefined') {
-    window.dispatchEvent(new CustomEvent('pkl-sync-updated'));
-  }
+  if (typeof window === 'undefined') return;
+  if (_notifySyncTimer !== null) return;
+  _notifySyncTimer = setTimeout(() => {
+    _notifySyncTimer = null;
+    try {
+      window.dispatchEvent(new CustomEvent('pkl-sync-updated'));
+    } catch {}
+  }, 0);
 }
 
 async function verifyGasRecordExists(
@@ -621,6 +629,9 @@ export const StorageService = {
   enqueuePendingSync(item: Omit<SyncQueueItem, 'queuedAt'>) {
     const queue = this.getSyncQueue();
     const existsIdx = queue.findIndex(q => q.type === item.type && q.key.toLowerCase() === item.key.toLowerCase());
+    if (existsIdx >= 0 && queue[existsIdx].action === item.action) {
+      return;
+    }
     const entry: SyncQueueItem = { ...item, queuedAt: new Date().toISOString() };
     if (existsIdx >= 0) {
       queue[existsIdx] = entry;
@@ -631,10 +642,13 @@ export const StorageService = {
   },
 
   dequeuePendingSync(type: 'STUDENT' | 'ATTENDANCE', key: string) {
-    const queue = this.getSyncQueue().filter(
+    const queue = this.getSyncQueue();
+    const nextQueue = queue.filter(
       q => !(q.type === type && q.key.toLowerCase() === key.toLowerCase())
     );
-    this.saveSyncQueue(queue);
+    if (nextQueue.length !== queue.length) {
+      this.saveSyncQueue(nextQueue);
+    }
   },
 
   getPendingSyncCount(): number {
@@ -1051,6 +1065,20 @@ export const StorageService = {
   },
 
   getGoogleSheetConfig(): GoogleSheetConfig {
+    let raw: string | null = null;
+    try {
+      raw = typeof localStorage !== 'undefined' ? localStorage.getItem(GOOGLE_SHEET_KEY) : null;
+    } catch {}
+
+    let parsed: GoogleSheetConfig | null = null;
+    if (raw) {
+      try {
+        parsed = JSON.parse(raw);
+      } catch {
+        parsed = null;
+      }
+    }
+
     // 1. Check URL query parameter or hash fragment (?gas=... / ?scriptUrl=... / #gas=...)
     if (typeof window !== 'undefined' && window.location) {
       try {
@@ -1068,12 +1096,17 @@ export const StorageService = {
           const cleanGas = queryGas.trim();
           const autoConfig: GoogleSheetConfig = {
             scriptUrl: cleanGas,
-            sheetName: 'Data_Absensi_PKL',
+            sheetName: parsed?.sheetName || 'Data_Absensi_PKL',
             connected: true,
             autoSync: true,
-            lastSync: new Date().toISOString(),
+            lastSync: parsed?.lastSync || new Date().toISOString(),
           };
-          this.saveGoogleSheetConfig(autoConfig, true);
+          const alreadyStoredSame = Boolean(parsed?.scriptUrl && parsed.scriptUrl.trim() === cleanGas && parsed.connected);
+          const shouldWarmServer = _lastServerSyncedGasUrl !== cleanGas;
+          if (!alreadyStoredSame || shouldWarmServer) {
+            // Never emit pkl-sync-updated from inside a getter! Only persist/warm once per URL.
+            this.saveGoogleSheetConfig(autoConfig, shouldWarmServer, false);
+          }
           // Do NOT strip ?gas= from URL bar so PWA install, bookmarks, and "Open in Chrome" keep the auto-connect link!
           return autoConfig;
         }
@@ -1082,27 +1115,18 @@ export const StorageService = {
       }
     }
 
-    const raw = localStorage.getItem(GOOGLE_SHEET_KEY);
-    let parsed: GoogleSheetConfig | null = null;
-    if (raw) {
-      try {
-        parsed = JSON.parse(raw);
-      } catch {
-        parsed = null;
-      }
-    }
-
     // 2. Fallback to Cookie (helps survive isolated WebView / tab resets)
     if (!parsed || !parsed.scriptUrl) {
       const cookieUrl = getCookieValue(GAS_COOKIE_NAME);
       if (cookieUrl && cookieUrl.startsWith('http')) {
+        const cleanCookie = cookieUrl.trim();
         const cookieConfig: GoogleSheetConfig = {
-          scriptUrl: cookieUrl.trim(),
+          scriptUrl: cleanCookie,
           sheetName: 'Data_Absensi_PKL',
           connected: true,
           autoSync: true,
         };
-        this.saveGoogleSheetConfig(cookieConfig, false);
+        this.saveGoogleSheetConfig(cookieConfig, false, false);
         return cookieConfig;
       }
     }
@@ -1111,13 +1135,14 @@ export const StorageService = {
     const envUrl = (import.meta as any).env?.VITE_GOOGLE_APPS_SCRIPT_URL || (import.meta as any).env?.VITE_SCRIPT_URL;
     if (!parsed || !parsed.scriptUrl) {
       if (envUrl && typeof envUrl === 'string' && envUrl.startsWith('http')) {
+        const cleanEnv = envUrl.trim();
         const envConfig: GoogleSheetConfig = {
-          scriptUrl: envUrl.trim(),
+          scriptUrl: cleanEnv,
           sheetName: 'Data_Absensi_PKL',
           connected: true,
           autoSync: true,
         };
-        this.saveGoogleSheetConfig(envConfig, true);
+        this.saveGoogleSheetConfig(envConfig, _lastServerSyncedGasUrl !== cleanEnv, false);
         return envConfig;
       }
     }
@@ -1133,7 +1158,7 @@ export const StorageService = {
     return config;
   },
 
-  saveGoogleSheetConfig(config: GoogleSheetConfig, syncServer: boolean = true) {
+  saveGoogleSheetConfig(config: GoogleSheetConfig, syncServer: boolean = true, emitEvent: boolean = true) {
     const cleanUrl = (config.scriptUrl || '').trim();
     const normalized: GoogleSheetConfig = {
       ...config,
@@ -1151,13 +1176,20 @@ export const StorageService = {
       saveGasUrlToCache('').catch(() => {});
     }
     if (syncServer && typeof window !== 'undefined') {
+      if (normalized.connected) {
+        _lastServerSyncedGasUrl = cleanUrl;
+      } else {
+        _lastServerSyncedGasUrl = '';
+      }
       fetch('/api/config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ googleSheet: normalized }),
       }).catch(err => console.warn('Sync config to server warning:', err));
     }
-    notifySyncUpdate();
+    if (emitEvent) {
+      notifySyncUpdate();
+    }
   },
 
   isGoogleSheetConnected(): boolean {

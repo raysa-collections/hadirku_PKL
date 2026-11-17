@@ -131,10 +131,13 @@ export const RegisterModal: React.FC<RegisterModalProps> = ({ onSuccess, onBackT
       }
 
       StorageService.setCurrentUser(regRes.user);
-      confetti({ particleCount: 60, spread: 70 });
+      try {
+        confetti({ particleCount: 60, spread: 70, disableForReducedMotion: true });
+      } catch {}
       onSuccess(regRes.user);
     } catch (err: any) {
       setError('Terjadi kendala saat menyimpan pendaftaran: ' + (err?.message || 'Silakan coba lagi.'));
+    } finally {
       setIsSubmitting(false);
     }
   };

@@ -15,7 +15,8 @@ import {
   Sparkles,
   ArrowRight,
   ArrowLeft,
-  School
+  School,
+  Loader2
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
@@ -35,11 +36,13 @@ export const LoginModal: React.FC<LoginModalProps> = ({
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
 
   const isSiswa = selectedRole === 'siswa';
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isLoggingIn) return;
     setErrorMessage(null);
 
     const cleanId = identifier.trim().toLowerCase();
@@ -52,60 +55,66 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       return;
     }
 
-    let users = StorageService.getUsers();
-    const targetRole = isSiswa ? 'siswa' : 'admin';
+    setIsLoggingIn(true);
+    try {
+      let users = StorageService.getUsers();
+      const targetRole = isSiswa ? 'siswa' : 'admin';
 
-    // Helper to match credentials strictly for targetRole
-    const matchUserCredentials = (u: User) => {
-      if (u.role !== targetRole) return false;
+      // Helper to match credentials strictly for targetRole
+      const matchUserCredentials = (u: User) => {
+        if (u.role !== targetRole) return false;
 
-      const uUser = (u.username || '').toLowerCase();
-      const uUserNoSpace = uUser.replace(/\s+/g, '');
-      const uNis = (u.nis || '').toLowerCase();
-      const uNisNoSpace = uNis.replace(/\s+/g, '');
-      const uNip = (u.nip || '').toLowerCase();
+        const uUser = (u.username || '').toLowerCase();
+        const uUserNoSpace = uUser.replace(/\s+/g, '');
+        const uNis = (u.nis || '').toLowerCase();
+        const uNisNoSpace = uNis.replace(/\s+/g, '');
+        const uNip = (u.nip || '').toLowerCase();
 
-      const idMatch = isSiswa
-        ? (uUser === cleanId || uUserNoSpace === cleanIdNoSpace || uNis === cleanId || uNisNoSpace === cleanIdNoSpace)
-        : (uUser === cleanId || uUserNoSpace === cleanIdNoSpace ||
-           ((cleanId === 'admin123' || cleanId === 'admin') && (uUser === 'admin123' || uUser === 'admin')) ||
-           (uNip && uNip === cleanId));
+        const idMatch = isSiswa
+          ? (uUser === cleanId || uUserNoSpace === cleanIdNoSpace || uNis === cleanId || uNisNoSpace === cleanIdNoSpace)
+          : (uUser === cleanId || uUserNoSpace === cleanIdNoSpace ||
+             ((cleanId === 'admin123' || cleanId === 'admin') && (uUser === 'admin123' || uUser === 'admin')) ||
+             (uNip && uNip === cleanId));
 
-      if (!idMatch) return false;
+        if (!idMatch) return false;
 
-      const uPass = (u.password || '').trim();
-      const uPassNoSpace = uPass.replace(/\s+/g, '');
+        const uPass = (u.password || '').trim();
+        const uPassNoSpace = uPass.replace(/\s+/g, '');
 
-      return (
-        uPass === cleanPass ||
-        uPass.toLowerCase() === cleanPass.toLowerCase() ||
-        uPassNoSpace === cleanPassNoSpace ||
-        (!isSiswa && (cleanPassNoSpace === 'admin123' || cleanPass === 'admin123'))
-      );
-    };
+        return (
+          uPass === cleanPass ||
+          uPass.toLowerCase() === cleanPass.toLowerCase() ||
+          uPassNoSpace === cleanPassNoSpace ||
+          (!isSiswa && (cleanPassNoSpace === 'admin123' || cleanPass === 'admin123'))
+        );
+      };
 
-    let user = users.find(matchUserCredentials);
+      let user = users.find(matchUserCredentials);
 
-    // If not found locally, pull latest students from server & Google Spreadsheet
-    if (!user && isSiswa) {
-      try {
-        await StorageService.ensureConfigSynced();
-        await StorageService.fetchStudentsFromServer();
-        if (StorageService.isGoogleSheetConnected()) {
-          await StorageService.pullStudentsFromCloud();
+      // If not found locally, pull latest students from server & Google Spreadsheet
+      if (!user && isSiswa) {
+        try {
+          await StorageService.ensureConfigSynced();
+          await StorageService.fetchStudentsFromServer();
+          if (StorageService.isGoogleSheetConnected()) {
+            await StorageService.pullStudentsFromCloud();
+          }
+          users = StorageService.getUsers();
+          user = users.find(matchUserCredentials);
+        } catch (cloudErr) {
+          console.warn('Cloud login lookup error:', cloudErr);
         }
-        users = StorageService.getUsers();
-        user = users.find(matchUserCredentials);
-      } catch (cloudErr) {
-        console.warn('Cloud login lookup error:', cloudErr);
       }
-    }
 
-    if (user) {
-      StorageService.setCurrentUser(user);
-      confetti({ particleCount: 40, spread: 60 });
-      onLoginSuccess(user);
-    } else {
+      if (user) {
+        StorageService.setCurrentUser(user);
+        try {
+          confetti({ particleCount: 40, spread: 60, disableForReducedMotion: true });
+        } catch {}
+        onLoginSuccess(user);
+        return;
+      }
+
       // 1. Check if user exists in the TARGET ROLE (matching username/nis) but password failed
       const sameRoleUser = users.find(u => {
         if (u.role !== targetRole) return false;
@@ -161,6 +170,8 @@ export const LoginModal: React.FC<LoginModalProps> = ({
           ? `Username / NIS "${identifier}" belum terdaftar. Silakan klik "Registrasi Siswa" di bawah untuk mendaftar.`
           : `Username "${identifier}" tidak terdaftar dalam sistem.`
       );
+    } finally {
+      setIsLoggingIn(false);
     }
   };
 
@@ -298,14 +309,24 @@ export const LoginModal: React.FC<LoginModalProps> = ({
 
         <button
           type="submit"
-          className={`w-full py-2.5 text-white font-bold rounded-xl shadow-md flex items-center justify-center gap-2 transition cursor-pointer text-xs mt-2 ${
+          disabled={isLoggingIn}
+          className={`w-full py-2.5 text-white font-bold rounded-xl shadow-md flex items-center justify-center gap-2 transition cursor-pointer text-xs mt-2 disabled:opacity-60 ${
             isSiswa
               ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/20'
               : 'bg-blue-600 hover:bg-blue-700 shadow-blue-600/20'
           }`}
         >
-          <LogIn className="w-4 h-4" />
-          Masuk sebagai {isSiswa ? 'Siswa' : 'Guru / Pembimbing'}
+          {isLoggingIn ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" />
+              <span>Memeriksa Akun...</span>
+            </>
+          ) : (
+            <>
+              <LogIn className="w-4 h-4" />
+              <span>Masuk sebagai {isSiswa ? 'Siswa' : 'Guru / Pembimbing'}</span>
+            </>
+          )}
         </button>
       </form>
 
