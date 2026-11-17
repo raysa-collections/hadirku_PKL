@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { User, AttendanceRecord, GoogleSheetConfig, AppThemeConfig, ReportPrintConfig, TahunAjaranConfig } from '../types/pkl';
+import { User, AttendanceRecord, GoogleSheetConfig, AppThemeConfig, ReportPrintConfig, TahunAjaranConfig, DataResetState } from '../types/pkl';
 import { INITIAL_USERS, generateSeedAttendance, DEFAULT_THEME_CONFIG, DEFAULT_REPORT_CONFIG, DEFAULT_TAHUN_AJARAN_CONFIG } from '../constants/defaults';
 
 interface ServerDatabase {
@@ -11,6 +11,7 @@ interface ServerDatabase {
     appTheme: AppThemeConfig;
     reportConfig: ReportPrintConfig;
     tahunAjaran: TahunAjaranConfig;
+    resetState?: DataResetState;
   };
   lastModified: string;
 }
@@ -61,6 +62,7 @@ class ServerStore {
         appTheme: { ...DEFAULT_THEME_CONFIG },
         reportConfig: { ...DEFAULT_REPORT_CONFIG },
         tahunAjaran: { ...DEFAULT_TAHUN_AJARAN_CONFIG },
+        resetState: {},
       },
       lastModified: new Date().toISOString(),
     };
@@ -252,11 +254,116 @@ class ServerStore {
     return data.attendance;
   }
 
+  private parseGasTimestampMs(raw?: string): number {
+    if (!raw) return 0;
+    const str = String(raw).replace(/\s*WIB\s*$/i, '').trim();
+    if (!str) return 0;
+    // Match "YYYY-MM-DD HH:mm:ss" (Asia/Jakarta UTC+7)
+    if (/^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}(:\d{2})?$/.test(str)) {
+      const iso = str.replace(/\s+/, 'T') + (str.length <= 16 ? ':00' : '') + '+07:00';
+      const ms = Date.parse(iso);
+      return Number.isNaN(ms) ? 0 : ms;
+    }
+    if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+      // Date only — treat as start of day Jakarta; compared alongside ignoredKeys
+      const ms = Date.parse(`${str}T00:00:00+07:00`);
+      return Number.isNaN(ms) ? 0 : ms;
+    }
+    const ms = Date.parse(str);
+    return Number.isNaN(ms) ? 0 : ms;
+  }
+
+  private unignoreStudentKeys(nis?: string, username?: string) {
+    const data = this.load();
+    const rs = data.config.resetState;
+    if (!rs || !Array.isArray(rs.ignoredStudentKeys) || rs.ignoredStudentKeys.length === 0) return;
+    const n = String(nis || '').trim().toLowerCase();
+    const u = String(username || '').trim().toLowerCase();
+    rs.ignoredStudentKeys = rs.ignoredStudentKeys.filter(k => k !== n && k !== u);
+  }
+
+  private unignoreAttendanceKeys(id?: string, tanggal?: string, nis?: string) {
+    const data = this.load();
+    const rs = data.config.resetState;
+    if (!rs || !Array.isArray(rs.ignoredAttendanceKeys) || rs.ignoredAttendanceKeys.length === 0) return;
+    const cleanId = String(id || '').trim();
+    const composite = `${tanggal || ''}::${String(nis || '').trim().toLowerCase()}`;
+    rs.ignoredAttendanceKeys = rs.ignoredAttendanceKeys.filter(k => k !== cleanId && k !== composite);
+  }
+
+  private isPreResetStudent(
+    nis: string,
+    username: string,
+    createdAt: string,
+    resetState?: DataResetState
+  ): boolean {
+    if (!resetState?.studentsResetAt) return false;
+    const resetMs = Date.parse(resetState.studentsResetAt);
+    if (Number.isNaN(resetMs)) return false;
+
+    const cleanNis = nis.trim().toLowerCase();
+    const cleanUser = username.trim().toLowerCase();
+    const ignored = new Set((resetState.ignoredStudentKeys || []).map(k => k.toLowerCase()));
+    const createdMs = this.parseGasTimestampMs(createdAt);
+
+    // If explicitly recorded as post-reset (> resetMs + 1s buffer) and has full timestamp, allow it
+    const hasTimePrecision = /\d{2}:\d{2}/.test(String(createdAt || ''));
+    if (hasTimePrecision && createdMs > resetMs + 1000) {
+      return false;
+    }
+    if (ignored.has(cleanNis) || (cleanUser && ignored.has(cleanUser))) {
+      return true;
+    }
+    if (hasTimePrecision && createdMs > 0 && createdMs <= resetMs) {
+      return true;
+    }
+    if (!hasTimePrecision && createdMs > 0) {
+      // Date-only stamp from on or before the reset date -> treat as pre-reset unless explicitly re-registered
+      const resetJakartaDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta' }).format(new Date(resetMs));
+      const rowDate = String(createdAt || '').slice(0, 10);
+      if (rowDate <= resetJakartaDate) return true;
+    }
+    return false;
+  }
+
+  private isPreResetAttendance(
+    id: string,
+    tanggal: string,
+    nis: string,
+    syncedAt: string,
+    resetState?: DataResetState
+  ): boolean {
+    if (!resetState?.attendanceResetAt) return false;
+    const resetMs = Date.parse(resetState.attendanceResetAt);
+    if (Number.isNaN(resetMs)) return false;
+
+    const composite = `${tanggal}::${nis.trim().toLowerCase()}`;
+    const ignored = new Set((resetState.ignoredAttendanceKeys || []));
+    const syncedMs = this.parseGasTimestampMs(syncedAt);
+    const hasTimePrecision = /\d{2}:\d{2}/.test(String(syncedAt || ''));
+
+    if (hasTimePrecision && syncedMs > resetMs + 1000) {
+      return false;
+    }
+    if (ignored.has(id) || ignored.has(composite)) {
+      return true;
+    }
+    if (hasTimePrecision && syncedMs > 0 && syncedMs <= resetMs) {
+      return true;
+    }
+    if (!hasTimePrecision && tanggal) {
+      const resetJakartaDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta' }).format(new Date(resetMs));
+      if (tanggal <= resetJakartaDate) return true;
+    }
+    return false;
+  }
+
   public async saveAttendanceRecord(
     record: AttendanceRecord,
     overrideScriptUrl?: string
   ): Promise<{ record: AttendanceRecord; sheetSynced: boolean; sheetError?: string; timedOut?: boolean }> {
     const data = this.load();
+    this.unignoreAttendanceKeys(record.id, record.tanggal, record.nis);
     const normNis = String(record.nis || '').trim().toLowerCase();
     const existingIdx = data.attendance.findIndex(
       r => r.id === record.id || (r.tanggal === record.tanggal && String(r.nis || '').trim().toLowerCase() === normNis)
@@ -320,24 +427,95 @@ class ServerStore {
     return false;
   }
 
-  public resetAttendance(mode: 'all' | 'attendance' | 'students' = 'all') {
+  public resetAttendance(
+    mode: 'all' | 'attendance' | 'students' = 'all',
+    clientResetState?: Partial<DataResetState>
+  ) {
     const data = this.load();
     let deletedAttendance = 0;
     let deletedStudents = 0;
+    const nowIso = clientResetState?.attendanceResetAt || clientResetState?.studentsResetAt || new Date().toISOString();
 
-    if (mode === 'all' || mode === 'attendance') {
+    const prevReset = data.config.resetState || {};
+    const prevIgnoredAtt = new Set(prevReset.ignoredAttendanceKeys || []);
+    const prevIgnoredStu = new Set((prevReset.ignoredStudentKeys || []).map(k => k.toLowerCase()));
+
+    (clientResetState?.ignoredAttendanceKeys || []).forEach(k => prevIgnoredAtt.add(k));
+    (clientResetState?.ignoredStudentKeys || []).forEach(k => prevIgnoredStu.add(String(k).toLowerCase()));
+
+    const removedStudents: User[] = [];
+
+    if (mode === 'all' || mode === 'attendance' || mode === 'students') {
       deletedAttendance = data.attendance.length;
+      data.attendance.forEach(r => {
+        if (r.id) prevIgnoredAtt.add(r.id);
+        if (r.tanggal && r.nis) prevIgnoredAtt.add(`${r.tanggal}::${String(r.nis).trim().toLowerCase()}`);
+      });
       data.attendance = [];
+      prevReset.attendanceResetAt = nowIso;
+      prevReset.ignoredAttendanceKeys = Array.from(prevIgnoredAtt).slice(-500);
     }
 
     if (mode === 'all' || mode === 'students') {
       const admins = data.users.filter(u => u.role === 'admin' || u.username.toLowerCase() === 'admin123');
-      deletedStudents = data.users.length - admins.length;
+      const studentsToRemove = data.users.filter(u => u.role !== 'admin' && u.username.toLowerCase() !== 'admin123');
+      deletedStudents = studentsToRemove.length;
+      studentsToRemove.forEach(s => {
+        removedStudents.push(s);
+        if (s.nis) prevIgnoredStu.add(String(s.nis).trim().toLowerCase());
+        if (s.username) prevIgnoredStu.add(String(s.username).trim().toLowerCase());
+      });
       data.users = admins;
+      prevReset.studentsResetAt = nowIso;
+      prevReset.ignoredStudentKeys = Array.from(prevIgnoredStu).slice(-500);
     }
 
+    data.config.resetState = prevReset;
+    this.lastHydratedAt = Date.now();
     this.saveToDisk();
-    return { deletedAttendance, deletedStudents };
+    return { deletedAttendance, deletedStudents, resetState: prevReset, removedStudents };
+  }
+
+  public async resetAttendanceAsync(
+    mode: 'all' | 'attendance' | 'students' = 'all',
+    overrideScriptUrl?: string,
+    clientResetState?: Partial<DataResetState>
+  ) {
+    const res = this.resetAttendance(mode, clientResetState);
+    const scriptUrl = this.resolveAndCacheScriptUrl(overrideScriptUrl);
+    let sheetResetSynced = false;
+
+    if (scriptUrl) {
+      try {
+        const testUrl = scriptUrl.includes('?') ? `${scriptUrl}&action=TEST&_t=${Date.now()}` : `${scriptUrl}?action=TEST&_t=${Date.now()}`;
+        const testRes = await this.fetchWithTimeout(testUrl, { redirect: 'follow' }, 5000);
+        const testParsed = await this.parseGasResponse(testRes);
+        if (testParsed.ok && testParsed.json?.supportsReset === true) {
+          const resetRes = await this.fetchWithTimeout(scriptUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify({ action: 'RESET_DATA', mode }),
+            redirect: 'follow',
+          }, 6500);
+          const resetParsed = await this.parseGasResponse(resetRes);
+          sheetResetSynced = resetParsed.ok;
+        } else if ((mode === 'all' || mode === 'students') && res.removedStudents.length > 0 && res.removedStudents.length <= 20) {
+          // Old Code.gs fallback: delete student rows individually using existing DELETE_STUDENT action
+          for (const st of res.removedStudents) {
+            await this.deleteStudentFromGAS(scriptUrl, st.nis, st.username).catch(() => {});
+          }
+        }
+      } catch (err) {
+        console.warn('[ServerStore] GAS reset cleanup warning:', err);
+      }
+    }
+
+    return {
+      deletedAttendance: res.deletedAttendance,
+      deletedStudents: res.deletedStudents,
+      resetState: res.resetState,
+      sheetResetSynced,
+    };
   }
 
   // --- USERS / STUDENTS METHODS ---
@@ -356,6 +534,7 @@ class ServerStore {
     overrideScriptUrl?: string
   ): Promise<{ user: User; sheetSynced: boolean; sheetError?: string }> {
     const data = this.load();
+    this.unignoreStudentKeys(user.nis, user.username);
     const existingIdx = data.users.findIndex(
       u =>
         u.id === user.id ||
@@ -413,6 +592,7 @@ class ServerStore {
     const scriptUrl = this.resolveAndCacheScriptUrl(overrideScriptUrl);
 
     for (const nu of users) {
+      this.unignoreStudentKeys(nu.nis, nu.username);
       const existingIdx = data.users.findIndex(
         u =>
           (u.nis && nu.nis && u.nis.toLowerCase() === nu.nis.toLowerCase()) ||
@@ -497,7 +677,20 @@ class ServerStore {
       data.config.reportConfig = { ...data.config.reportConfig, ...partialConfig.reportConfig };
     }
     if (partialConfig.tahunAjaran) {
-      data.config.tahunAjaran = { ...data.config.tahunAjaran, ...partialConfig.tahunAjaran };
+      const incoming = partialConfig.tahunAjaran;
+      const existing = data.config.tahunAjaran;
+      const inMs = incoming.updatedAt ? Date.parse(incoming.updatedAt) : 0;
+      const exMs = existing?.updatedAt ? Date.parse(existing.updatedAt) : 0;
+      if (!existing || !exMs || !inMs || inMs >= exMs) {
+        data.config.tahunAjaran = {
+          ...existing,
+          ...incoming,
+          updatedAt: incoming.updatedAt || new Date().toISOString(),
+        };
+      }
+    }
+    if (partialConfig.resetState !== undefined) {
+      data.config.resetState = partialConfig.resetState;
     }
     this.saveToDisk();
     return data.config;
@@ -571,6 +764,8 @@ class ServerStore {
   }
 
   public async forwardStudentToGAS(scriptUrl: string, student: User): Promise<{ success: boolean; message: string }> {
+    const data = this.load();
+    const activeTahun = data.config.tahunAjaran?.tahunAktif || '2025/2026';
     const payload = {
       action: 'REGISTER_STUDENT',
       nis: student.nis,
@@ -583,7 +778,7 @@ class ServerStore {
       noHp: student.noHp || '-',
       tempatPkl: student.tempatPkl || '-',
       namaPembimbing: student.namaPembimbing || '-',
-      tahunAjaran: student.tahunAjaran || '2025/2026',
+      tahunAjaran: student.tahunAjaran || activeTahun,
       password: student.password || 'siswa123',
     };
 
@@ -630,6 +825,7 @@ class ServerStore {
     if (json && json.status === 'success' && Array.isArray(json.data)) {
       let updated = 0;
       const defaultTahun = data.config.tahunAjaran?.tahunAktif || '2025/2026';
+      const resetState = data.config.resetState;
 
       json.data.forEach((st: any) => {
         const cleanNis = String(st.nis || '').trim();
@@ -637,6 +833,9 @@ class ServerStore {
         if (!cleanNis || !cleanNama) return;
 
         const cleanUsername = String(st.username || cleanNis).trim().toLowerCase().replace(/\s+/g, '');
+        if (this.isPreResetStudent(cleanNis, cleanUsername, String(st.createdAt || ''), resetState)) {
+          return;
+        }
         const existingIdx = data.users.findIndex(
           u =>
             u.role === 'siswa' &&
@@ -716,10 +915,14 @@ class ServerStore {
     const json = parsed.json;
     if (json && json.status === 'success' && Array.isArray(json.data)) {
       let updated = 0;
+      const resetState = data.config.resetState;
       json.data.forEach((item: any) => {
         if (!item.tanggal || !item.nis) return;
         const itemNis = String(item.nis).trim();
         const id = item.id || `ABS-${String(item.tanggal).replace(/-/g, '')}-${itemNis}`;
+        if (this.isPreResetAttendance(id, String(item.tanggal), itemNis, String(item.syncedAt || ''), resetState)) {
+          return;
+        }
         const existingIdx = data.attendance.findIndex(
           r => r.id === id || (r.tanggal === item.tanggal && String(r.nis).trim().toLowerCase() === itemNis.toLowerCase())
         );

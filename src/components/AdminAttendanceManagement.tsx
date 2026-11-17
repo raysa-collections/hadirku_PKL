@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { AttendanceRecord, AttendanceStatus } from '../types/pkl';
+import { AttendanceRecord, AttendanceStatus, TahunAjaranConfig } from '../types/pkl';
 import { StorageService, formatIndonesianDate, getJakartaDate, getAttendanceSplitStatus } from '../services/storage';
 import { 
   Search, 
@@ -31,7 +31,7 @@ export const AdminAttendanceManagement: React.FC = () => {
   const [showEditModal, setShowEditModal] = useState(false);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
 
-  const tahunConfig = StorageService.getTahunAjaranConfig();
+  const [tahunConfig, setTahunConfig] = useState<TahunAjaranConfig>(() => StorageService.getTahunAjaranConfig());
   const [previewPhotoModal, setPreviewPhotoModal] = useState<{
     url: string;
     title: string;
@@ -45,6 +45,7 @@ export const AdminAttendanceManagement: React.FC = () => {
 
   const reloadData = () => {
     setRecords(StorageService.getAttendance());
+    setTahunConfig(StorageService.getTahunAjaranConfig());
   };
 
   const showToast = (msg: string) => {

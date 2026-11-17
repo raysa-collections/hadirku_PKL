@@ -5,7 +5,8 @@ import {
   PaperSize, 
   PaperOrientation, 
   PaperMargin, 
-  TableFontSize 
+  TableFontSize,
+  TahunAjaranConfig
 } from '../types/pkl';
 import { StorageService, formatIndonesianDate, getJakartaDate, DEFAULT_REPORT_CONFIG, getAttendanceSplitStatus } from '../services/storage';
 import * as XLSX from 'xlsx';
@@ -180,6 +181,14 @@ export const AdminReports: React.FC = () => {
 
   useEffect(() => {
     let active = true;
+    const onSyncUpdate = () => {
+      if (!active) return;
+      setAllRecords(StorageService.getAttendance());
+      setAllStudents(StorageService.getUsers().filter(u => u.role === 'siswa'));
+      setTahunConfig(StorageService.getTahunAjaranConfig());
+    };
+    window.addEventListener('pkl-sync-updated', onSyncUpdate);
+
     const loadLatestForReport = async () => {
       try {
         await StorageService.ensureConfigSynced();
@@ -194,13 +203,15 @@ export const AdminReports: React.FC = () => {
           ]);
         }
         if (active) {
-          setAllRecords(StorageService.getAttendance());
-          setAllStudents(StorageService.getUsers().filter(u => u.role === 'siswa'));
+          onSyncUpdate();
         }
       } catch {}
     };
     loadLatestForReport();
-    return () => { active = false; };
+    return () => {
+      active = false;
+      window.removeEventListener('pkl-sync-updated', onSyncUpdate);
+    };
   }, []);
 
   const getOffsetDate = (baseDateStr: string, offsetDays: number): string => {
@@ -227,7 +238,7 @@ export const AdminReports: React.FC = () => {
   const [selectedStudentNis, setSelectedStudentNis] = useState<string>('all');
   const [selectedSchool, setSelectedSchool] = useState<string>('all');
 
-  const tahunConfig = StorageService.getTahunAjaranConfig();
+  const [tahunConfig, setTahunConfig] = useState<TahunAjaranConfig>(() => StorageService.getTahunAjaranConfig());
 
   const getMonthName = (m: string) => {
     const monthMap: Record<string, string> = {
@@ -884,6 +895,8 @@ export const AdminReports: React.FC = () => {
                   onChange={(e) => setSelectedYear(e.target.value)}
                   className="bg-white border border-slate-300 rounded-xl px-2.5 py-1.5 text-slate-900 font-mono focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20"
                 >
+                  <option value="all" className="bg-white text-slate-900">Semua Tahun</option>
+                  <option value="2027" className="bg-white text-slate-900">2027</option>
                   <option value="2026" className="bg-white text-slate-900">2026</option>
                   <option value="2025" className="bg-white text-slate-900">2025</option>
                 </select>
@@ -1133,7 +1146,7 @@ export const AdminReports: React.FC = () => {
                       : reportType === 'bulanan'
                       ? `BULANAN (${selectedMonth === 'all' ? 'Semua Bulan' : getMonthName(selectedMonth)} ${selectedYear === 'all' ? '' : selectedYear})`
                       : reportType.toUpperCase()}{' '}
-                    ({selectedTahun === 'all' ? 'Semua Tahun Ajaran' : `TA ${selectedTahun}`}) • Format Kertas: {paperSize} {paperOrientation.toUpperCase()}
+                    ({selectedTahun === 'all' ? `Semua Periode • TA Aktif: ${tahunConfig.tahunAktif}` : `TA ${selectedTahun}`}) • Format Kertas: {paperSize} {paperOrientation.toUpperCase()}
                   </p>
                 </div>
               </div>

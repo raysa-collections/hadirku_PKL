@@ -156,6 +156,8 @@ function doGet(e) {
   if (action === "TEST" || action === "PING") {
     return createJsonResponse({
       status: "success",
+      version: "2.1",
+      supportsReset: true,
       message: "Koneksi Google Apps Script Web App Aktif & Terhubung Sempurna!",
       timestamp: new Date().toISOString()
     });
@@ -205,8 +207,67 @@ function doPost(e) {
     if (action === "TEST" || action === "PING") {
       return createJsonResponse({
         status: "success",
+        version: "2.1",
+        supportsReset: true,
         message: "Koneksi Google Apps Script Web App Aktif & Terhubung Sempurna!",
         timestamp: new Date().toISOString()
+      });
+    }
+
+    // --- UPDATE KONFIGURASI TAHUN AJARAN ---
+    if (action === "SET_TAHUN_AJARAN") {
+      const ss = SpreadsheetApp.getActiveSpreadsheet();
+      let sheetConfig = ss.getSheetByName(SHEET_CONFIG);
+      if (!sheetConfig) {
+        setupDatabase();
+        sheetConfig = ss.getSheetByName(SHEET_CONFIG);
+      }
+      const tahunAktif = String(data.tahunAktif || "").trim();
+      if (sheetConfig && tahunAktif) {
+        const lastRowCfg = sheetConfig.getLastRow();
+        let foundRow = -1;
+        if (lastRowCfg > 1) {
+          const keys = sheetConfig.getRange(2, 1, lastRowCfg - 1, 1).getValues();
+          for (let i = 0; i < keys.length; i++) {
+            if (String(keys[i][0] || "").trim() === "TAHUN_AJARAN_AKTIF") {
+              foundRow = i + 2;
+              break;
+            }
+          }
+        }
+        if (foundRow !== -1) {
+          sheetConfig.getRange(foundRow, 2).setValue(tahunAktif);
+        } else {
+          sheetConfig.appendRow(["TAHUN_AJARAN_AKTIF", tahunAktif, "Tahun Ajaran PKL Aktif"]);
+        }
+      }
+      return createJsonResponse({
+        status: "success",
+        tahunAktif: tahunAktif,
+        message: "Tahun ajaran aktif diperbarui di Konfigurasi Spreadsheet."
+      });
+    }
+
+    // --- RESET DATA SISWA & ABSENSI (KOSONGKAN BARIS DATA, PERTAHANKAN HEADER) ---
+    if (action === "RESET_DATA") {
+      const ss = SpreadsheetApp.getActiveSpreadsheet();
+      const mode = String(data.mode || "all");
+      if (mode === "all" || mode === "attendance" || mode === "students") {
+        const sheetAbsensi = ss.getSheetByName(SHEET_ABSENSI);
+        if (sheetAbsensi && sheetAbsensi.getLastRow() > 1) {
+          sheetAbsensi.deleteRows(2, sheetAbsensi.getLastRow() - 1);
+        }
+      }
+      if (mode === "all" || mode === "students") {
+        const sheetSiswa = ss.getSheetByName(SHEET_SISWA);
+        if (sheetSiswa && sheetSiswa.getLastRow() > 1) {
+          sheetSiswa.deleteRows(2, sheetSiswa.getLastRow() - 1);
+        }
+      }
+      return createJsonResponse({
+        status: "success",
+        mode: mode,
+        message: "Data di Google Spreadsheet berhasil dikosongkan."
       });
     }
 

@@ -3,6 +3,7 @@ import { User, AttendanceRecord, AppThemeConfig, ReportPrintConfig, TahunAjaranC
 export const DEFAULT_TAHUN_AJARAN_CONFIG: TahunAjaranConfig = {
   tahunAktif: '2025/2026',
   daftarTahun: ['2024/2025', '2025/2026', '2026/2027', '2027/2028'],
+  updatedAt: '2025-01-01T00:00:00.000Z',
 };
 
 export const DEFAULT_THEME_CONFIG: AppThemeConfig = {

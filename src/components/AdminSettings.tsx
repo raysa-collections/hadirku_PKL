@@ -45,25 +45,59 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ onThemeUpdated }) 
   const [tahunConfig, setTahunConfig] = useState<TahunAjaranConfig>(() => StorageService.getTahunAjaranConfig());
   const [newTahunInput, setNewTahunInput] = useState('');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isRestoring, setIsRestoring] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
   const [showVercelModal, setShowVercelModal] = useState(false);
   const [dataRevision, setDataRevision] = useState(0);
-  
-  // Reset Modal state
+
+  // Reset & Auto-Backup Modal states
   const [showResetModal, setShowResetModal] = useState<'all' | 'attendance' | 'students' | null>(null);
   const [confirmInputText, setConfirmInputText] = useState('');
+  const [resetNextTahun, setResetNextTahun] = useState<string>(() => StorageService.getActiveTahunAjaran());
+  const [resetModalError, setResetModalError] = useState<string | null>(null);
+  const [showAutoBackupModal, setShowAutoBackupModal] = useState(false);
+  const [autoBackupNextTahun, setAutoBackupNextTahun] = useState('');
+  const [confirmResetTheme, setConfirmResetTheme] = useState(false);
+  const [pendingDeleteTahun, setPendingDeleteTahun] = useState<string | null>(null);
 
   const jsonFileInputRef = useRef<HTMLInputElement>(null);
   const logoFileInputRef = useRef<HTMLInputElement>(null);
 
+  React.useEffect(() => {
+    const syncState = () => {
+      setTahunConfig(StorageService.getTahunAjaranConfig());
+      setTheme(StorageService.getAppThemeConfig());
+      setDataRevision(prev => prev + 1);
+    };
+    window.addEventListener('pkl-sync-updated', syncState);
+    return () => window.removeEventListener('pkl-sync-updated', syncState);
+  }, []);
+
   const showToast = (msg: string) => {
+    setErrorMessage(null);
     setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 3500);
+    setTimeout(() => setToastMessage(null), 5000);
+  };
+
+  const showError = (msg: string) => {
+    setToastMessage(null);
+    setErrorMessage(msg);
+    setTimeout(() => setErrorMessage(null), 5000);
+  };
+
+  const computeSuggestedNextTahun = (current: string): string => {
+    const m = /^(\d{4})\/(\d{4})$/.exec((current || '').trim());
+    if (m) {
+      return `${Number(m[1]) + 1}/${Number(m[2]) + 1}`;
+    }
+    return '2026/2027';
   };
 
   // Reload Academic Year Config
   const reloadTahunConfig = () => {
     setTahunConfig(StorageService.getTahunAjaranConfig());
+    setDataRevision(prev => prev + 1);
   };
 
   // Save Theme configuration
@@ -71,18 +105,21 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ onThemeUpdated }) 
     if (e) e.preventDefault();
     StorageService.saveAppThemeConfig(theme);
     onThemeUpdated(theme);
-    confetti({ particleCount: 40, spread: 60 });
-    showToast('Pengaturan judul, logo, dan gaya header border berhasil disimpan!');
+    try { confetti({ particleCount: 40, spread: 60 }); } catch {}
+    const msg = 'Pengaturan judul, logo, dan gaya header border berhasil disimpan.';
+    showToast(msg);
+    StorageService.emitChangeNotification('Perubahan Tampilan Disimpan', msg, 'success');
   };
 
   // Reset Theme to Default
   const handleResetTheme = () => {
-    if (confirm('Kembalikan pengaturan tampilan judul, logo, dan border header ke bawaan standar?')) {
-      setTheme(DEFAULT_THEME_CONFIG);
-      StorageService.saveAppThemeConfig(DEFAULT_THEME_CONFIG);
-      onThemeUpdated(DEFAULT_THEME_CONFIG);
-      showToast('Tampilan berhasil dikembalikan ke default.');
-    }
+    setConfirmResetTheme(false);
+    setTheme(DEFAULT_THEME_CONFIG);
+    StorageService.saveAppThemeConfig(DEFAULT_THEME_CONFIG);
+    onThemeUpdated(DEFAULT_THEME_CONFIG);
+    const msg = 'Tampilan judul, logo, dan header dikembalikan ke pengaturan default.';
+    showToast(msg);
+    StorageService.emitChangeNotification('Tampilan Direset ke Default', msg, 'info');
   };
 
   // Handle Custom Logo Upload with Automatic Canvas Downscaling
@@ -91,7 +128,7 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ onThemeUpdated }) 
     if (!file) return;
 
     if (!file.type.startsWith('image/')) {
-      alert('Mohon pilih file gambar (.png, .jpg, .svg, .webp).');
+      showError('Mohon pilih file gambar (.png, .jpg, .svg, .webp).');
       return;
     }
 
@@ -104,9 +141,11 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ onThemeUpdated }) 
       setTheme(updated);
       StorageService.saveAppThemeConfig(updated);
       onThemeUpdated(updated);
-      showToast('Logo kustom berhasil diunggah & dioptimalkan!');
+      const msg = 'Logo kustom berhasil diunggah & dioptimalkan!';
+      showToast(msg);
+      StorageService.emitChangeNotification('Logo Aplikasi Diperbarui', msg, 'success');
     } catch (err: any) {
-      alert(err.message || 'Gagal memproses file logo.');
+      showError(err.message || 'Gagal memproses file logo.');
     } finally {
       if (logoFileInputRef.current) logoFileInputRef.current.value = '';
     }
@@ -120,7 +159,9 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ onThemeUpdated }) 
     setTheme(updated);
     StorageService.saveAppThemeConfig(updated);
     onThemeUpdated(updated);
-    showToast('Logo kustom dihapus, menggunakan preset ikon.');
+    const msg = 'Logo kustom dihapus, menggunakan preset ikon standar.';
+    showToast(msg);
+    StorageService.emitChangeNotification('Logo Kustom Dihapus', msg, 'info');
   };
 
   // =========================================================================
@@ -128,10 +169,13 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ onThemeUpdated }) 
   // =========================================================================
 
   const handleSelectActiveTahun = (tahun: string) => {
+    const prevTahun = tahunConfig.tahunAktif;
     StorageService.setActiveTahunAjaran(tahun);
     reloadTahunConfig();
-    confetti({ particleCount: 30, spread: 50 });
-    showToast(`Tahun Ajaran Aktif berhasil diubah ke: ${tahun}`);
+    try { confetti({ particleCount: 30, spread: 50 }); } catch {}
+    const msg = `Tahun Ajaran Aktif berhasil diubah dari ${prevTahun} menjadi ${tahun} dan disinkronkan ke seluruh sistem.`;
+    showToast(msg);
+    StorageService.emitChangeNotification(`Perubahan Tahun Ajaran: ${tahun}`, msg, 'success');
   };
 
   const handleAddTahunAjaran = (e: React.FormEvent) => {
@@ -141,28 +185,29 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ onThemeUpdated }) 
 
     // Validate format like YYYY/YYYY (e.g. 2026/2027)
     if (!/^\d{4}\/\d{4}$/.test(clean)) {
-      alert('Format Tahun Ajaran harus berformat: TTTT/TTTT (Contoh: 2026/2027)');
+      showError('Format Tahun Ajaran harus berformat: TTTT/TTTT (Contoh: 2026/2027)');
       return;
     }
 
     const added = StorageService.addTahunAjaran(clean);
-    if (added) {
-      StorageService.setActiveTahunAjaran(clean);
-      setNewTahunInput('');
-      reloadTahunConfig();
-      confetti({ particleCount: 40, spread: 60 });
-      showToast(`Tahun Ajaran "${clean}" berhasil ditambahkan dan dijadikan Aktif.`);
-    } else {
-      alert(`Tahun Ajaran "${clean}" sudah ada dalam daftar.`);
-    }
+    StorageService.setActiveTahunAjaran(clean);
+    setNewTahunInput('');
+    reloadTahunConfig();
+    try { confetti({ particleCount: 40, spread: 60 }); } catch {}
+    const msg = added
+      ? `Tahun Ajaran "${clean}" berhasil ditambahkan, diaktifkan di seluruh aplikasi, dan disimpan ke server.`
+      : `Tahun Ajaran "${clean}" sudah ada dan langsung diaktifkan sebagai periode berjalan.`;
+    showToast(msg);
+    StorageService.emitChangeNotification(`Tahun Ajaran ${clean} Aktif`, msg, 'success');
   };
 
   const handleDeleteTahunAjaran = (tahun: string) => {
-    if (confirm(`Apakah Anda yakin ingin menghapus Tahun Ajaran "${tahun}" dari opsi daftar?`)) {
-      StorageService.deleteTahunAjaran(tahun);
-      reloadTahunConfig();
-      showToast(`Tahun Ajaran "${tahun}" berhasil dihapus.`);
-    }
+    setPendingDeleteTahun(null);
+    StorageService.deleteTahunAjaran(tahun);
+    reloadTahunConfig();
+    const msg = `Tahun Ajaran "${tahun}" telah dihapus dari daftar periode.`;
+    showToast(msg);
+    StorageService.emitChangeNotification('Tahun Ajaran Dihapus', msg, 'info');
   };
 
   // =========================================================================
@@ -251,19 +296,19 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ onThemeUpdated }) 
 
         const result = StorageService.importFullBackup(text);
         if (result.success) {
-          confetti({ particleCount: 60, spread: 80 });
+          try { confetti({ particleCount: 60, spread: 80 }); } catch {}
           showToast(result.message);
+          StorageService.emitChangeNotification('Restore Database Berhasil', result.message, 'success');
           // Reload theme & tahun
           const newTheme = StorageService.getAppThemeConfig();
           setTheme(newTheme);
           onThemeUpdated(newTheme);
           reloadTahunConfig();
-          setDataRevision(prev => prev + 1);
         } else {
-          alert('Gagal restore: ' + result.message);
+          showError('Gagal restore: ' + result.message);
         }
       } catch (err: any) {
-        alert('Format file JSON tidak dapat diproses: ' + (err?.message || ''));
+        showError('Format file JSON tidak dapat diproses: ' + (err?.message || ''));
       } finally {
         setIsRestoring(false);
         if (jsonFileInputRef.current) jsonFileInputRef.current.value = '';
@@ -276,38 +321,82 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ onThemeUpdated }) 
   // RESET DATA METHODS
   // =========================================================================
 
-  const handleOpenResetModal = (mode: 'all' | 'attendance' | 'students') => {
+  const handleOpenResetModal = (mode: 'all' | 'attendance' | 'students', suggestedTahun?: string) => {
     setShowResetModal(mode);
     setConfirmInputText('');
+    setResetModalError(null);
+    setResetNextTahun(suggestedTahun || StorageService.getActiveTahunAjaran());
   };
 
   const handleExecuteReset = async () => {
-    if (!showResetModal) return;
+    if (!showResetModal || isResetting) return;
 
     if (showResetModal === 'all' && confirmInputText.trim().toUpperCase() !== 'RESET') {
-      alert('Mohon ketik kata "RESET" dengan huruf kapital untuk mengonfirmasi penghapusan total.');
+      setResetModalError('Mohon ketik kata "RESET" dengan huruf kapital untuk mengonfirmasi penghapusan total.');
       return;
     }
 
-    const res = await StorageService.resetTotalData(showResetModal);
-    setDataRevision(prev => prev + 1);
-    confetti({ particleCount: 40, spread: 60 });
-    showToast(res.message);
-    setShowResetModal(null);
-    setConfirmInputText('');
+    const chosenTahun = resetNextTahun.trim();
+    if (showResetModal === 'all' && chosenTahun && !/^\d{4}\/\d{4}$/.test(chosenTahun)) {
+      setResetModalError('Format Tahun Ajaran baru harus TTTT/TTTT (Contoh: 2026/2027).');
+      return;
+    }
+
+    setResetModalError(null);
+    setIsResetting(true);
+    try {
+      if (showResetModal === 'all' && chosenTahun) {
+        StorageService.setActiveTahunAjaran(chosenTahun);
+      }
+
+      const activeMode = showResetModal;
+      const res = await StorageService.resetTotalData(activeMode);
+      reloadTahunConfig();
+      try { confetti({ particleCount: 40, spread: 60 }); } catch {}
+      showToast(res.message);
+      StorageService.emitChangeNotification(
+        activeMode === 'all'
+          ? 'Reset Total & Pembaruan Periode Selesai'
+          : activeMode === 'attendance'
+          ? 'Reset Data Presensi Selesai'
+          : 'Reset Data Siswa Selesai',
+        res.message,
+        'warning'
+      );
+      setShowResetModal(null);
+      setConfirmInputText('');
+    } finally {
+      setIsResetting(false);
+    }
   };
 
   // Auto Backup and prepare empty state for new academic period
   const handleAutoBackupAndPrepareNewPeriod = () => {
-    if (confirm('Langkah ini akan mendownload Backup JSON & Master Excel secara otomatis, kemudian mengosongkan data peserta untuk tahun ajaran baru. Lanjutkan?')) {
-      handleExportJsonBackup();
-      setTimeout(() => {
-        handleExportExcelMaster();
-        setTimeout(() => {
-          handleOpenResetModal('all');
-        }, 1000);
-      }, 800);
+    setAutoBackupNextTahun(computeSuggestedNextTahun(tahunConfig.tahunAktif));
+    setShowAutoBackupModal(true);
+  };
+
+  const handleConfirmAutoBackup = () => {
+    const cleanNext = autoBackupNextTahun.trim();
+    if (cleanNext && !/^\d{4}\/\d{4}$/.test(cleanNext)) {
+      showError('Format Tahun Ajaran baru harus TTTT/TTTT (Contoh: 2026/2027)');
+      return;
     }
+
+    handleExportJsonBackup();
+    setTimeout(() => {
+      handleExportExcelMaster();
+    }, 350);
+
+    setShowAutoBackupModal(false);
+    StorageService.emitChangeNotification(
+      'Backup JSON & Excel Diunduh',
+      `Cadangan data periode ${tahunConfig.tahunAktif} telah diunduh. Konfirmasikan Reset Total untuk memulai Tahun Ajaran ${cleanNext || tahunConfig.tahunAktif}.`,
+      'info'
+    );
+    setTimeout(() => {
+      handleOpenResetModal('all', cleanNext || tahunConfig.tahunAktif);
+    }, 600);
   };
 
   // Render Preset Icon Component
@@ -327,13 +416,57 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ onThemeUpdated }) 
   const currentAttendanceCount = StorageService.getAttendance().length;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" data-revision={dataRevision}>
       
       {/* Toast Alert */}
       {toastMessage && (
-        <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-medium flex items-center gap-2 shadow-sm">
-          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-          <span>{toastMessage}</span>
+        <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-medium flex items-center justify-between gap-2 shadow-sm">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span>{toastMessage}</span>
+          </div>
+          <button type="button" onClick={() => setToastMessage(null)} className="text-emerald-700 hover:text-emerald-950 font-bold cursor-pointer">
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
+      {/* Error Alert */}
+      {errorMessage && (
+        <div className="p-3.5 rounded-xl bg-red-50 border border-red-200 text-red-800 text-xs font-medium flex items-center justify-between gap-2 shadow-sm">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+            <span>{errorMessage}</span>
+          </div>
+          <button type="button" onClick={() => setErrorMessage(null)} className="text-red-700 hover:text-red-950 font-bold cursor-pointer">
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
+      {/* Inline Theme Reset Confirmation */}
+      {confirmResetTheme && (
+        <div className="p-4 rounded-2xl bg-amber-50 border border-amber-300 text-amber-950 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+            <span className="font-semibold">Kembalikan pengaturan tampilan judul, logo, dan border header ke bawaan standar?</span>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => setConfirmResetTheme(false)}
+              className="px-3 py-1.5 rounded-xl bg-white border border-slate-300 text-slate-700 font-semibold cursor-pointer"
+            >
+              Batal
+            </button>
+            <button
+              type="button"
+              onClick={handleResetTheme}
+              className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold cursor-pointer"
+            >
+              Ya, Kembalikan Default
+            </button>
+          </div>
         </div>
       )}
 
@@ -361,7 +494,7 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ onThemeUpdated }) 
           </button>
 
           <button
-            onClick={handleResetTheme}
+            onClick={() => setConfirmResetTheme(true)}
             className="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-slate-900 text-xs font-semibold flex items-center gap-1.5 transition border border-slate-200 cursor-pointer"
           >
             <RotateCcw className="w-3.5 h-3.5 text-slate-500" />
@@ -427,7 +560,7 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ onThemeUpdated }) 
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleDeleteTahunAjaran(t);
+                          setPendingDeleteTahun(t);
                         }}
                         title={`Hapus tahun ajaran ${t}`}
                         className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-white hover:bg-red-600 text-slate-500 hover:text-white flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition shadow-sm border border-slate-300 cursor-pointer"
@@ -439,6 +572,30 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ onThemeUpdated }) 
                 );
               })}
             </div>
+
+            {pendingDeleteTahun && (
+              <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-xs flex items-center justify-between gap-2">
+                <span className="text-red-900 font-medium">
+                  Hapus Tahun Ajaran <strong className="font-mono">{pendingDeleteTahun}</strong> dari daftar opsi?
+                </span>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setPendingDeleteTahun(null)}
+                    className="px-2.5 py-1 rounded-lg bg-white border border-slate-300 text-slate-700 font-semibold cursor-pointer"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteTahunAjaran(pendingDeleteTahun)}
+                    className="px-2.5 py-1 rounded-lg bg-red-600 hover:bg-red-700 text-white font-bold cursor-pointer"
+                  >
+                    Hapus
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Form Tambah Tahun Ajaran Baru */}
             <form onSubmit={handleAddTahunAjaran} className="flex items-center gap-2 pt-1">
@@ -896,17 +1053,42 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ onThemeUpdated }) 
             </div>
 
             {showResetModal === 'all' && (
-              <div className="space-y-1.5 pt-1">
-                <label className="block text-xs font-bold text-slate-700">
-                  Ketik kata <span className="font-mono font-black text-red-600">RESET</span> untuk mengonfirmasi:
-                </label>
-                <input
-                  type="text"
-                  value={confirmInputText}
-                  onChange={(e) => setConfirmInputText(e.target.value)}
-                  placeholder="Ketik RESET"
-                  className="w-full bg-white border border-red-300 rounded-xl px-3 py-2 text-slate-900 font-mono text-center text-sm uppercase focus:outline-none focus:border-red-600 focus:ring-2 focus:ring-red-600/20"
-                />
+              <div className="space-y-3 pt-1">
+                <div className="space-y-1">
+                  <label className="block text-xs font-bold text-slate-700">
+                    Tahun Ajaran Aktif Setelah Reset:
+                  </label>
+                  <input
+                    type="text"
+                    value={resetNextTahun}
+                    onChange={(e) => setResetNextTahun(e.target.value)}
+                    placeholder="Contoh: 2026/2027"
+                    className="w-full bg-white border border-blue-300 rounded-xl px-3 py-2 text-slate-900 font-mono text-center text-xs font-bold focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20"
+                  />
+                  <p className="text-[10px] text-slate-500">
+                    Tahun ajaran ini akan otomatis diaktifkan ke seluruh aplikasi dan tidak akan kembali ke periode sebelumnya.
+                  </p>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-bold text-slate-700">
+                    Ketik kata <span className="font-mono font-black text-red-600">RESET</span> untuk mengonfirmasi:
+                  </label>
+                  <input
+                    type="text"
+                    value={confirmInputText}
+                    onChange={(e) => setConfirmInputText(e.target.value)}
+                    placeholder="Ketik RESET"
+                    className="w-full bg-white border border-red-300 rounded-xl px-3 py-2 text-slate-900 font-mono text-center text-sm uppercase focus:outline-none focus:border-red-600 focus:ring-2 focus:ring-red-600/20"
+                  />
+                </div>
+              </div>
+            )}
+
+            {resetModalError && (
+              <div className="p-2.5 rounded-xl bg-red-50 border border-red-200 text-red-800 text-[11px] font-medium flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+                <span>{resetModalError}</span>
               </div>
             )}
 
@@ -914,25 +1096,80 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ onThemeUpdated }) 
               <button
                 type="button"
                 onClick={() => setShowResetModal(null)}
-                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-semibold text-xs cursor-pointer transition"
+                disabled={isResetting}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-semibold text-xs cursor-pointer transition disabled:opacity-50"
               >
                 Batal
               </button>
               <button
                 type="button"
                 onClick={handleExecuteReset}
-                disabled={showResetModal === 'all' && confirmInputText.trim().toUpperCase() !== 'RESET'}
-                className={`px-5 py-2 font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-sm cursor-pointer transition ${
-                  showResetModal === 'all' && confirmInputText.trim().toUpperCase() !== 'RESET'
+                disabled={isResetting || (showResetModal === 'all' && confirmInputText.trim().toUpperCase() !== 'RESET')}
+                className={`px-5 py-2 font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-sm transition ${
+                  isResetting || (showResetModal === 'all' && confirmInputText.trim().toUpperCase() !== 'RESET')
                     ? 'bg-slate-200 text-slate-400 cursor-not-allowed border border-slate-300'
-                    : 'bg-red-600 hover:bg-red-700 text-white'
+                    : 'bg-red-600 hover:bg-red-700 text-white cursor-pointer'
                 }`}
               >
                 <Trash2 className="w-4 h-4" />
-                <span>Ya, Kosongkan Data Sekarang</span>
+                <span>{isResetting ? 'Mengosongkan Data...' : 'Ya, Kosongkan Data Sekarang'}</span>
               </button>
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {/* Modal Auto-Backup & Transisi Periode Baru */}
+      {showAutoBackupModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md bg-white border border-amber-200 rounded-3xl p-6 shadow-2xl relative text-slate-900 space-y-4 overflow-hidden">
+            <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-amber-500 via-blue-600 to-emerald-600" />
+
+            <div className="flex items-center gap-3 border-b border-slate-200 pb-3 pt-1">
+              <div className="w-10 h-10 rounded-2xl bg-amber-50 border border-amber-200 text-amber-600 flex items-center justify-center shrink-0">
+                <RefreshCw className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">Transisi Periode Tahun Ajaran Baru</h3>
+                <p className="text-xs text-slate-600">Backup Otomatis (JSON & Excel) lalu Reset Data Kosong</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-700 leading-relaxed">
+              Sistem akan mengunduh <strong>Backup Database (.json)</strong> dan <strong>Master Excel (.xlsx)</strong> untuk periode <strong className="font-mono">{tahunConfig.tahunAktif}</strong>, lalu membuka konfirmasi pengosongan data peserta & presensi ke tahun ajaran baru.
+            </p>
+
+            <div className="space-y-1.5">
+              <label className="block text-xs font-bold text-slate-700">
+                Tahun Ajaran Baru yang Akan Diaktifkan:
+              </label>
+              <input
+                type="text"
+                value={autoBackupNextTahun}
+                onChange={(e) => setAutoBackupNextTahun(e.target.value)}
+                placeholder="Contoh: 2026/2027"
+                className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-slate-900 font-mono text-center text-sm font-bold focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20"
+              />
+            </div>
+
+            <div className="pt-2 flex items-center justify-end gap-2 border-t border-slate-200">
+              <button
+                type="button"
+                onClick={() => setShowAutoBackupModal(false)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-semibold text-xs cursor-pointer transition"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmAutoBackup}
+                className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-sm cursor-pointer transition"
+              >
+                <Download className="w-4 h-4" />
+                <span>Unduh Backup & Lanjut Reset</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

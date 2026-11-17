@@ -52,6 +52,14 @@ export interface AttendanceRecord {
 export interface TahunAjaranConfig {
   tahunAktif: string; // e.g. "2025/2026"
   daftarTahun: string[]; // e.g. ["2024/2025", "2025/2026", "2026/2027", "2027/2028"]
+  updatedAt?: string;
+}
+
+export interface DataResetState {
+  attendanceResetAt?: string;
+  studentsResetAt?: string;
+  ignoredStudentKeys?: string[];
+  ignoredAttendanceKeys?: string[];
 }
 
 export interface GoogleSheetConfig {

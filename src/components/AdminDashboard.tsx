@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { User, AttendanceRecord } from '../types/pkl';
+import { User, AttendanceRecord, TahunAjaranConfig } from '../types/pkl';
 import { StorageService, getJakartaDate, formatIndonesianDate, getAttendanceSplitStatus } from '../services/storage';
 import { 
   Users, 
@@ -38,6 +38,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigateTab, o
   const [copiedLink, setCopiedLink] = useState(false);
   const [showQrShare, setShowQrShare] = useState(false);
   const [diagnostics, setDiagnostics] = useState(() => StorageService.getServerDiagnostics());
+  const [tahunConfig, setTahunConfig] = useState<TahunAjaranConfig>(() => StorageService.getTahunAjaranConfig());
 
   const todayDate = getJakartaDate();
   const sheetConfig = StorageService.getGoogleSheetConfig();
@@ -84,6 +85,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigateTab, o
       setAllAttendance(StorageService.getAttendance());
       setAllUsers(StorageService.getUsers().filter(u => u.role === 'siswa'));
       setDiagnostics(StorageService.getServerDiagnostics());
+      setTahunConfig(StorageService.getTahunAjaranConfig());
     };
     window.addEventListener('pkl-sync-updated', onSyncUpdate);
 
@@ -148,6 +150,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigateTab, o
             <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-50 text-amber-800 border border-amber-200 flex items-center gap-1">
               <ShieldCheck className="w-3.5 h-3.5 text-amber-600 shrink-0" />
               <span>Administrator PKL TKR</span>
+            </span>
+            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 font-mono">
+              TA: {tahunConfig.tahunAktif}
             </span>
             <span className="text-xs text-slate-600 font-mono font-medium">
               {formatIndonesianDate(todayDate)}

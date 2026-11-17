@@ -1,4 +1,4 @@
-import { User, AttendanceRecord, GoogleSheetConfig, AppThemeConfig, ReportPrintConfig, TahunAjaranConfig } from '../types/pkl';
+import { User, AttendanceRecord, GoogleSheetConfig, AppThemeConfig, ReportPrintConfig, TahunAjaranConfig, DataResetState } from '../types/pkl';
 import {
   DEFAULT_TAHUN_AJARAN_CONFIG,
   DEFAULT_THEME_CONFIG,
@@ -22,8 +22,19 @@ const GOOGLE_SHEET_KEY = 'pkl_google_sheet_v1';
 const THEME_KEY = 'pkl_theme_config_v1';
 const REPORT_CONFIG_KEY = 'pkl_report_config_v1';
 const TAHUN_AJARAN_KEY = 'pkl_tahun_ajaran_v1';
+const RESET_STATE_KEY = 'pkl_reset_state_v1';
 const SYNC_QUEUE_KEY = 'pkl_sync_queue_v1';
 const GAS_COOKIE_NAME = 'pkl_gas_url';
+const TAHUN_COOKIE_NAME = 'pkl_tahun_ajaran';
+const RESET_COOKIE_NAME = 'pkl_reset_state';
+
+export interface ChangeNotificationDetail {
+  id: number;
+  title: string;
+  message: string;
+  type: 'success' | 'info' | 'warning';
+  timestamp: string;
+}
 
 interface SyncQueueItem {
   type: 'STUDENT' | 'ATTENDANCE';
@@ -112,6 +123,65 @@ function notifySyncUpdate() {
       window.dispatchEvent(new CustomEvent('pkl-sync-updated'));
     } catch {}
   }, 0);
+}
+
+function dispatchChangeNotification(
+  title: string,
+  message: string,
+  type: 'success' | 'info' | 'warning' = 'success'
+) {
+  if (typeof window === 'undefined') return;
+  setTimeout(() => {
+    try {
+      const detail: ChangeNotificationDetail = {
+        id: Date.now() + Math.floor(Math.random() * 1000),
+        title,
+        message,
+        type,
+        timestamp: new Date().toISOString(),
+      };
+      window.dispatchEvent(new CustomEvent('pkl-change-notification', { detail }));
+    } catch {}
+  }, 0);
+}
+
+function parseGasTimestampMs(raw?: string): number {
+  if (!raw) return 0;
+  const str = String(raw).replace(/\s*WIB\s*$/i, '').trim();
+  if (!str) return 0;
+  if (/^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}(:\d{2})?$/.test(str)) {
+    const iso = str.replace(/\s+/, 'T') + (str.length <= 16 ? ':00' : '') + '+07:00';
+    const ms = Date.parse(iso);
+    return Number.isNaN(ms) ? 0 : ms;
+  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+    const ms = Date.parse(`${str}T00:00:00+07:00`);
+    return Number.isNaN(ms) ? 0 : ms;
+  }
+  const ms = Date.parse(str);
+  return Number.isNaN(ms) ? 0 : ms;
+}
+
+function mergeResetStates(a: DataResetState = {}, b: DataResetState = {}): DataResetState {
+  const aStuMs = a.studentsResetAt ? Date.parse(a.studentsResetAt) : 0;
+  const bStuMs = b.studentsResetAt ? Date.parse(b.studentsResetAt) : 0;
+  const aAttMs = a.attendanceResetAt ? Date.parse(a.attendanceResetAt) : 0;
+  const bAttMs = b.attendanceResetAt ? Date.parse(b.attendanceResetAt) : 0;
+
+  const stuSet = new Set<string>();
+  (a.ignoredStudentKeys || []).forEach(k => stuSet.add(String(k).toLowerCase()));
+  (b.ignoredStudentKeys || []).forEach(k => stuSet.add(String(k).toLowerCase()));
+
+  const attSet = new Set<string>();
+  (a.ignoredAttendanceKeys || []).forEach(k => attSet.add(String(k)));
+  (b.ignoredAttendanceKeys || []).forEach(k => attSet.add(String(k)));
+
+  return {
+    studentsResetAt: bStuMs >= aStuMs ? (b.studentsResetAt || a.studentsResetAt) : a.studentsResetAt,
+    attendanceResetAt: bAttMs >= aAttMs ? (b.attendanceResetAt || a.attendanceResetAt) : a.attendanceResetAt,
+    ignoredStudentKeys: Array.from(stuSet).slice(-500),
+    ignoredAttendanceKeys: Array.from(attSet).slice(-500),
+  };
 }
 
 async function verifyGasRecordExists(
@@ -375,6 +445,10 @@ export const StorageService = {
       this.saveUsers(users);
     }
 
+    if (syncToRemote) {
+      this.unignoreStudentKeys(savedUser.nis, savedUser.username);
+    }
+
     if (syncToRemote && savedUser.role === 'siswa') {
       // Single clean sync path (posts to /api/students and falls back/forwards to Google Spreadsheet)
       this.syncStudentToGoogleSheet(savedUser).catch(err => console.warn('Sync student warning:', err));
@@ -391,6 +465,7 @@ export const StorageService = {
     message: string;
   }> {
     await this.ensureConfigSynced();
+    this.unignoreStudentKeys(user.nis, user.username);
     this.addUser(user, false);
 
     // Re-read saved user (with resolved password merge if NIS existed)
@@ -420,6 +495,9 @@ export const StorageService = {
     const syncedBatch: User[] = [];
 
     for (const nu of newUsers) {
+      if (syncToCloud) {
+        this.unignoreStudentKeys(nu.nis, nu.username);
+      }
       const existingIndex = users.findIndex(
         u =>
           (u.nis && nu.nis && u.nis.toLowerCase() === nu.nis.toLowerCase()) ||
@@ -592,6 +670,7 @@ export const StorageService = {
   },
 
   addOrUpdateAttendance(record: AttendanceRecord) {
+    this.unignoreAttendanceKeys(record.id, record.tanggal, record.nis);
     const records = this.getAttendance();
     const normNis = String(record.nis || '').trim().toLowerCase();
     const existingIndex = records.findIndex(
@@ -771,13 +850,14 @@ export const StorageService = {
             queuedAt: new Date().toISOString(),
           }));
 
+        const resetState = this.getResetState();
         const allItems = [...queue, ...extraPending];
         for (const item of allItems) {
           if (item.type === 'STUDENT') {
             const student = users.find(
               u => u.role === 'siswa' && (u.nis.toLowerCase() === item.key.toLowerCase() || u.id === item.key)
             );
-            if (!student) {
+            if (!student || this.isPreResetStudent(student.nis || '', student.username || '', student.createdAt || '', resetState)) {
               this.dequeuePendingSync('STUDENT', item.key);
               continue;
             }
@@ -788,7 +868,7 @@ export const StorageService = {
             }
           } else if (item.type === 'ATTENDANCE') {
             const rec = attendance.find(r => r.id === item.key);
-            if (!rec) {
+            if (!rec || this.isPreResetAttendance(rec.id, rec.tanggal, rec.nis, rec.syncedAt || '', resetState)) {
               this.dequeuePendingSync('ATTENDANCE', item.key);
               continue;
             }
@@ -906,7 +986,39 @@ export const StorageService = {
               localStorage.setItem(THEME_KEY, JSON.stringify(json.data.appTheme));
             }
             if (json.data.tahunAjaran) {
-              localStorage.setItem(TAHUN_AJARAN_KEY, JSON.stringify(json.data.tahunAjaran));
+              const serverTa: TahunAjaranConfig = { ...DEFAULT_TAHUN_AJARAN_CONFIG, ...json.data.tahunAjaran };
+              const localTa = this.getTahunAjaranConfig();
+              const serverMs = serverTa.updatedAt ? Date.parse(serverTa.updatedAt) : 0;
+              const localMs = localTa.updatedAt ? Date.parse(localTa.updatedAt) : 0;
+              if (
+                localMs > serverMs ||
+                (localMs === serverMs &&
+                  localTa.tahunAktif !== DEFAULT_TAHUN_AJARAN_CONFIG.tahunAktif &&
+                  serverTa.tahunAktif === DEFAULT_TAHUN_AJARAN_CONFIG.tahunAktif)
+              ) {
+                this.syncTahunAjaranToServer(localTa).catch(() => {});
+              } else {
+                this.saveTahunAjaranConfig(serverTa, false, false);
+              }
+            }
+            if (json.data.resetState) {
+              const localRs = this.getResetState();
+              const serverRs: DataResetState = json.data.resetState;
+              const mergedRs = mergeResetStates(localRs, serverRs);
+              this.saveResetState(mergedRs);
+              this.purgePreResetLocalData(mergedRs);
+
+              const localAttMs = localRs.attendanceResetAt ? Date.parse(localRs.attendanceResetAt) : 0;
+              const serverAttMs = serverRs.attendanceResetAt ? Date.parse(serverRs.attendanceResetAt) : 0;
+              const localStuMs = localRs.studentsResetAt ? Date.parse(localRs.studentsResetAt) : 0;
+              const serverStuMs = serverRs.studentsResetAt ? Date.parse(serverRs.studentsResetAt) : 0;
+              if (localAttMs > serverAttMs || localStuMs > serverStuMs) {
+                fetch('/api/config', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ resetState: mergedRs }),
+                }).catch(() => {});
+              }
             }
             if (json.data.reportConfig) {
               this.saveReportPrintConfig(json.data.reportConfig, false);
@@ -915,6 +1027,9 @@ export const StorageService = {
         } else {
           writeServerMeta({ serverReachable: false, serverError: `HTTP ${cfgRes.status}` });
         }
+
+        // Purge any pre-reset items locally before flushing/fetching
+        this.purgePreResetLocalData(this.getResetState());
 
         // 2. Flush any pending student/attendance records from prior offline session
         await this.flushPendingSyncQueue();
@@ -947,9 +1062,14 @@ export const StorageService = {
         writeServerMeta({ serverReachable: true, serverError: undefined });
         const json = await res.json();
         if (json && json.status === 'success' && Array.isArray(json.data)) {
-          // Merge remote records with any unsynced local records so nothing on this device is lost
-          const localRecords = this.getAttendance();
-          const remoteRecords: AttendanceRecord[] = json.data;
+          const resetState = this.getResetState();
+          // Merge remote records with any post-reset unsynced local records
+          const localRecords = this.getAttendance().filter(
+            lr => !this.isPreResetAttendance(lr.id, lr.tanggal, lr.nis, lr.syncedAt || '', resetState)
+          );
+          const remoteRecords: AttendanceRecord[] = (json.data as AttendanceRecord[]).filter(
+            r => r && !this.isPreResetAttendance(r.id, r.tanggal, r.nis, r.syncedAt || '', resetState)
+          );
           const map = new Map<string, AttendanceRecord>();
           const remoteKeys = new Set<string>();
 
@@ -1017,10 +1137,15 @@ export const StorageService = {
         writeServerMeta({ serverReachable: true, serverError: undefined });
         const json = await res.json();
         if (json && json.status === 'success' && Array.isArray(json.data)) {
+          const resetState = this.getResetState();
           const localUsers = this.getUsers();
           const admins = localUsers.filter(u => u.role === 'admin');
-          const localStudents = localUsers.filter(u => u.role === 'siswa');
-          const remoteStudents: User[] = json.data;
+          const localStudents = localUsers.filter(
+            u => u.role === 'siswa' && !this.isPreResetStudent(u.nis || '', u.username || '', u.createdAt || '', resetState)
+          );
+          const remoteStudents: User[] = (json.data as User[]).filter(
+            s => s && !this.isPreResetStudent(s.nis || '', s.username || '', s.createdAt || '', resetState)
+          );
           const config = this.getGoogleSheetConfig();
 
           // Merge server students with local students so no newly registered local student is lost!
@@ -1224,7 +1349,10 @@ export const StorageService = {
     }
 
     const mergeRemoteRecords = (remoteList: AttendanceRecord[]): number => {
-      const localRecords = this.getAttendance();
+      const resetState = this.getResetState();
+      const localRecords = this.getAttendance().filter(
+        lr => !this.isPreResetAttendance(lr.id, lr.tanggal, lr.nis, lr.syncedAt || '', resetState)
+      );
       const map = new Map<string, AttendanceRecord>();
       let changedCount = 0;
 
@@ -1235,6 +1363,9 @@ export const StorageService = {
 
       remoteList.forEach(rem => {
         if (!rem || !rem.tanggal || !rem.nis) return;
+        if (this.isPreResetAttendance(rem.id, rem.tanggal, rem.nis, rem.syncedAt || '', resetState)) {
+          return;
+        }
         const normNis = String(rem.nis).trim().toLowerCase();
         const key = `${rem.tanggal}::${normNis}`;
         const existing = map.get(key);
@@ -1397,15 +1528,20 @@ export const StorageService = {
       if (serverRes.ok) {
         const json = await serverRes.json();
         if (json && json.success && Array.isArray(json.data)) {
+          const resetState = this.getResetState();
+          this.purgePreResetLocalData(resetState);
+          const filteredRemote = (json.data as User[]).filter(
+            st => st && !this.isPreResetStudent(st.nis || '', st.username || '', st.createdAt || '', resetState)
+          );
           // Pass syncToCloud = false so pulling does NOT re-push students back to Spreadsheet
-          this.addUsersBulk(json.data, false);
+          this.addUsersBulk(filteredRemote, false);
           config.lastSync = new Date().toISOString();
           config.connected = true;
           this.saveGoogleSheetConfig(config, false);
           return {
             success: true,
-            count: json.count ?? json.data.length,
-            message: json.message || `Berhasil sinkron ${json.data.length} data siswa dari Google Spreadsheet.`,
+            count: filteredRemote.length,
+            message: json.message || `Berhasil sinkron ${filteredRemote.length} data siswa dari Google Spreadsheet.`,
           };
         }
       }
@@ -1430,9 +1566,12 @@ export const StorageService = {
       }
       const data = JSON.parse(rawText);
       if (data && data.status === 'success' && Array.isArray(data.data)) {
+        const resetState = this.getResetState();
+        this.purgePreResetLocalData(resetState);
         const defaultTahun = this.getActiveTahunAjaran();
         const studentUsers: User[] = data.data
           .filter((st: any) => st && st.nis && st.nama)
+          .filter((st: any) => !this.isPreResetStudent(String(st.nis || ''), String(st.username || st.nis || ''), String(st.createdAt || ''), resetState))
           .map((st: any) => ({
             id: `USR-SISWA-${String(st.nis).trim()}`,
             username: String(st.username || st.nis).trim().toLowerCase().replace(/\s+/g, ''),
@@ -1957,18 +2096,242 @@ export const StorageService = {
     return saved;
   },
 
+  emitChangeNotification(title: string, message: string, type: 'success' | 'info' | 'warning' = 'success') {
+    dispatchChangeNotification(title, message, type);
+  },
+
+  getResetState(): DataResetState {
+    if (typeof window === 'undefined') return {};
+    try {
+      const raw = localStorage.getItem(RESET_STATE_KEY);
+      if (raw) return JSON.parse(raw);
+    } catch {}
+    const fromCookie = getCookieValue(RESET_COOKIE_NAME);
+    if (fromCookie) {
+      try {
+        const parsed = JSON.parse(fromCookie);
+        localStorage.setItem(RESET_STATE_KEY, JSON.stringify(parsed));
+        return parsed;
+      } catch {}
+    }
+    return {};
+  },
+
+  saveResetState(state: DataResetState) {
+    if (typeof window === 'undefined') return;
+    const compact: DataResetState = {
+      attendanceResetAt: state.attendanceResetAt,
+      studentsResetAt: state.studentsResetAt,
+      ignoredStudentKeys: (state.ignoredStudentKeys || []).slice(-500),
+      ignoredAttendanceKeys: (state.ignoredAttendanceKeys || []).slice(-500),
+    };
+    try {
+      localStorage.setItem(RESET_STATE_KEY, JSON.stringify(compact));
+    } catch {}
+    // Keep cookie compact (timestamps + small ignored list within ~2KB cookie limit)
+    const cookieCompact: DataResetState = {
+      attendanceResetAt: compact.attendanceResetAt,
+      studentsResetAt: compact.studentsResetAt,
+      ignoredStudentKeys: (compact.ignoredStudentKeys || []).slice(-40),
+      ignoredAttendanceKeys: (compact.ignoredAttendanceKeys || []).slice(-40),
+    };
+    if (cookieCompact.attendanceResetAt || cookieCompact.studentsResetAt) {
+      setCookieValue(RESET_COOKIE_NAME, JSON.stringify(cookieCompact));
+    } else {
+      setCookieValue(RESET_COOKIE_NAME, '', 0);
+    }
+  },
+
+  unignoreStudentKeys(nis?: string, username?: string) {
+    const rs = this.getResetState();
+    if (!rs.ignoredStudentKeys || rs.ignoredStudentKeys.length === 0) return;
+    const n = String(nis || '').trim().toLowerCase();
+    const u = String(username || '').trim().toLowerCase();
+    const filtered = rs.ignoredStudentKeys.filter(k => k !== n && k !== u);
+    if (filtered.length !== rs.ignoredStudentKeys.length) {
+      this.saveResetState({ ...rs, ignoredStudentKeys: filtered });
+    }
+  },
+
+  unignoreAttendanceKeys(id?: string, tanggal?: string, nis?: string) {
+    const rs = this.getResetState();
+    if (!rs.ignoredAttendanceKeys || rs.ignoredAttendanceKeys.length === 0) return;
+    const cleanId = String(id || '').trim();
+    const composite = `${tanggal || ''}::${String(nis || '').trim().toLowerCase()}`;
+    const filtered = rs.ignoredAttendanceKeys.filter(k => k !== cleanId && k !== composite);
+    if (filtered.length !== rs.ignoredAttendanceKeys.length) {
+      this.saveResetState({ ...rs, ignoredAttendanceKeys: filtered });
+    }
+  },
+
+  isPreResetStudent(nis: string, username: string, createdAt: string, resetState?: DataResetState): boolean {
+    const rs = resetState || this.getResetState();
+    if (!rs.studentsResetAt) return false;
+    const resetMs = Date.parse(rs.studentsResetAt);
+    if (Number.isNaN(resetMs)) return false;
+
+    const cleanNis = String(nis || '').trim().toLowerCase();
+    const cleanUser = String(username || '').trim().toLowerCase();
+    const ignored = new Set((rs.ignoredStudentKeys || []).map(k => k.toLowerCase()));
+    const createdMs = parseGasTimestampMs(createdAt);
+    const hasTimePrecision = /\d{2}:\d{2}/.test(String(createdAt || ''));
+
+    if (hasTimePrecision && createdMs > resetMs + 1000) {
+      return false;
+    }
+    if (ignored.has(cleanNis) || (cleanUser && ignored.has(cleanUser))) {
+      return true;
+    }
+    if (hasTimePrecision && createdMs > 0 && createdMs <= resetMs) {
+      return true;
+    }
+    if (!hasTimePrecision && createdMs > 0) {
+      const resetJakartaDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta' }).format(new Date(resetMs));
+      const rowDate = String(createdAt || '').slice(0, 10);
+      if (rowDate <= resetJakartaDate) return true;
+    }
+    return false;
+  },
+
+  isPreResetAttendance(id: string, tanggal: string, nis: string, syncedAt: string, resetState?: DataResetState): boolean {
+    const rs = resetState || this.getResetState();
+    if (!rs.attendanceResetAt) return false;
+    const resetMs = Date.parse(rs.attendanceResetAt);
+    if (Number.isNaN(resetMs)) return false;
+
+    const composite = `${tanggal}::${String(nis || '').trim().toLowerCase()}`;
+    const ignored = new Set(rs.ignoredAttendanceKeys || []);
+    const syncedMs = parseGasTimestampMs(syncedAt);
+    const hasTimePrecision = /\d{2}:\d{2}/.test(String(syncedAt || ''));
+
+    if (hasTimePrecision && syncedMs > resetMs + 1000) {
+      return false;
+    }
+    if (ignored.has(id) || ignored.has(composite)) {
+      return true;
+    }
+    if (hasTimePrecision && syncedMs > 0 && syncedMs <= resetMs) {
+      return true;
+    }
+    if (!hasTimePrecision && tanggal) {
+      const resetJakartaDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta' }).format(new Date(resetMs));
+      if (tanggal <= resetJakartaDate) return true;
+    }
+    return false;
+  },
+
+  purgePreResetLocalData(resetState?: DataResetState) {
+    if (typeof window === 'undefined') return;
+    const rs = resetState || this.getResetState();
+    if (!rs.studentsResetAt && !rs.attendanceResetAt) return;
+
+    if (rs.studentsResetAt) {
+      const users = this.getUsers();
+      const filteredUsers = users.filter(u =>
+        u.role === 'admin' ||
+        u.username.toLowerCase() === 'admin123' ||
+        !this.isPreResetStudent(u.nis || '', u.username || '', u.createdAt || '', rs)
+      );
+      if (filteredUsers.length !== users.length) {
+        this.saveUsers(filteredUsers);
+      }
+    }
+
+    if (rs.attendanceResetAt) {
+      const records = this.getAttendance();
+      const filteredRecords = records.filter(
+        r => !this.isPreResetAttendance(r.id, r.tanggal, r.nis, r.syncedAt || '', rs)
+      );
+      if (filteredRecords.length !== records.length) {
+        this.saveAttendance(filteredRecords);
+      }
+    }
+  },
+
   getTahunAjaranConfig(): TahunAjaranConfig {
-    const raw = localStorage.getItem(TAHUN_AJARAN_KEY);
+    let raw: string | null = null;
+    try {
+      raw = typeof localStorage !== 'undefined' ? localStorage.getItem(TAHUN_AJARAN_KEY) : null;
+    } catch {}
+    if (!raw && typeof document !== 'undefined') {
+      raw = getCookieValue(TAHUN_COOKIE_NAME) || null;
+      if (raw) {
+        try { localStorage.setItem(TAHUN_AJARAN_KEY, raw); } catch {}
+      }
+    }
     if (!raw) return DEFAULT_TAHUN_AJARAN_CONFIG;
     try {
-      return { ...DEFAULT_TAHUN_AJARAN_CONFIG, ...JSON.parse(raw) };
+      const parsed = JSON.parse(raw);
+      return {
+        ...DEFAULT_TAHUN_AJARAN_CONFIG,
+        ...parsed,
+        daftarTahun: Array.isArray(parsed?.daftarTahun) && parsed.daftarTahun.length > 0
+          ? parsed.daftarTahun
+          : DEFAULT_TAHUN_AJARAN_CONFIG.daftarTahun,
+      };
     } catch {
       return DEFAULT_TAHUN_AJARAN_CONFIG;
     }
   },
 
-  saveTahunAjaranConfig(config: TahunAjaranConfig) {
-    localStorage.setItem(TAHUN_AJARAN_KEY, JSON.stringify(config));
+  async syncTahunAjaranToServer(config: TahunAjaranConfig): Promise<void> {
+    if (typeof window === 'undefined') return;
+    try {
+      await fetch('/api/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tahunAjaran: config }),
+      });
+    } catch (err) {
+      console.warn('Sync tahunAjaran to server warning:', err);
+    }
+
+    // Also notify GAS if scriptUrl supports v2.1 action=SET_TAHUN_AJARAN
+    try {
+      const sheetCfg = this.getGoogleSheetConfig();
+      const targetUrl = (sheetCfg.scriptUrl || '').trim();
+      if (targetUrl && targetUrl.startsWith('http')) {
+        const testUrl = targetUrl.includes('?') ? `${targetUrl}&action=TEST&_t=${Date.now()}` : `${targetUrl}?action=TEST&_t=${Date.now()}`;
+        const testRes = await fetchWithTimeout(testUrl, { redirect: 'follow' }, 4500);
+        const txt = await testRes.text();
+        if (!txt.includes('<') && txt.includes('supportsReset')) {
+          const parsed = JSON.parse(txt);
+          if (parsed?.supportsReset === true) {
+            fetch(targetUrl, {
+              method: 'POST',
+              mode: 'no-cors',
+              headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+              body: JSON.stringify({ action: 'SET_TAHUN_AJARAN', tahunAjaran: config }),
+            }).catch(() => {});
+          }
+        }
+      }
+    } catch {}
+  },
+
+  saveTahunAjaranConfig(config: TahunAjaranConfig, syncServer: boolean = true, emitEvent: boolean = true) {
+    const normalized: TahunAjaranConfig = {
+      tahunAktif: config.tahunAktif || DEFAULT_TAHUN_AJARAN_CONFIG.tahunAktif,
+      daftarTahun: Array.isArray(config.daftarTahun) && config.daftarTahun.length > 0
+        ? Array.from(new Set(config.daftarTahun))
+        : [...DEFAULT_TAHUN_AJARAN_CONFIG.daftarTahun],
+      updatedAt: config.updatedAt || new Date().toISOString(),
+    };
+    if (!normalized.daftarTahun.includes(normalized.tahunAktif)) {
+      normalized.daftarTahun.push(normalized.tahunAktif);
+    }
+    const serialized = JSON.stringify(normalized);
+    try {
+      localStorage.setItem(TAHUN_AJARAN_KEY, serialized);
+    } catch {}
+    setCookieValue(TAHUN_COOKIE_NAME, serialized);
+
+    if (syncServer && typeof window !== 'undefined') {
+      this.syncTahunAjaranToServer(normalized).catch(() => {});
+    }
+    if (emitEvent) {
+      notifySyncUpdate();
+    }
   },
 
   getActiveTahunAjaran(): string {
@@ -1981,14 +2344,16 @@ export const StorageService = {
     if (!config.daftarTahun.includes(tahun)) {
       config.daftarTahun.push(tahun);
     }
-    this.saveTahunAjaranConfig(config);
+    config.updatedAt = new Date().toISOString();
+    this.saveTahunAjaranConfig(config, true, true);
   },
 
   addTahunAjaran(tahun: string): boolean {
     const config = this.getTahunAjaranConfig();
     if (!config.daftarTahun.includes(tahun)) {
       config.daftarTahun.push(tahun);
-      this.saveTahunAjaranConfig(config);
+      config.updatedAt = new Date().toISOString();
+      this.saveTahunAjaranConfig(config, true, true);
       return true;
     }
     return false;
@@ -2001,49 +2366,133 @@ export const StorageService = {
     if (config.tahunAktif === tahun) {
       config.tahunAktif = config.daftarTahun[0];
     }
-    this.saveTahunAjaranConfig(config);
+    config.updatedAt = new Date().toISOString();
+    this.saveTahunAjaranConfig(config, true, true);
   },
 
-  async resetTotalData(mode: 'all' | 'attendance' | 'students' = 'all'): Promise<{ success: boolean; message: string; deletedUsers: number; deletedAttendance: number }> {
+  async resetTotalData(mode: 'all' | 'attendance' | 'students' = 'all'): Promise<{
+    success: boolean;
+    message: string;
+    deletedUsers: number;
+    deletedAttendance: number;
+    sheetResetSynced?: boolean;
+  }> {
     let deletedUsers = 0;
     let deletedAttendance = 0;
+    const nowIso = new Date().toISOString();
+    const prevReset = this.getResetState();
+    const ignoredStu = new Set((prevReset.ignoredStudentKeys || []).map(k => k.toLowerCase()));
+    const ignoredAtt = new Set(prevReset.ignoredAttendanceKeys || []);
 
     if (mode === 'all' || mode === 'students') {
       const allUsers = this.getUsers();
       const adminUsers = allUsers.filter(u => u.role === 'admin' || u.username.toLowerCase() === 'admin123');
-      deletedUsers = allUsers.length - adminUsers.length;
+      const students = allUsers.filter(u => u.role !== 'admin' && u.username.toLowerCase() !== 'admin123');
+      deletedUsers = students.length;
+      students.forEach(s => {
+        if (s.nis) ignoredStu.add(String(s.nis).trim().toLowerCase());
+        if (s.username) ignoredStu.add(String(s.username).trim().toLowerCase());
+      });
       this.saveUsers(adminUsers);
+      prevReset.studentsResetAt = nowIso;
+      prevReset.ignoredStudentKeys = Array.from(ignoredStu).slice(-500);
     }
 
     if (mode === 'all' || mode === 'attendance' || mode === 'students') {
       const att = this.getAttendance();
       deletedAttendance = att.length;
+      att.forEach(r => {
+        if (r.id) ignoredAtt.add(r.id);
+        if (r.tanggal && r.nis) ignoredAtt.add(`${r.tanggal}::${String(r.nis).trim().toLowerCase()}`);
+      });
       this.saveAttendance([]);
+      prevReset.attendanceResetAt = nowIso;
+      prevReset.ignoredAttendanceKeys = Array.from(ignoredAtt).slice(-500);
     }
 
-    // Call server API to reset server database permanently so data never resurrects
+    // Clear pending outbox items so pre-reset items are never re-uploaded
+    try {
+      if (mode === 'all' || mode === 'students') {
+        localStorage.removeItem(SYNC_QUEUE_KEY);
+      } else if (mode === 'attendance') {
+        const remainingQueue = this.getSyncQueue().filter(q => q.type !== 'ATTENDANCE');
+        this.saveSyncQueue(remainingQueue);
+      }
+    } catch {}
+
+    this.saveResetState(prevReset);
+
+    // Ensure current Tahun Ajaran is preserved and pushed to server alongside reset
+    const currentTa = this.getTahunAjaranConfig();
+    const sheetConfig = this.getGoogleSheetConfig();
+    let sheetResetSynced = false;
+
     if (typeof window !== 'undefined') {
       try {
-        await fetch('/api/attendance/reset', {
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (sheetConfig.scriptUrl && sheetConfig.scriptUrl.startsWith('http')) {
+          headers['x-gas-url'] = sheetConfig.scriptUrl;
+        }
+        const resetRes = await fetchWithTimeout('/api/attendance/reset', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ mode }),
-        });
+          headers,
+          body: JSON.stringify({
+            mode,
+            scriptUrl: sheetConfig.scriptUrl || '',
+            resetAt: nowIso,
+            ignoredStudentKeys: prevReset.ignoredStudentKeys || [],
+            ignoredAttendanceKeys: prevReset.ignoredAttendanceKeys || [],
+          }),
+        }, 12000);
+        if (resetRes.ok) {
+          const json = await resetRes.json();
+          sheetResetSynced = Boolean(json?.sheetResetSynced);
+          if (json?.resetState) {
+            this.saveResetState(mergeResetStates(prevReset, json.resetState));
+          }
+        }
+        // Re-affirm active Tahun Ajaran on server
+        await this.syncTahunAjaranToServer(currentTa);
       } catch (e) {
         console.warn('Server reset API call warning:', e);
       }
+
+      // Direct browser fallback to GAS if server didn't complete sheet wipe (only when Code.gs supportsReset === true)
+      if (!sheetResetSynced && sheetConfig.scriptUrl && sheetConfig.scriptUrl.startsWith('http')) {
+        try {
+          const testUrl = sheetConfig.scriptUrl.includes('?')
+            ? `${sheetConfig.scriptUrl}&action=TEST&_t=${Date.now()}`
+            : `${sheetConfig.scriptUrl}?action=TEST&_t=${Date.now()}`;
+          const testRes = await fetchWithTimeout(testUrl, { redirect: 'follow' }, 5000);
+          const testTxt = await testRes.text();
+          if (!testTxt.includes('<') && testTxt.includes('supportsReset')) {
+            const parsed = JSON.parse(testTxt);
+            if (parsed?.supportsReset === true) {
+              await fetch(sheetConfig.scriptUrl, {
+                method: 'POST',
+                mode: 'no-cors',
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                body: JSON.stringify({ action: 'RESET_DATA', mode }),
+              });
+              sheetResetSynced = true;
+            }
+          }
+        } catch {}
+      }
     }
+
+    notifySyncUpdate();
 
     let message = '';
     if (mode === 'all') {
-      message = `Reset total berhasil! Dihapus ${deletedUsers} data siswa dan ${deletedAttendance} catatan presensi dari perangkat dan server aplikasi. Database kini bersih untuk registrasi siswa baru.`;
+      message = `Reset total berhasil! Dihapus ${deletedUsers} data siswa dan ${deletedAttendance} catatan presensi. Semua data kini kosong permanen dan Tahun Ajaran aktif tetap "${currentTa.tahunAktif}".`;
     } else if (mode === 'attendance') {
-      message = `Reset data presensi berhasil! Dihapus ${deletedAttendance} catatan presensi dari perangkat dan server. Data akun siswa tetap tersimpan.`;
+      message = `Reset data presensi berhasil! Dihapus ${deletedAttendance} catatan presensi. Data akun siswa dan Tahun Ajaran "${currentTa.tahunAktif}" tetap tersimpan.`;
     } else if (mode === 'students') {
-      message = `Reset data siswa berhasil! Dihapus ${deletedUsers} profil siswa dan seluruh riwayat presensinya dari perangkat dan server.`;
+      message = `Reset data siswa berhasil! Dihapus ${deletedUsers} profil siswa dan seluruh riwayat presensinya.`;
     }
 
-    return { success: true, message, deletedUsers, deletedAttendance };
+    return { success: true, message, deletedUsers, deletedAttendance, sheetResetSynced };
   },
 
   exportFullBackup(): string {
@@ -2068,6 +2517,9 @@ export const StorageService = {
         return { success: false, message: 'Format file backup tidak valid. File harus berformat JSON backup dari aplikasi ini.', usersCount: 0, attendanceCount: 0 };
       }
 
+      // Clear prior reset tombstones so restored backup data is NOT blocked
+      this.saveResetState({});
+
       let usersCount = 0;
       let attendanceCount = 0;
 
@@ -2080,10 +2532,14 @@ export const StorageService = {
         attendanceCount = data.attendance.length;
       }
       if (data.tahunAjaranConfig) {
-        this.saveTahunAjaranConfig(data.tahunAjaranConfig);
+        this.saveTahunAjaranConfig(
+          { ...data.tahunAjaranConfig, updatedAt: new Date().toISOString() },
+          true,
+          false
+        );
       }
       if (data.googleSheetConfig) {
-        this.saveGoogleSheetConfig(data.googleSheetConfig);
+        this.saveGoogleSheetConfig(data.googleSheetConfig, true, false);
       }
       if (data.themeConfig) {
         this.saveAppThemeConfig(data.themeConfig);
@@ -2091,6 +2547,21 @@ export const StorageService = {
       if (data.reportConfig) {
         this.saveReportPrintConfig(data.reportConfig);
       }
+
+      if (typeof window !== 'undefined') {
+        fetch('/api/config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ resetState: {} }),
+        }).catch(() => {});
+
+        const restoredStudents = (Array.isArray(data.users) ? data.users : []).filter((u: User) => u.role === 'siswa');
+        if (restoredStudents.length > 0) {
+          this.syncStudentsBulkToCloud(restoredStudents).catch(() => {});
+        }
+      }
+
+      notifySyncUpdate();
 
       return {
         success: true,

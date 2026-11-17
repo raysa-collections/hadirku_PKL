@@ -146,11 +146,17 @@ app.post('/api/attendance/pull', async (req: Request, res: Response) => {
   }
 });
 
-// Reset attendance data
-app.post('/api/attendance/reset', (req: Request, res: Response) => {
+// Reset attendance/student data
+app.post('/api/attendance/reset', async (req: Request, res: Response) => {
   try {
-    const { mode } = req.body || { mode: 'all' };
-    const result = serverStore.resetAttendance(mode);
+    const { mode, scriptUrl, resetAt, ignoredStudentKeys, ignoredAttendanceKeys } = req.body || { mode: 'all' };
+    const overrideGas = scriptUrl || (req.headers['x-gas-url'] as string | undefined);
+    const result = await serverStore.resetAttendanceAsync(mode || 'all', overrideGas, {
+      attendanceResetAt: resetAt,
+      studentsResetAt: resetAt,
+      ignoredStudentKeys,
+      ignoredAttendanceKeys,
+    });
     res.json({ status: 'success', message: 'Reset data berhasil', ...result });
   } catch (err: any) {
     res.status(500).json({ status: 'error', message: err.message });

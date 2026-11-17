@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { User, PEMBIMBING_TKR_LIST } from '../types/pkl';
+import { User, PEMBIMBING_TKR_LIST, TahunAjaranConfig } from '../types/pkl';
 import { StorageService } from '../services/storage';
 import * as XLSX from 'xlsx';
 import { 
@@ -39,7 +39,7 @@ export const AdminStudentManagement: React.FC = () => {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
 
-  const tahunConfig = StorageService.getTahunAjaranConfig();
+  const [tahunConfig, setTahunConfig] = useState<TahunAjaranConfig>(() => StorageService.getTahunAjaranConfig());
 
   // Excel Import & Template state
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -101,13 +101,24 @@ export const AdminStudentManagement: React.FC = () => {
   };
 
   React.useEffect(() => {
+    const onSyncUpdate = () => {
+      reloadUsers();
+      const nextTa = StorageService.getTahunAjaranConfig();
+      setTahunConfig(nextTa);
+      setFormData(prev => ({ ...prev, tahunAjaran: nextTa.tahunAktif }));
+    };
+    window.addEventListener('pkl-sync-updated', onSyncUpdate);
+
     handleSyncStudents(false);
 
     const interval = setInterval(() => {
       handleSyncStudents(false);
     }, 15000);
 
-    return () => clearInterval(interval);
+    return () => {
+      window.removeEventListener('pkl-sync-updated', onSyncUpdate);
+      clearInterval(interval);
+    };
   }, []);
 
   // Download official Excel template for student PKL data
@@ -275,6 +286,7 @@ export const AdminStudentManagement: React.FC = () => {
             noHp: noHp,
             tempatPkl: tempatPkl,
             namaPembimbing: namaPembimbing,
+            tahunAjaran: normalizedRow['tahunajaran'] || StorageService.getActiveTahunAjaran(),
             createdAt: new Date().toISOString().slice(0, 10),
           });
         });

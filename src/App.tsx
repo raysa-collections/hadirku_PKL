@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { User, AppThemeConfig } from './types/pkl';
-import { StorageService } from './services/storage';
+import { StorageService, ChangeNotificationDetail } from './services/storage';
 import { RoleSelectScreen } from './components/RoleSelectScreen';
 import { LoginModal } from './components/LoginModal';
 import { StudentDashboard } from './components/StudentDashboard';
@@ -26,7 +26,11 @@ import {
   Settings,
   Wrench,
   Car,
-  ShieldCheck
+  ShieldCheck,
+  CheckCircle2,
+  AlertTriangle,
+  Info,
+  X
 } from 'lucide-react';
 
 export default function App() {
@@ -36,14 +40,20 @@ export default function App() {
   const [adminTab, setAdminTab] = useState<'dashboard' | 'students' | 'attendance' | 'reports' | 'gas_sync' | 'settings'>('dashboard');
   const [showGoogleSheetModal, setShowGoogleSheetModal] = useState(false);
   const [themeConfig, setThemeConfig] = useState<AppThemeConfig>(() => StorageService.getAppThemeConfig());
+  const [tahunAktif, setTahunAktif] = useState<string>(() => StorageService.getActiveTahunAjaran());
   const [sheetConfig, setSheetConfig] = useState(() => StorageService.getGoogleSheetConfig());
   const [pendingCount, setPendingCount] = useState(() => StorageService.getPendingSyncCount());
   const [cloudNotice, setCloudNotice] = useState<string | null>(null);
+  const [changeNotice, setChangeNotice] = useState<ChangeNotificationDetail | null>(null);
 
   React.useEffect(() => {
+    let noticeTimer: ReturnType<typeof setTimeout> | null = null;
+
     const refreshSyncBadges = () => {
       const nextCfg = StorageService.getGoogleSheetConfig();
       const nextPending = StorageService.getPendingSyncCount();
+      const nextTahun = StorageService.getActiveTahunAjaran();
+      const nextTheme = StorageService.getAppThemeConfig();
       setSheetConfig(prev =>
         prev.scriptUrl === nextCfg.scriptUrl &&
         prev.connected === nextCfg.connected &&
@@ -52,6 +62,18 @@ export default function App() {
           : nextCfg
       );
       setPendingCount(prev => (prev === nextPending ? prev : nextPending));
+      setTahunAktif(prev => (prev === nextTahun ? prev : nextTahun));
+      setThemeConfig(prev => (JSON.stringify(prev) === JSON.stringify(nextTheme) ? prev : nextTheme));
+    };
+
+    const handleChangeNotification = (evt: Event) => {
+      const custom = evt as CustomEvent<ChangeNotificationDetail>;
+      if (!custom?.detail) return;
+      setChangeNotice(custom.detail);
+      if (noticeTimer) clearTimeout(noticeTimer);
+      noticeTimer = setTimeout(() => {
+        setChangeNotice(null);
+      }, 6500);
     };
 
     refreshSyncBadges();
@@ -64,15 +86,17 @@ export default function App() {
     }
 
     window.addEventListener('pkl-sync-updated', refreshSyncBadges);
+    window.addEventListener('pkl-change-notification', handleChangeNotification);
 
-    // Also wait for server sync so Admin/Student picks up server-configured GAS URL & theme
+    // Also wait for server sync so Admin/Student picks up server-configured GAS URL, tahunAjaran & theme
     StorageService.initServerSync().then(() => {
       refreshSyncBadges();
-      setThemeConfig(StorageService.getAppThemeConfig());
     });
 
     return () => {
       window.removeEventListener('pkl-sync-updated', refreshSyncBadges);
+      window.removeEventListener('pkl-change-notification', handleChangeNotification);
+      if (noticeTimer) clearTimeout(noticeTimer);
     };
   }, []);
 
@@ -238,7 +262,7 @@ export default function App() {
                   {currentUser.role === 'admin' ? 'Administrator PKL TKR' : 'Siswa PKL'}
                 </span>
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-300 font-mono tabular-nums">
-                  TA: {StorageService.getActiveTahunAjaran()}
+                  TA: {tahunAktif}
                 </span>
               </div>
               <p className="text-[11px] text-slate-600 mt-0.5 truncate max-w-sm font-medium flex items-center gap-1">
@@ -338,6 +362,53 @@ export default function App() {
 
       {/* Main Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 space-y-6">
+
+        {/* Global Change Notification Banner (Notifikasi Perubahan) */}
+        {changeNotice && (
+          <div
+            role="status"
+            aria-live="polite"
+            className={`print:hidden p-4 rounded-2xl border shadow-md flex items-start justify-between gap-3 transition-all ${
+              changeNotice.type === 'warning'
+                ? 'bg-amber-50 border-amber-300 text-amber-950'
+                : changeNotice.type === 'info'
+                ? 'bg-blue-50 border-blue-300 text-blue-950'
+                : 'bg-emerald-50 border-emerald-300 text-emerald-950'
+            }`}
+          >
+            <div className="flex items-start gap-3">
+              <div
+                className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 border ${
+                  changeNotice.type === 'warning'
+                    ? 'bg-amber-100 border-amber-200 text-amber-700'
+                    : changeNotice.type === 'info'
+                    ? 'bg-blue-100 border-blue-200 text-blue-700'
+                    : 'bg-emerald-100 border-emerald-200 text-emerald-700'
+                }`}
+              >
+                {changeNotice.type === 'warning' ? (
+                  <AlertTriangle className="w-4 h-4" />
+                ) : changeNotice.type === 'info' ? (
+                  <Info className="w-4 h-4" />
+                ) : (
+                  <CheckCircle2 className="w-4 h-4" />
+                )}
+              </div>
+              <div className="space-y-0.5 text-xs">
+                <p className="font-bold text-slate-900">{changeNotice.title}</p>
+                <p className="text-slate-700 leading-relaxed">{changeNotice.message}</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setChangeNotice(null)}
+              className="p-1 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-white/70 transition cursor-pointer shrink-0"
+              aria-label="Tutup notifikasi"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
         
         {/* PWA Home Screen Banner */}
         <div className="print:hidden">
