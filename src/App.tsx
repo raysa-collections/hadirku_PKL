@@ -570,7 +570,10 @@ export default function App() {
             )}
 
             {adminTab === 'settings' && (
-              <AdminSettings onThemeUpdated={(newTheme) => setThemeConfig(newTheme)} />
+              <AdminSettings
+                onThemeUpdated={(newTheme) => setThemeConfig(newTheme)}
+                onNavigateTab={(tab) => setAdminTab(tab)}
+              />
             )}
 
           </div>

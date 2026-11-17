@@ -153,11 +153,15 @@ function doGet(e) {
   if (action === "GET_STUDENTS") {
     return handleGetStudents();
   }
+  if (action === "GET_CONFIG") {
+    return handleGetConfig();
+  }
   if (action === "TEST" || action === "PING") {
     return createJsonResponse({
       status: "success",
-      version: "2.1",
+      version: "2.2",
       supportsReset: true,
+      supportsConfig: true,
       message: "Koneksi Google Apps Script Web App Aktif & Terhubung Sempurna!",
       timestamp: new Date().toISOString()
     });
@@ -174,6 +178,74 @@ function doGet(e) {
     // Fallback JSON jika file index.html belum dibuat
     return handleGetAttendance();
   }
+}
+
+/**
+ * SIMPAN / PERBARUI NILAI KONFIGURASI DI SHEET Konfigurasi_Sistem
+ */
+function upsertConfigKey(ss, key, value, desc) {
+  let sheetConfig = ss.getSheetByName(SHEET_CONFIG);
+  if (!sheetConfig) {
+    setupDatabase();
+    sheetConfig = ss.getSheetByName(SHEET_CONFIG);
+  }
+  if (!sheetConfig) return;
+  const lastRowCfg = sheetConfig.getLastRow();
+  let foundRow = -1;
+  if (lastRowCfg > 1) {
+    const keys = sheetConfig.getRange(2, 1, lastRowCfg - 1, 1).getValues();
+    for (let i = 0; i < keys.length; i++) {
+      if (String(keys[i][0] || "").trim() === key) {
+        foundRow = i + 2;
+        break;
+      }
+    }
+  }
+  if (foundRow !== -1) {
+    sheetConfig.getRange(foundRow, 2).setValue(value);
+  } else {
+    sheetConfig.appendRow([key, value, desc || ""]);
+  }
+}
+
+function handleGetConfig() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheetConfig = ss.getSheetByName(SHEET_CONFIG);
+  const map = {};
+  if (sheetConfig && sheetConfig.getLastRow() > 1) {
+    const rows = sheetConfig.getRange(2, 1, sheetConfig.getLastRow() - 1, 2).getValues();
+    for (let i = 0; i < rows.length; i++) {
+      const k = String(rows[i][0] || "").trim();
+      const v = String(rows[i][1] || "").trim();
+      if (k) map[k] = v;
+    }
+  }
+  return createJsonResponse({
+    status: "success",
+    version: "2.2",
+    tahunAktif: map["TAHUN_AJARAN_AKTIF"] || "",
+    resetState: {
+      attendanceResetAt: map["RESET_ATTENDANCE_AT"] || "",
+      studentsResetAt: map["RESET_STUDENTS_AT"] || ""
+    }
+  });
+}
+
+function clearSheetDataRows(sheet) {
+  if (!sheet) return 0;
+  const lastRow = sheet.getLastRow();
+  if (lastRow <= 1) return 0;
+  const numRows = lastRow - 1;
+  try {
+    if (sheet.getMaxRows() <= lastRow) {
+      sheet.insertRowsAfter(lastRow, 1);
+    }
+    sheet.deleteRows(2, numRows);
+  } catch (delErr) {
+    const numCols = Math.max(1, sheet.getLastColumn());
+    sheet.getRange(2, 1, numRows, numCols).clearContent();
+  }
+  return numRows;
 }
 
 /**
@@ -202,44 +274,30 @@ function doPost(e) {
       throw new Error("Tidak ada data payload yang dikirimkan.");
     }
     
-    const action = data.action; // 'REGISTER_STUDENT', 'CHECK_IN', 'CHECK_OUT', 'TEST'
+    const action = data.action; // 'REGISTER_STUDENT', 'CHECK_IN', 'CHECK_OUT', 'TEST', 'RESET_DATA', 'SET_TAHUN_AJARAN'
     
     if (action === "TEST" || action === "PING") {
       return createJsonResponse({
         status: "success",
-        version: "2.1",
+        version: "2.2",
         supportsReset: true,
+        supportsConfig: true,
         message: "Koneksi Google Apps Script Web App Aktif & Terhubung Sempurna!",
         timestamp: new Date().toISOString()
       });
     }
 
+    if (action === "GET_CONFIG") {
+      return handleGetConfig();
+    }
+
     // --- UPDATE KONFIGURASI TAHUN AJARAN ---
     if (action === "SET_TAHUN_AJARAN") {
       const ss = SpreadsheetApp.getActiveSpreadsheet();
-      let sheetConfig = ss.getSheetByName(SHEET_CONFIG);
-      if (!sheetConfig) {
-        setupDatabase();
-        sheetConfig = ss.getSheetByName(SHEET_CONFIG);
-      }
-      const tahunAktif = String(data.tahunAktif || "").trim();
-      if (sheetConfig && tahunAktif) {
-        const lastRowCfg = sheetConfig.getLastRow();
-        let foundRow = -1;
-        if (lastRowCfg > 1) {
-          const keys = sheetConfig.getRange(2, 1, lastRowCfg - 1, 1).getValues();
-          for (let i = 0; i < keys.length; i++) {
-            if (String(keys[i][0] || "").trim() === "TAHUN_AJARAN_AKTIF") {
-              foundRow = i + 2;
-              break;
-            }
-          }
-        }
-        if (foundRow !== -1) {
-          sheetConfig.getRange(foundRow, 2).setValue(tahunAktif);
-        } else {
-          sheetConfig.appendRow(["TAHUN_AJARAN_AKTIF", tahunAktif, "Tahun Ajaran PKL Aktif"]);
-        }
+      const tahunAktif = String(data.tahunAktif || (data.tahunAjaran && data.tahunAjaran.tahunAktif) || "").trim();
+      if (tahunAktif) {
+        upsertConfigKey(ss, "TAHUN_AJARAN_AKTIF", tahunAktif, "Tahun Ajaran PKL Aktif");
+        SpreadsheetApp.flush();
       }
       return createJsonResponse({
         status: "success",
@@ -252,22 +310,33 @@ function doPost(e) {
     if (action === "RESET_DATA") {
       const ss = SpreadsheetApp.getActiveSpreadsheet();
       const mode = String(data.mode || "all");
+      const nowResetIso = new Date().toISOString();
+      let deletedAttendanceRows = 0;
+      let deletedStudentRows = 0;
+
       if (mode === "all" || mode === "attendance" || mode === "students") {
         const sheetAbsensi = ss.getSheetByName(SHEET_ABSENSI);
-        if (sheetAbsensi && sheetAbsensi.getLastRow() > 1) {
-          sheetAbsensi.deleteRows(2, sheetAbsensi.getLastRow() - 1);
-        }
+        deletedAttendanceRows = clearSheetDataRows(sheetAbsensi);
+        upsertConfigKey(ss, "RESET_ATTENDANCE_AT", nowResetIso, "Waktu Reset Terakhir Presensi");
       }
       if (mode === "all" || mode === "students") {
         const sheetSiswa = ss.getSheetByName(SHEET_SISWA);
-        if (sheetSiswa && sheetSiswa.getLastRow() > 1) {
-          sheetSiswa.deleteRows(2, sheetSiswa.getLastRow() - 1);
-        }
+        deletedStudentRows = clearSheetDataRows(sheetSiswa);
+        upsertConfigKey(ss, "RESET_STUDENTS_AT", nowResetIso, "Waktu Reset Terakhir Siswa");
       }
+      const nextTahun = String(data.tahunAktif || "").trim();
+      if (nextTahun) {
+        upsertConfigKey(ss, "TAHUN_AJARAN_AKTIF", nextTahun, "Tahun Ajaran PKL Aktif");
+      }
+      SpreadsheetApp.flush();
+
       return createJsonResponse({
         status: "success",
         mode: mode,
-        message: "Data di Google Spreadsheet berhasil dikosongkan."
+        deletedAttendanceRows: deletedAttendanceRows,
+        deletedStudentRows: deletedStudentRows,
+        resetAt: nowResetIso,
+        message: "Seluruh data di Google Spreadsheet berhasil dikosongkan permanen."
       });
     }
 

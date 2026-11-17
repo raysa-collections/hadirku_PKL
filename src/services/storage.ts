@@ -464,22 +464,34 @@ export const StorageService = {
     isUnconfigured?: boolean;
     message: string;
   }> {
-    await this.ensureConfigSynced();
-    this.unignoreStudentKeys(user.nis, user.username);
-    this.addUser(user, false);
+    await this.syncConfigFromServer();
+    const rs = this.getResetState();
+    const stuResetMs = rs.studentsResetAt ? Date.parse(rs.studentsResetAt) : 0;
+    const nowIso = new Date(Math.max(Date.now(), stuResetMs + 2000)).toISOString();
+    const stampedUser: User = {
+      ...user,
+      createdAt: user.createdAt && /\d{2}:\d{2}/.test(user.createdAt) ? user.createdAt : nowIso,
+    };
+
+    this.unignoreStudentKeys(stampedUser.nis, stampedUser.username);
+    this.addUser(stampedUser, false);
 
     // Re-read saved user (with resolved password merge if NIS existed)
     const saved = this.getUsers().find(
-      u => u.role === 'siswa' && (u.id === user.id || u.nis.toLowerCase() === user.nis.toLowerCase())
-    ) || user;
+      u => u.role === 'siswa' && (u.id === stampedUser.id || u.nis.toLowerCase() === stampedUser.nis.toLowerCase())
+    ) || stampedUser;
 
     if (saved.role !== 'siswa') {
       return { user: saved, success: true, serverSynced: false, sheetSynced: false, message: 'Tersimpan lokal.' };
     }
 
     const syncRes = await this.syncStudentToGoogleSheet(saved);
+    const syncedUser = syncRes.user || saved;
+    if (syncRes.user) {
+      this.addUser(syncRes.user, false);
+    }
     return {
-      user: saved,
+      user: syncedUser,
       success: true,
       serverSynced: Boolean(syncRes.serverSynced),
       sheetSynced: Boolean(syncRes.sheetSynced),
@@ -897,6 +909,89 @@ export const StorageService = {
   // Deduplicated initial server sync promise
   _initSyncPromise: null as Promise<void> | null,
 
+  _syncConfigPromise: null as Promise<GoogleSheetConfig> | null,
+
+  async syncConfigFromServer(): Promise<GoogleSheetConfig> {
+    if (typeof window === 'undefined') return this.getGoogleSheetConfig();
+    if (this._syncConfigPromise) return this._syncConfigPromise;
+
+    this._syncConfigPromise = (async () => {
+      try {
+        let localConfig = this.getGoogleSheetConfig();
+        if (!localConfig.scriptUrl) {
+          const cachedUrl = await readGasUrlFromCache();
+          if (cachedUrl && cachedUrl.startsWith('http')) {
+            localConfig = {
+              scriptUrl: cachedUrl,
+              sheetName: 'Data_Absensi_PKL',
+              connected: true,
+              autoSync: true,
+            };
+            this.saveGoogleSheetConfig(localConfig, false, false);
+          }
+        }
+
+        const cfgHeaders: Record<string, string> = {};
+        if (localConfig.scriptUrl && localConfig.scriptUrl.startsWith('http')) {
+          cfgHeaders['x-gas-url'] = localConfig.scriptUrl;
+        }
+        const cfgRes = await fetchWithTimeout(`/api/config?_t=${Date.now()}`, { headers: cfgHeaders }, 5500);
+        if (cfgRes.ok) {
+          const json = await cfgRes.json();
+          writeServerMeta({
+            ...(json?.meta || {}),
+            serverReachable: true,
+            serverError: undefined,
+          });
+          if (json && json.status === 'success' && json.data) {
+            if (json.data.googleSheet?.scriptUrl) {
+              if (!localConfig.scriptUrl || localConfig.scriptUrl !== json.data.googleSheet.scriptUrl) {
+                this.saveGoogleSheetConfig(json.data.googleSheet, false);
+              }
+            }
+            if (json.data.appTheme) {
+              try {
+                localStorage.setItem(THEME_KEY, JSON.stringify(json.data.appTheme));
+              } catch {}
+            }
+            if (json.data.tahunAjaran) {
+              const serverTa: TahunAjaranConfig = { ...DEFAULT_TAHUN_AJARAN_CONFIG, ...json.data.tahunAjaran };
+              const localTa = this.getTahunAjaranConfig();
+              const serverMs = serverTa.updatedAt ? Date.parse(serverTa.updatedAt) : 0;
+              const localMs = localTa.updatedAt ? Date.parse(localTa.updatedAt) : 0;
+              if (
+                localMs > serverMs ||
+                (localMs === serverMs &&
+                  localTa.tahunAktif !== DEFAULT_TAHUN_AJARAN_CONFIG.tahunAktif &&
+                  serverTa.tahunAktif === DEFAULT_TAHUN_AJARAN_CONFIG.tahunAktif)
+              ) {
+                this.syncTahunAjaranToServer(localTa).catch(() => {});
+              } else {
+                this.saveTahunAjaranConfig(serverTa, false, false);
+              }
+            }
+            if (json.data.resetState) {
+              const localRs = this.getResetState();
+              const mergedRs = mergeResetStates(localRs, json.data.resetState as DataResetState);
+              this.saveResetState(mergedRs);
+              this.purgePreResetLocalData(mergedRs);
+            }
+            if (json.data.reportConfig) {
+              this.saveReportPrintConfig(json.data.reportConfig, false);
+            }
+          }
+        }
+      } catch {
+        // Offline / network fallback keeps existing local config
+      } finally {
+        this._syncConfigPromise = null;
+      }
+      return this.getGoogleSheetConfig();
+    })();
+
+    return this._syncConfigPromise;
+  },
+
   async ensureConfigSynced(): Promise<GoogleSheetConfig> {
     if (typeof window === 'undefined') return this.getGoogleSheetConfig();
     const current = this.getGoogleSheetConfig();
@@ -929,6 +1024,11 @@ export const StorageService = {
         });
         if (json && json.status === 'success' && json.data?.googleSheet?.scriptUrl) {
           this.saveGoogleSheetConfig(json.data.googleSheet, false);
+        }
+        if (json?.data?.resetState) {
+          const mergedRs = mergeResetStates(this.getResetState(), json.data.resetState as DataResetState);
+          this.saveResetState(mergedRs);
+          this.purgePreResetLocalData(mergedRs);
         }
       } else {
         writeServerMeta({ serverReachable: false, serverError: `HTTP ${cfgRes.status}` });
@@ -1062,7 +1162,12 @@ export const StorageService = {
         writeServerMeta({ serverReachable: true, serverError: undefined });
         const json = await res.json();
         if (json && json.status === 'success' && Array.isArray(json.data)) {
-          const resetState = this.getResetState();
+          let resetState = this.getResetState();
+          if (json.resetState) {
+            resetState = mergeResetStates(resetState, json.resetState as DataResetState);
+            this.saveResetState(resetState);
+            this.purgePreResetLocalData(resetState);
+          }
           // Merge remote records with any post-reset unsynced local records
           const localRecords = this.getAttendance().filter(
             lr => !this.isPreResetAttendance(lr.id, lr.tanggal, lr.nis, lr.syncedAt || '', resetState)
@@ -1137,7 +1242,22 @@ export const StorageService = {
         writeServerMeta({ serverReachable: true, serverError: undefined });
         const json = await res.json();
         if (json && json.status === 'success' && Array.isArray(json.data)) {
-          const resetState = this.getResetState();
+          let resetState = this.getResetState();
+          if (json.resetState) {
+            resetState = mergeResetStates(resetState, json.resetState as DataResetState);
+            this.saveResetState(resetState);
+            this.purgePreResetLocalData(resetState);
+          }
+          if (json.tahunAjaran) {
+            const serverTa: TahunAjaranConfig = { ...DEFAULT_TAHUN_AJARAN_CONFIG, ...json.tahunAjaran };
+            const localTa = this.getTahunAjaranConfig();
+            const serverMs = serverTa.updatedAt ? Date.parse(serverTa.updatedAt) : 0;
+            const localMs = localTa.updatedAt ? Date.parse(localTa.updatedAt) : 0;
+            if (serverMs > localMs) {
+              this.saveTahunAjaranConfig(serverTa, false, false);
+            }
+          }
+
           const localUsers = this.getUsers();
           const admins = localUsers.filter(u => u.role === 'admin');
           const localStudents = localUsers.filter(
@@ -1167,13 +1287,19 @@ export const StorageService = {
                 password: effectivePass,
               });
             } else {
-              studentMap.set(key, s);
-              // Sync missing local student to server API
-              fetch('/api/students', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ...s, scriptUrl: config.scriptUrl || '' }),
-              }).catch(() => {});
+              // Only re-upload local-only student if no reset happened OR it has an explicit post-reset timestamp
+              const stuResetMs = resetState.studentsResetAt ? Date.parse(resetState.studentsResetAt) : 0;
+              const sCreatedMs = s.createdAt ? parseGasTimestampMs(s.createdAt) : 0;
+              const hasTimePrecision = /\d{2}:\d{2}/.test(String(s.createdAt || ''));
+              const isConfirmedPostReset = !stuResetMs || (hasTimePrecision && sCreatedMs > stuResetMs + 1000);
+              if (isConfirmedPostReset) {
+                studentMap.set(key, s);
+                fetch('/api/students', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ ...s, scriptUrl: config.scriptUrl || '' }),
+                }).catch(() => {});
+              }
             }
           });
 
@@ -1612,11 +1738,12 @@ export const StorageService = {
     student: User,
     skipServerApi: boolean = false,
     _isRetry: boolean = false
-  ): Promise<{ success: boolean; serverSynced?: boolean; sheetSynced?: boolean; isUnconfigured?: boolean; message: string }> {
+  ): Promise<{ success: boolean; user?: User; serverSynced?: boolean; sheetSynced?: boolean; isUnconfigured?: boolean; message: string }> {
     const config = await this.ensureConfigSynced();
     const targetUrl = (config.scriptUrl || '').trim();
     const queueKey = student.nis || student.id;
     let serverSynced = false;
+    let updatedUser: User = student;
 
     // 1. Try sending to application server API first (passing scriptUrl so stateless Vercel lambdas can forward cleanly)
     if (!skipServerApi && typeof window !== 'undefined') {
@@ -1633,6 +1760,9 @@ export const StorageService = {
           const json = await serverRes.json();
           if (json && json.status === 'success') {
             serverSynced = true;
+            if (json.data) {
+              updatedUser = json.data as User;
+            }
             if (json.sheetSynced === true) {
               this.dequeuePendingSync('STUDENT', queueKey);
               config.lastSync = new Date().toISOString();
@@ -1640,6 +1770,7 @@ export const StorageService = {
               this.saveGoogleSheetConfig(config, false);
               return {
                 success: true,
+                user: updatedUser,
                 serverSynced: true,
                 sheetSynced: true,
                 message: 'Siswa berhasil didaftarkan di Server & Google Spreadsheet!',
@@ -2376,6 +2507,9 @@ export const StorageService = {
     deletedUsers: number;
     deletedAttendance: number;
     sheetResetSynced?: boolean;
+    supportsReset?: boolean | null;
+    studentsClearedInSheet?: number;
+    needsCodeGsUpdate?: boolean;
   }> {
     let deletedUsers = 0;
     let deletedAttendance = 0;
@@ -2383,6 +2517,7 @@ export const StorageService = {
     const prevReset = this.getResetState();
     const ignoredStu = new Set((prevReset.ignoredStudentKeys || []).map(k => k.toLowerCase()));
     const ignoredAtt = new Set(prevReset.ignoredAttendanceKeys || []);
+    const removedLocalStudents: User[] = [];
 
     if (mode === 'all' || mode === 'students') {
       const allUsers = this.getUsers();
@@ -2390,12 +2525,19 @@ export const StorageService = {
       const students = allUsers.filter(u => u.role !== 'admin' && u.username.toLowerCase() !== 'admin123');
       deletedUsers = students.length;
       students.forEach(s => {
+        removedLocalStudents.push(s);
         if (s.nis) ignoredStu.add(String(s.nis).trim().toLowerCase());
         if (s.username) ignoredStu.add(String(s.username).trim().toLowerCase());
       });
       this.saveUsers(adminUsers);
       prevReset.studentsResetAt = nowIso;
       prevReset.ignoredStudentKeys = Array.from(ignoredStu).slice(-500);
+
+      // Ensure if a student is somehow cached as active user on this browser, clear it (keep Admin logged in)
+      const cur = this.getCurrentUser();
+      if (cur && cur.role === 'siswa') {
+        this.setCurrentUser(null);
+      }
     }
 
     if (mode === 'all' || mode === 'attendance' || mode === 'students') {
@@ -2426,6 +2568,8 @@ export const StorageService = {
     const currentTa = this.getTahunAjaranConfig();
     const sheetConfig = this.getGoogleSheetConfig();
     let sheetResetSynced = false;
+    let supportsReset: boolean | null = null;
+    let studentsClearedInSheet = 0;
 
     if (typeof window !== 'undefined') {
       try {
@@ -2443,10 +2587,14 @@ export const StorageService = {
             ignoredStudentKeys: prevReset.ignoredStudentKeys || [],
             ignoredAttendanceKeys: prevReset.ignoredAttendanceKeys || [],
           }),
-        }, 12000);
+        }, 14000);
         if (resetRes.ok) {
           const json = await resetRes.json();
           sheetResetSynced = Boolean(json?.sheetResetSynced);
+          if (typeof json?.supportsReset === 'boolean') {
+            supportsReset = json.supportsReset;
+          }
+          studentsClearedInSheet = Number(json?.deletedGasStudents || 0);
           if (json?.resetState) {
             this.saveResetState(mergeResetStates(prevReset, json.resetState));
           }
@@ -2457,42 +2605,130 @@ export const StorageService = {
         console.warn('Server reset API call warning:', e);
       }
 
-      // Direct browser fallback to GAS if server didn't complete sheet wipe (only when Code.gs supportsReset === true)
+      // Direct browser fallback to GAS if server didn't complete sheet wipe
       if (!sheetResetSynced && sheetConfig.scriptUrl && sheetConfig.scriptUrl.startsWith('http')) {
+        const targetUrl = sheetConfig.scriptUrl.trim();
         try {
-          const testUrl = sheetConfig.scriptUrl.includes('?')
-            ? `${sheetConfig.scriptUrl}&action=TEST&_t=${Date.now()}`
-            : `${sheetConfig.scriptUrl}?action=TEST&_t=${Date.now()}`;
-          const testRes = await fetchWithTimeout(testUrl, { redirect: 'follow' }, 5000);
-          const testTxt = await testRes.text();
-          if (!testTxt.includes('<') && testTxt.includes('supportsReset')) {
-            const parsed = JSON.parse(testTxt);
-            if (parsed?.supportsReset === true) {
-              await fetch(sheetConfig.scriptUrl, {
+          if (supportsReset === null) {
+            const testUrl = targetUrl.includes('?')
+              ? `${targetUrl}&action=TEST&_t=${Date.now()}`
+              : `${targetUrl}?action=TEST&_t=${Date.now()}`;
+            const testRes = await fetchWithTimeout(testUrl, { redirect: 'follow' }, 4500);
+            const testTxt = await testRes.text();
+            if (!testTxt.includes('<') && testTxt.includes('supportsReset')) {
+              const parsed = JSON.parse(testTxt);
+              supportsReset = parsed?.supportsReset === true;
+            } else {
+              supportsReset = false;
+            }
+          }
+
+          if (supportsReset === true) {
+            try {
+              const postRes = await fetchWithTimeout(targetUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                body: JSON.stringify({ action: 'RESET_DATA', mode, tahunAktif: currentTa.tahunAktif }),
+                redirect: 'follow',
+              }, 8000);
+              const postTxt = await postRes.text();
+              const postJson = JSON.parse(postTxt);
+              if (postJson?.status === 'success') {
+                sheetResetSynced = true;
+              }
+            } catch {
+              await fetchWithTimeout(targetUrl, {
                 method: 'POST',
                 mode: 'no-cors',
                 headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                body: JSON.stringify({ action: 'RESET_DATA', mode }),
-              });
+                body: JSON.stringify({ action: 'RESET_DATA', mode, tahunAktif: currentTa.tahunAktif }),
+              }, 8000).catch(() => {});
+              await new Promise(resolve => setTimeout(resolve, 900));
               sheetResetSynced = true;
+            }
+          } else if (supportsReset === false && (mode === 'all' || mode === 'students')) {
+            // Old Code.gs still deployed: wipe Data_Siswa_TKR rows via GET_STUDENTS + DELETE_STUDENT directly from browser
+            const targetsMap = new Map<string, { nis: string; username?: string }>();
+            removedLocalStudents.forEach(st => {
+              const key = String(st.nis || st.username || '').trim().toLowerCase();
+              if (key) targetsMap.set(key, { nis: st.nis, username: st.username });
+            });
+            try {
+              const stuUrl = targetUrl.includes('?')
+                ? `${targetUrl}&action=GET_STUDENTS&_t=${Date.now()}`
+                : `${targetUrl}?action=GET_STUDENTS&_t=${Date.now()}`;
+              const stuRes = await fetchWithTimeout(stuUrl, { redirect: 'follow' }, 6000);
+              const stuTxt = await stuRes.text();
+              if (!stuTxt.includes('<')) {
+                const stuJson = JSON.parse(stuTxt);
+                if (stuJson?.status === 'success' && Array.isArray(stuJson.data)) {
+                  stuJson.data.forEach((st: any) => {
+                    const nis = String(st?.nis || '').trim();
+                    const username = String(st?.username || '').trim();
+                    const key = (nis || username).toLowerCase();
+                    if (key && !targetsMap.has(key)) {
+                      targetsMap.set(key, { nis, username });
+                    }
+                  });
+                }
+              }
+            } catch {}
+
+            const targets = Array.from(targetsMap.values());
+            for (let i = 0; i < targets.length; i += 4) {
+              const batch = targets.slice(i, i + 4);
+              await Promise.all(
+                batch.map(t =>
+                  fetchWithTimeout(targetUrl, {
+                    method: 'POST',
+                    mode: 'no-cors',
+                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                    body: JSON.stringify({ action: 'DELETE_STUDENT', nis: t.nis, username: t.username }),
+                  }, 6000).catch(() => {})
+                )
+              );
+              studentsClearedInSheet += batch.length;
             }
           }
         } catch {}
       }
     }
 
+    const needsCodeGsUpdate = Boolean(
+      sheetConfig.scriptUrl &&
+      sheetConfig.scriptUrl.startsWith('http') &&
+      supportsReset === false
+    );
+
     notifySyncUpdate();
 
     let message = '';
     if (mode === 'all') {
-      message = `Reset total berhasil! Dihapus ${deletedUsers} data siswa dan ${deletedAttendance} catatan presensi. Semua data kini kosong permanen dan Tahun Ajaran aktif tetap "${currentTa.tahunAktif}".`;
+      message = sheetResetSynced
+        ? `Reset total berhasil! Dihapus ${deletedUsers} data siswa dan ${deletedAttendance} catatan presensi dari aplikasi, server, dan Google Spreadsheet. Tahun Ajaran aktif tetap "${currentTa.tahunAktif}".`
+        : needsCodeGsUpdate
+        ? `Reset total selesai di aplikasi & server (${deletedUsers} siswa, ${deletedAttendance} presensi) serta daftar siswa di Spreadsheet dikosongkan. Untuk mengosongkan riwayat sheet Data_Absensi_PKL otomatis di Spreadsheet, perbarui & deploy ulang Code.gs terbaru.`
+        : `Reset total berhasil! Dihapus ${deletedUsers} data siswa dan ${deletedAttendance} catatan presensi. Semua data kini kosong permanen dan Tahun Ajaran aktif tetap "${currentTa.tahunAktif}".`;
     } else if (mode === 'attendance') {
-      message = `Reset data presensi berhasil! Dihapus ${deletedAttendance} catatan presensi. Data akun siswa dan Tahun Ajaran "${currentTa.tahunAktif}" tetap tersimpan.`;
+      message = sheetResetSynced
+        ? `Reset data presensi berhasil di aplikasi, server, dan Google Spreadsheet! Dihapus ${deletedAttendance} catatan presensi.`
+        : needsCodeGsUpdate
+        ? `Reset presensi selesai di aplikasi & server (${deletedAttendance} catatan). Untuk mengosongkan sheet Data_Absensi_PKL otomatis di Spreadsheet, perbarui & deploy ulang Code.gs terbaru.`
+        : `Reset data presensi berhasil! Dihapus ${deletedAttendance} catatan presensi. Data akun siswa dan Tahun Ajaran "${currentTa.tahunAktif}" tetap tersimpan.`;
     } else if (mode === 'students') {
-      message = `Reset data siswa berhasil! Dihapus ${deletedUsers} profil siswa dan seluruh riwayat presensinya.`;
+      message = `Reset data siswa berhasil! Dihapus ${deletedUsers} profil siswa dan seluruh riwayat presensinya.${sheetResetSynced ? ' Google Spreadsheet ikut dikosongkan.' : ''}`;
     }
 
-    return { success: true, message, deletedUsers, deletedAttendance, sheetResetSynced };
+    return {
+      success: true,
+      message,
+      deletedUsers,
+      deletedAttendance,
+      sheetResetSynced,
+      supportsReset,
+      studentsClearedInSheet,
+      needsCodeGsUpdate,
+    };
   },
 
   exportFullBackup(): string {

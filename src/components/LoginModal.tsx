@@ -57,6 +57,10 @@ export const LoginModal: React.FC<LoginModalProps> = ({
 
     setIsLoggingIn(true);
     try {
+      if (isSiswa) {
+        await StorageService.syncConfigFromServer().catch(() => {});
+      }
+
       let users = StorageService.getUsers();
       const targetRole = isSiswa ? 'siswa' : 'admin';
 

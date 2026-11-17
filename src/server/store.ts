@@ -220,6 +220,84 @@ class ServerStore {
     };
   }
 
+  private applyResetState(incoming: Partial<DataResetState>) {
+    const data = this.load();
+    const prev = data.config.resetState || {};
+    const prevAttMs = prev.attendanceResetAt ? Date.parse(prev.attendanceResetAt) : 0;
+    const inAttMs = incoming.attendanceResetAt ? Date.parse(incoming.attendanceResetAt) : 0;
+    const prevStuMs = prev.studentsResetAt ? Date.parse(prev.studentsResetAt) : 0;
+    const inStuMs = incoming.studentsResetAt ? Date.parse(incoming.studentsResetAt) : 0;
+
+    const merged: DataResetState = {
+      attendanceResetAt: inAttMs > prevAttMs ? incoming.attendanceResetAt : prev.attendanceResetAt,
+      studentsResetAt: inStuMs > prevStuMs ? incoming.studentsResetAt : prev.studentsResetAt,
+      ignoredStudentKeys: Array.from(new Set([...(prev.ignoredStudentKeys || []), ...(incoming.ignoredStudentKeys || [])])).slice(-500),
+      ignoredAttendanceKeys: Array.from(new Set([...(prev.ignoredAttendanceKeys || []), ...(incoming.ignoredAttendanceKeys || [])])).slice(-500),
+    };
+    data.config.resetState = merged;
+
+    let changed = false;
+    if (merged.studentsResetAt) {
+      const before = data.users.length;
+      data.users = data.users.filter(
+        u =>
+          u.role === 'admin' ||
+          u.username.toLowerCase() === 'admin123' ||
+          !this.isPreResetStudent(u.nis || '', u.username || '', u.createdAt || '', merged)
+      );
+      if (data.users.length !== before) changed = true;
+    }
+    if (merged.attendanceResetAt) {
+      const before = data.attendance.length;
+      data.attendance = data.attendance.filter(
+        r => !this.isPreResetAttendance(r.id, r.tanggal, r.nis, r.syncedAt || '', merged)
+      );
+      if (data.attendance.length !== before) changed = true;
+    }
+    if (changed || inAttMs > prevAttMs || inStuMs > prevStuMs) {
+      this.saveToDisk();
+    }
+  }
+
+  private async pullConfigFromGAS(targetUrl: string): Promise<void> {
+    try {
+      const cfgUrl = targetUrl.includes('?')
+        ? `${targetUrl}&action=GET_CONFIG&_t=${Date.now()}`
+        : `${targetUrl}?action=GET_CONFIG&_t=${Date.now()}`;
+      const res = await this.fetchWithTimeout(cfgUrl, { redirect: 'follow' }, 3500);
+      const parsed = await this.parseGasResponse(res);
+      if (!parsed.ok || !parsed.json) return;
+
+      const data = this.load();
+      const cloudTahun = String(parsed.json.tahunAktif || '').trim();
+      if (cloudTahun && /^\d{4}\/\d{4}$/.test(cloudTahun)) {
+        const currentTa = data.config.tahunAjaran || { ...DEFAULT_TAHUN_AJARAN_CONFIG };
+        if (currentTa.tahunAktif === DEFAULT_TAHUN_AJARAN_CONFIG.tahunAktif && cloudTahun !== currentTa.tahunAktif) {
+          const daftar = currentTa.daftarTahun.includes(cloudTahun)
+            ? currentTa.daftarTahun
+            : [...currentTa.daftarTahun, cloudTahun];
+          data.config.tahunAjaran = {
+            tahunAktif: cloudTahun,
+            daftarTahun: daftar,
+            updatedAt: new Date().toISOString(),
+          };
+          this.saveToDisk();
+        }
+      }
+
+      if (parsed.json.resetState) {
+        const rs: Partial<DataResetState> = {};
+        if (parsed.json.resetState.attendanceResetAt) rs.attendanceResetAt = String(parsed.json.resetState.attendanceResetAt);
+        if (parsed.json.resetState.studentsResetAt) rs.studentsResetAt = String(parsed.json.resetState.studentsResetAt);
+        if (rs.attendanceResetAt || rs.studentsResetAt) {
+          this.applyResetState(rs);
+        }
+      }
+    } catch {
+      // Older Code.gs without GET_CONFIG will return HTML/fail quietly
+    }
+  }
+
   public async hydrateFromGasIfCold(overrideScriptUrl?: string): Promise<void> {
     const now = Date.now();
     // Throttle automatic re-hydration to once every 15 seconds so warm lambdas stay up-to-date without spamming GAS
@@ -231,6 +309,7 @@ class ServerStore {
 
     this.hydratePromise = (async () => {
       try {
+        await this.pullConfigFromGAS(targetUrl).catch(() => {});
         await Promise.all([
           this.pullStudentsFromGAS(targetUrl).catch(() => {}),
           this.pullAttendanceFromGAS(targetUrl).catch(() => {}),
@@ -434,7 +513,12 @@ class ServerStore {
     const data = this.load();
     let deletedAttendance = 0;
     let deletedStudents = 0;
-    const nowIso = clientResetState?.attendanceResetAt || clientResetState?.studentsResetAt || new Date().toISOString();
+    const candidateTimes = [
+      Date.now(),
+      clientResetState?.attendanceResetAt ? Date.parse(clientResetState.attendanceResetAt) : 0,
+      clientResetState?.studentsResetAt ? Date.parse(clientResetState.studentsResetAt) : 0,
+    ].filter(n => !Number.isNaN(n) && n > 0);
+    const nowIso = new Date(Math.max(...candidateTimes)).toISOString();
 
     const prevReset = data.config.resetState || {};
     const prevIgnoredAtt = new Set(prevReset.ignoredAttendanceKeys || []);
@@ -482,27 +566,66 @@ class ServerStore {
     clientResetState?: Partial<DataResetState>
   ) {
     const res = this.resetAttendance(mode, clientResetState);
+    const data = this.load();
     const scriptUrl = this.resolveAndCacheScriptUrl(overrideScriptUrl);
     let sheetResetSynced = false;
+    let supportsReset: boolean | null = null;
+    let deletedGasStudents = 0;
 
     if (scriptUrl) {
       try {
         const testUrl = scriptUrl.includes('?') ? `${scriptUrl}&action=TEST&_t=${Date.now()}` : `${scriptUrl}?action=TEST&_t=${Date.now()}`;
-        const testRes = await this.fetchWithTimeout(testUrl, { redirect: 'follow' }, 5000);
+        const testRes = await this.fetchWithTimeout(testUrl, { redirect: 'follow' }, 3500);
         const testParsed = await this.parseGasResponse(testRes);
         if (testParsed.ok && testParsed.json?.supportsReset === true) {
+          supportsReset = true;
           const resetRes = await this.fetchWithTimeout(scriptUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-            body: JSON.stringify({ action: 'RESET_DATA', mode }),
+            body: JSON.stringify({
+              action: 'RESET_DATA',
+              mode,
+              tahunAktif: data.config.tahunAjaran?.tahunAktif || '',
+            }),
             redirect: 'follow',
-          }, 6500);
+          }, 5500);
           const resetParsed = await this.parseGasResponse(resetRes);
           sheetResetSynced = resetParsed.ok;
-        } else if ((mode === 'all' || mode === 'students') && res.removedStudents.length > 0 && res.removedStudents.length <= 20) {
-          // Old Code.gs fallback: delete student rows individually using existing DELETE_STUDENT action
-          for (const st of res.removedStudents) {
-            await this.deleteStudentFromGAS(scriptUrl, st.nis, st.username).catch(() => {});
+        } else {
+          supportsReset = false;
+          // Old Code.gs fallback: discover ALL students currently stored in Data_Siswa_TKR and delete them via DELETE_STUDENT
+          if (mode === 'all' || mode === 'students') {
+            const targetsMap = new Map<string, { nis: string; username?: string }>();
+            res.removedStudents.forEach(st => {
+              const key = String(st.nis || st.username || '').trim().toLowerCase();
+              if (key) targetsMap.set(key, { nis: st.nis, username: st.username });
+            });
+            try {
+              const stuUrl = scriptUrl.includes('?')
+                ? `${scriptUrl}&action=GET_STUDENTS&_t=${Date.now()}`
+                : `${scriptUrl}?action=GET_STUDENTS&_t=${Date.now()}`;
+              const stuRes = await this.fetchWithTimeout(stuUrl, { redirect: 'follow' }, 4000);
+              const stuParsed = await this.parseGasResponse(stuRes);
+              if (stuParsed.ok && Array.isArray(stuParsed.json?.data)) {
+                stuParsed.json.data.forEach((st: any) => {
+                  const nis = String(st?.nis || '').trim();
+                  const username = String(st?.username || '').trim();
+                  const key = (nis || username).toLowerCase();
+                  if (key && !targetsMap.has(key)) {
+                    targetsMap.set(key, { nis, username });
+                  }
+                });
+              }
+            } catch {}
+
+            const targets = Array.from(targetsMap.values());
+            for (let i = 0; i < targets.length; i += 5) {
+              const batch = targets.slice(i, i + 5);
+              const results = await Promise.all(
+                batch.map(t => this.deleteStudentFromGAS(scriptUrl, t.nis, t.username).catch(() => ({ success: false })))
+              );
+              deletedGasStudents += results.filter(r => r.success).length;
+            }
           }
         }
       } catch (err) {
@@ -515,6 +638,8 @@ class ServerStore {
       deletedStudents: res.deletedStudents,
       resetState: res.resetState,
       sheetResetSynced,
+      supportsReset,
+      deletedGasStudents,
     };
   }
 
@@ -542,7 +667,15 @@ class ServerStore {
         (u.username && user.username && u.username.toLowerCase() === user.username.toLowerCase())
     );
 
-    let savedUser = { ...user };
+    const stuResetMs = data.config.resetState?.studentsResetAt ? Date.parse(data.config.resetState.studentsResetAt) : 0;
+    const incomingCreatedMs = user.createdAt ? this.parseGasTimestampMs(user.createdAt) : 0;
+    const hasTimePrecision = /\d{2}:\d{2}/.test(String(user.createdAt || ''));
+    const safeCreatedAt =
+      hasTimePrecision && incomingCreatedMs > stuResetMs + 1000
+        ? user.createdAt!
+        : new Date(Math.max(Date.now(), stuResetMs + 2000)).toISOString();
+
+    let savedUser: User = { ...user, createdAt: safeCreatedAt };
     if (existingIdx >= 0) {
       const existingPass = data.users[existingIdx].password;
       const incomingPass = user.password;
@@ -553,6 +686,7 @@ class ServerStore {
       savedUser = {
         ...data.users[existingIdx],
         ...user,
+        createdAt: safeCreatedAt,
         password: finalPass,
       };
       data.users[existingIdx] = savedUser;

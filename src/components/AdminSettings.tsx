@@ -38,14 +38,16 @@ import { optimizeLogoImage } from '../utils/imageOptimizer';
 
 interface AdminSettingsProps {
   onThemeUpdated: (newTheme: AppThemeConfig) => void;
+  onNavigateTab?: (tab: 'dashboard' | 'students' | 'attendance' | 'reports' | 'gas_sync' | 'settings') => void;
 }
 
-export const AdminSettings: React.FC<AdminSettingsProps> = ({ onThemeUpdated }) => {
+export const AdminSettings: React.FC<AdminSettingsProps> = ({ onThemeUpdated, onNavigateTab }) => {
   const [theme, setTheme] = useState<AppThemeConfig>(() => StorageService.getAppThemeConfig());
   const [tahunConfig, setTahunConfig] = useState<TahunAjaranConfig>(() => StorageService.getTahunAjaranConfig());
   const [newTahunInput, setNewTahunInput] = useState('');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [needsCodeGsNotice, setNeedsCodeGsNotice] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
   const [showVercelModal, setShowVercelModal] = useState(false);
@@ -351,6 +353,7 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ onThemeUpdated }) 
 
       const activeMode = showResetModal;
       const res = await StorageService.resetTotalData(activeMode);
+      setNeedsCodeGsNotice(Boolean(res.needsCodeGsUpdate));
       reloadTahunConfig();
       try { confetti({ particleCount: 40, spread: 60 }); } catch {}
       showToast(res.message);
@@ -361,7 +364,7 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ onThemeUpdated }) 
           ? 'Reset Data Presensi Selesai'
           : 'Reset Data Siswa Selesai',
         res.message,
-        'warning'
+        res.needsCodeGsUpdate ? 'warning' : 'success'
       );
       setShowResetModal(null);
       setConfirmInputText('');
@@ -441,6 +444,40 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ onThemeUpdated }) 
           <button type="button" onClick={() => setErrorMessage(null)} className="text-red-700 hover:text-red-950 font-bold cursor-pointer">
             <X className="w-3.5 h-3.5" />
           </button>
+        </div>
+      )}
+
+      {/* Code.gs Update Notice after Reset when Spreadsheet still uses older Code.gs */}
+      {needsCodeGsNotice && (
+        <div className="p-4 rounded-2xl bg-amber-50 border border-amber-300 text-amber-950 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
+          <div className="flex items-start gap-2.5">
+            <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+            <div className="space-y-0.5">
+              <p className="font-bold text-slate-900">Perbarui Code.gs untuk Hapus Otomatis Sheet Data_Absensi_PKL</p>
+              <p className="text-amber-900 leading-relaxed">
+                Data siswa &amp; presensi di aplikasi serta server sudah kosong bersih (daftar siswa di sheet <code className="font-mono font-bold">Data_Siswa_TKR</code> juga sudah dibersihkan). Agar baris lama di sheet <code className="font-mono font-bold">Data_Absensi_PKL</code> ikut terhapus otomatis dari aplikasi saat Reset, salin &amp; deploy ulang <strong>Code.gs v2.2</strong> di menu Sinkron Spreadsheet.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            {onNavigateTab && (
+              <button
+                type="button"
+                onClick={() => onNavigateTab('gas_sync')}
+                className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold cursor-pointer shadow-sm"
+              >
+                Salin Code.gs Terbaru
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setNeedsCodeGsNotice(false)}
+              className="p-1.5 rounded-lg text-amber-700 hover:text-amber-950 cursor-pointer"
+              aria-label="Tutup pemberitahuan"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       )}
 

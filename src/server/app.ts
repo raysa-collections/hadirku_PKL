@@ -44,11 +44,12 @@ app.get('/api/health', (req: Request, res: Response) => {
 });
 
 // --- CONFIG API ---
-app.get('/api/config', (req: Request, res: Response) => {
+app.get('/api/config', async (req: Request, res: Response) => {
   const headerGas = (req.headers['x-gas-url'] as string | undefined) || (typeof req.query.gas === 'string' ? req.query.gas : undefined);
   if (headerGas && headerGas.trim().startsWith('http')) {
     serverStore.saveConfig({ googleSheet: { scriptUrl: headerGas.trim(), sheetName: 'Data_Absensi_PKL', connected: true, autoSync: true } });
   }
+  await serverStore.hydrateFromGasIfCold(headerGas).catch(() => {});
   res.json({
     status: 'success',
     data: serverStore.getConfig(),
@@ -72,7 +73,14 @@ app.get('/api/attendance', async (req: Request, res: Response) => {
   const overrideGas = (req.headers['x-gas-url'] as string | undefined) || (typeof req.query.scriptUrl === 'string' ? req.query.scriptUrl : undefined);
   await serverStore.hydrateFromGasIfCold(overrideGas);
   const records = serverStore.getAttendance(nis);
-  res.json({ status: 'success', total: records.length, data: records });
+  const cfg = serverStore.getConfig();
+  res.json({
+    status: 'success',
+    total: records.length,
+    data: records,
+    resetState: cfg.resetState,
+    tahunAjaran: cfg.tahunAjaran,
+  });
 });
 
 // POST attendance record (Check-In or Check-Out) from student phone
@@ -179,7 +187,14 @@ app.get('/api/students', async (req: Request, res: Response) => {
   const overrideGas = (req.headers['x-gas-url'] as string | undefined) || (typeof req.query.scriptUrl === 'string' ? req.query.scriptUrl : undefined);
   await serverStore.hydrateFromGasIfCold(overrideGas);
   const students = serverStore.getStudents();
-  res.json({ status: 'success', total: students.length, data: students });
+  const cfg = serverStore.getConfig();
+  res.json({
+    status: 'success',
+    total: students.length,
+    data: students,
+    resetState: cfg.resetState,
+    tahunAjaran: cfg.tahunAjaran,
+  });
 });
 
 app.post('/api/students', async (req: Request, res: Response) => {

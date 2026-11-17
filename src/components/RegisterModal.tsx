@@ -30,7 +30,7 @@ export const RegisterModal: React.FC<RegisterModalProps> = ({ onSuccess, onBackT
   const [isCloudReady, setIsCloudReady] = useState(() => StorageService.isGoogleSheetConnected());
 
   useEffect(() => {
-    StorageService.ensureConfigSynced()
+    StorageService.syncConfigFromServer()
       .then(() => {
         setIsCloudReady(StorageService.isGoogleSheetConnected());
       })
@@ -48,6 +48,11 @@ export const RegisterModal: React.FC<RegisterModalProps> = ({ onSuccess, onBackT
 
     if (!cleanUsername || !cleanNis || !cleanNama || !formData.password.trim()) {
       setError('Mohon lengkapi Username, NIS, Nama Siswa, dan Password.');
+      return;
+    }
+
+    if (cleanUsername === 'admin' || cleanUsername === 'admin123') {
+      setError('Username tersebut khusus untuk Administrator. Silakan gunakan username siswa lain.');
       return;
     }
 
@@ -71,24 +76,25 @@ export const RegisterModal: React.FC<RegisterModalProps> = ({ onSuccess, onBackT
     setIsSubmitting(true);
 
     try {
-      await StorageService.ensureConfigSynced();
+      // Sync latest config + reset tombstones from server BEFORE reading/merging student list
+      await StorageService.syncConfigFromServer();
 
       // Fetch fresh user list from server & Google Spreadsheet to ensure duplicate checks are accurate
-      let existingUsers: User[] = [];
+      let activeStudents: User[] = [];
       try {
-        existingUsers = await StorageService.fetchStudentsFromServer();
+        await StorageService.fetchStudentsFromServer();
         if (StorageService.isGoogleSheetConnected()) {
           await StorageService.pullStudentsFromCloud();
-          existingUsers = StorageService.getUsers();
         }
+        activeStudents = StorageService.getUsers().filter(u => u.role === 'siswa');
       } catch {
-        existingUsers = StorageService.getUsers();
+        activeStudents = StorageService.getUsers().filter(u => u.role === 'siswa');
       }
 
-      const existingWithSameUsername = existingUsers.find(
+      const existingWithSameUsername = activeStudents.find(
         u => u.username && u.username.toLowerCase() === cleanUsername
       );
-      const existingWithSameNis = existingUsers.find(
+      const existingWithSameNis = activeStudents.find(
         u => u.nis && u.nis.toLowerCase() === cleanNis.toLowerCase()
       );
 
@@ -103,6 +109,10 @@ export const RegisterModal: React.FC<RegisterModalProps> = ({ onSuccess, onBackT
         setIsSubmitting(false);
         return;
       }
+
+      const rs = StorageService.getResetState();
+      const stuResetMs = rs.studentsResetAt ? Date.parse(rs.studentsResetAt) : 0;
+      const nowIso = new Date(Math.max(Date.now(), stuResetMs + 2000)).toISOString();
 
       const newUser: User = {
         id: existingWithSameNis?.id || `USR-SISWA-${Date.now()}`,
@@ -119,7 +129,7 @@ export const RegisterModal: React.FC<RegisterModalProps> = ({ onSuccess, onBackT
         tempatPkl: formData.tempatPkl.trim() || 'Instansi PKL Mitra',
         namaPembimbing: formData.namaPembimbing.trim() || 'Pembimbing Lapangan',
         tahunAjaran: StorageService.getActiveTahunAjaran(),
-        createdAt: new Date().toISOString().slice(0, 10),
+        createdAt: nowIso,
       };
 
       // Await single atomic registration + Server & Google Spreadsheet sync BEFORE navigating
