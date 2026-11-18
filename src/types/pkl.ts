@@ -47,6 +47,7 @@ export interface AttendanceRecord {
   tahunAjaran?: string; // e.g. "2025/2026"
   syncStatus: 'synced' | 'pending' | 'local_only';
   syncedAt?: string;
+  recordedAt?: string;
 }
 
 export interface TahunAjaranConfig {

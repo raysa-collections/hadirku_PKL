@@ -67,8 +67,18 @@ export const AdminStudentManagement: React.FC = () => {
     password: 'siswa123',
   });
 
+  const usersSigRef = useRef<string>(JSON.stringify(users));
+  const syncingRef = useRef<boolean>(false);
+  const modalOpenRef = useRef<boolean>(false);
+  modalOpenRef.current = showAddModal || Boolean(editingUser) || Boolean(importPreview);
+
   const reloadUsers = () => {
-    setUsers(StorageService.getUsers().filter(u => u.role === 'siswa'));
+    const nextUsers = StorageService.getUsers().filter(u => u.role === 'siswa');
+    const nextSig = JSON.stringify(nextUsers);
+    if (nextSig !== usersSigRef.current) {
+      usersSigRef.current = nextSig;
+      setUsers(nextUsers);
+    }
   };
 
   const showToast = (msg: string) => {
@@ -77,11 +87,12 @@ export const AdminStudentManagement: React.FC = () => {
   };
 
   const handleSyncStudents = async (notify: boolean = true) => {
-    setIsSyncing(true);
+    if (syncingRef.current) return;
+    syncingRef.current = true;
+    if (notify) setIsSyncing(true);
     try {
       await StorageService.ensureConfigSynced();
-      const serverUsers = await StorageService.fetchStudentsFromServer();
-      setUsers(serverUsers.filter(u => u.role === 'siswa'));
+      await StorageService.fetchStudentsFromServer();
 
       if (StorageService.isGoogleSheetConnected()) {
         const res = await StorageService.pullStudentsFromCloud();
@@ -89,14 +100,18 @@ export const AdminStudentManagement: React.FC = () => {
         if (notify) {
           showToast(res.message);
         }
-      } else if (notify) {
-        const count = StorageService.getUsers().filter(u => u.role === 'siswa').length;
-        showToast(`Data siswa diperbarui dari server. Total: ${count} siswa.`);
+      } else {
+        reloadUsers();
+        if (notify) {
+          const count = StorageService.getUsers().filter(u => u.role === 'siswa').length;
+          showToast(`Data siswa diperbarui dari server. Total: ${count} siswa.`);
+        }
       }
     } catch (err: any) {
       if (notify) showToast('Gagal sinkronisasi data siswa: ' + (err?.message || 'Jaringan error'));
     } finally {
-      setIsSyncing(false);
+      syncingRef.current = false;
+      if (notify) setIsSyncing(false);
     }
   };
 
@@ -104,14 +119,16 @@ export const AdminStudentManagement: React.FC = () => {
     const onSyncUpdate = () => {
       reloadUsers();
       const nextTa = StorageService.getTahunAjaranConfig();
-      setTahunConfig(nextTa);
-      setFormData(prev => ({ ...prev, tahunAjaran: nextTa.tahunAktif }));
+      setTahunConfig(prev => (JSON.stringify(prev) === JSON.stringify(nextTa) ? prev : nextTa));
+      setFormData(prev => (prev.tahunAjaran === nextTa.tahunAktif ? prev : { ...prev, tahunAjaran: nextTa.tahunAktif }));
     };
     window.addEventListener('pkl-sync-updated', onSyncUpdate);
 
     handleSyncStudents(false);
 
     const interval = setInterval(() => {
+      if (modalOpenRef.current) return;
+      if (typeof document !== 'undefined' && document.hidden) return;
       handleSyncStudents(false);
     }, 15000);
 

@@ -579,6 +579,10 @@ function formatSheetDate(val) {
   if (/^\\d{4}-\\d{2}-\\d{2}/.test(str)) {
     return str.substring(0, 10);
   }
+  const dmy = str.match(/^(\\d{1,2})[\\/-](\\d{1,2})[\\/-](\\d{4})/);
+  if (dmy) {
+    return dmy[3] + "-" + ("0" + dmy[2]).slice(-2) + "-" + ("0" + dmy[1]).slice(-2);
+  }
   try {
     const d = new Date(str);
     if (!isNaN(d.getTime())) {
@@ -596,7 +600,12 @@ function formatSheetTime(val) {
   if (val instanceof Date) {
     return Utilities.formatDate(val, TIMEZONE, "HH:mm:ss");
   }
-  return String(val).trim();
+  const str = String(val).trim();
+  const m = str.match(/(\\d{1,2})[:.](\\d{2})(?:[:.](\\d{2}))?/);
+  if (m) {
+    return ("0" + m[1]).slice(-2) + ":" + m[2] + ":" + (m[3] || "00");
+  }
+  return str;
 }
 
 function handleGetAttendance(filterNis) {

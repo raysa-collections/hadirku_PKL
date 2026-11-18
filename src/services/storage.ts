@@ -6,6 +6,13 @@ import {
   INITIAL_USERS,
   generateSeedAttendance,
 } from '../constants/defaults';
+import {
+  normalizeAttendanceRecord,
+  normalizeDateYmd,
+  parseTimestampMsSafe,
+  sortAttendanceRecordsDeterministic,
+  getAttendanceSignature,
+} from '../utils/attendanceUtils';
 
 export {
   DEFAULT_TAHUN_AJARAN_CONFIG,
@@ -92,13 +99,20 @@ async function readGasUrlFromCache(): Promise<string> {
   }
 }
 
-function writeServerMeta(patch: Record<string, any>) {
-  if (typeof sessionStorage === 'undefined') return;
+function writeServerMeta(patch: Record<string, any>): boolean {
+  if (typeof sessionStorage === 'undefined') return false;
   try {
     const raw = sessionStorage.getItem('pkl_server_meta_v1');
     const prev = raw ? JSON.parse(raw) : {};
-    sessionStorage.setItem('pkl_server_meta_v1', JSON.stringify({ ...prev, ...patch }));
-  } catch {}
+    const next = { ...prev, ...patch };
+    const prevStr = JSON.stringify(prev);
+    const nextStr = JSON.stringify(next);
+    if (prevStr === nextStr) return false;
+    sessionStorage.setItem('pkl_server_meta_v1', nextStr);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs: number = 10000): Promise<Response> {
@@ -146,20 +160,7 @@ function dispatchChangeNotification(
 }
 
 function parseGasTimestampMs(raw?: string): number {
-  if (!raw) return 0;
-  const str = String(raw).replace(/\s*WIB\s*$/i, '').trim();
-  if (!str) return 0;
-  if (/^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}(:\d{2})?$/.test(str)) {
-    const iso = str.replace(/\s+/, 'T') + (str.length <= 16 ? ':00' : '') + '+07:00';
-    const ms = Date.parse(iso);
-    return Number.isNaN(ms) ? 0 : ms;
-  }
-  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
-    const ms = Date.parse(`${str}T00:00:00+07:00`);
-    return Number.isNaN(ms) ? 0 : ms;
-  }
-  const ms = Date.parse(str);
-  return Number.isNaN(ms) ? 0 : ms;
+  return parseTimestampMsSafe(raw).ms;
 }
 
 function mergeResetStates(a: DataResetState = {}, b: DataResetState = {}): DataResetState {
@@ -247,10 +248,20 @@ export function getJakartaTime(): string {
   return `${hours}:${minutes}:${seconds}`;
 }
 
-export function formatIndonesianDate(dateStr: string): string {
+export function formatIndonesianDate(dateStr?: string | null): string {
+  const safeInput = String(dateStr ?? '').trim();
+  if (!safeInput || safeInput === '-') return '-';
   try {
-    const [y, m, d] = dateStr.split('-');
-    const date = new Date(Number(y), Number(m) - 1, Number(d));
+    const normYmd = normalizeDateYmd(safeInput);
+    const [y, m, d] = (normYmd || safeInput).split('-');
+    const yn = Number(y);
+    const mn = Number(m);
+    const dn = Number(d);
+    if (!Number.isFinite(yn) || !Number.isFinite(mn) || !Number.isFinite(dn) || mn < 1 || mn > 12 || dn < 1 || dn > 31) {
+      return safeInput;
+    }
+    const date = new Date(yn, mn - 1, dn);
+    if (Number.isNaN(date.getTime())) return safeInput;
     return new Intl.DateTimeFormat('id-ID', {
       weekday: 'long',
       day: 'numeric',
@@ -258,7 +269,7 @@ export function formatIndonesianDate(dateStr: string): string {
       year: 'numeric',
     }).format(date);
   } catch {
-    return dateStr;
+    return safeInput || '-';
   }
 }
 
@@ -644,19 +655,42 @@ export const StorageService = {
       return [];
     }
     try {
-      return JSON.parse(raw);
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return [];
+      const students = this.getUsers();
+      const defaultTahun = this.getActiveTahunAjaran();
+      const map = new Map<string, AttendanceRecord>();
+      parsed.forEach((item: any) => {
+        const norm = normalizeAttendanceRecord(item, students, defaultTahun);
+        if (!norm) return;
+        const key = `${norm.tanggal}::${norm.nis.toLowerCase()}`;
+        const prev = map.get(key);
+        if (!prev) {
+          map.set(key, norm);
+        } else {
+          map.set(key, {
+            ...prev,
+            ...norm,
+            fotoBukti: norm.fotoBukti || prev.fotoBukti,
+            fotoPulang: norm.fotoPulang || prev.fotoPulang,
+            recordedAt: norm.recordedAt || prev.recordedAt,
+          });
+        }
+      });
+      return sortAttendanceRecordsDeterministic(Array.from(map.values()));
     } catch {
       return [];
     }
   },
 
   saveAttendance(records: AttendanceRecord[]) {
+    const sorted = sortAttendanceRecordsDeterministic(records);
     try {
-      localStorage.setItem(ATTENDANCE_KEY, JSON.stringify(records));
+      localStorage.setItem(ATTENDANCE_KEY, JSON.stringify(sorted));
     } catch (err) {
       // QuotaExceededError recovery: strip heavy base64 photos from older already-synced records
       console.warn('localStorage quota reached in saveAttendance, compacting older photos:', err);
-      const compacted = records.map((r, idx) => {
+      const compacted = sorted.map((r, idx) => {
         if (idx >= 8 && r.syncStatus === 'synced') {
           const { fotoBukti, fotoPulang, ...rest } = r;
           return rest;
@@ -667,7 +701,7 @@ export const StorageService = {
         localStorage.setItem(ATTENDANCE_KEY, JSON.stringify(compacted));
       } catch {
         // Last resort: strip photos on all synced records
-        const stripped = records.map((r) => {
+        const stripped = sorted.map((r) => {
           if (r.syncStatus === 'synced') {
             const { fotoBukti, fotoPulang, ...rest } = r;
             return rest;
@@ -682,20 +716,42 @@ export const StorageService = {
   },
 
   addOrUpdateAttendance(record: AttendanceRecord) {
-    this.unignoreAttendanceKeys(record.id, record.tanggal, record.nis);
+    const students = this.getUsers();
+    const defaultTahun = this.getActiveTahunAjaran();
+    const rs = this.getResetState();
+    const attResetMs = rs.attendanceResetAt ? Date.parse(rs.attendanceResetAt) : 0;
+    const safeRecordedAt = new Date(Math.max(Date.now(), (Number.isNaN(attResetMs) ? 0 : attResetMs) + 2000)).toISOString();
+
+    const norm = normalizeAttendanceRecord(
+      {
+        ...record,
+        recordedAt: record.recordedAt || safeRecordedAt,
+      },
+      students,
+      defaultTahun
+    ) || { ...record, recordedAt: record.recordedAt || safeRecordedAt };
+
+    this.unignoreAttendanceKeys(norm.id, norm.tanggal, norm.nis);
     const records = this.getAttendance();
-    const normNis = String(record.nis || '').trim().toLowerCase();
+    const normNis = String(norm.nis || '').trim().toLowerCase();
     const existingIndex = records.findIndex(
-      r => r.id === record.id || (r.tanggal === record.tanggal && String(r.nis || '').trim().toLowerCase() === normNis)
+      r => r.id === norm.id || (r.tanggal === norm.tanggal && String(r.nis || '').trim().toLowerCase() === normNis)
     );
     if (existingIndex >= 0) {
-      records[existingIndex] = { ...records[existingIndex], ...record };
+      const ex = records[existingIndex];
+      records[existingIndex] = {
+        ...ex,
+        ...norm,
+        recordedAt: safeRecordedAt,
+        fotoBukti: norm.fotoBukti || ex.fotoBukti,
+        fotoPulang: norm.fotoPulang || ex.fotoPulang,
+      };
     } else {
-      records.unshift(record);
+      records.unshift(norm);
     }
     this.saveAttendance(records);
     notifySyncUpdate();
-    return record;
+    return norm;
   },
 
   // --- OUTBOX / PENDING SYNC QUEUE ---
@@ -711,10 +767,18 @@ export const StorageService = {
 
   saveSyncQueue(queue: SyncQueueItem[]) {
     if (typeof window === 'undefined') return;
+    let changed = true;
     try {
-      localStorage.setItem(SYNC_QUEUE_KEY, JSON.stringify(queue));
+      const prevRaw = localStorage.getItem(SYNC_QUEUE_KEY);
+      const nextRaw = JSON.stringify(queue);
+      changed = prevRaw !== nextRaw;
+      if (changed) {
+        localStorage.setItem(SYNC_QUEUE_KEY, nextRaw);
+      }
     } catch {}
-    notifySyncUpdate();
+    if (changed) {
+      notifySyncUpdate();
+    }
   },
 
   enqueuePendingSync(item: Omit<SyncQueueItem, 'queuedAt'>) {
@@ -789,8 +853,9 @@ export const StorageService = {
       const res = await fetchWithTimeout(`/api/health?_t=${Date.now()}`, {}, 7000);
       if (!res.ok) {
         const errMsg = `HTTP ${res.status}`;
-        writeServerMeta({ serverReachable: false, serverError: errMsg });
-        notifySyncUpdate();
+        if (writeServerMeta({ serverReachable: false, serverError: errMsg })) {
+          notifySyncUpdate();
+        }
         return {
           ok: false,
           isVercel: window.location.hostname.includes('vercel.app'),
@@ -803,14 +868,16 @@ export const StorageService = {
       }
       const json = await res.json();
       if (json && json.status === 'ok') {
-        writeServerMeta({
+        const metaChanged = writeServerMeta({
           isVercel: Boolean(json.isVercel || window.location.hostname.includes('vercel.app')),
           hasEnvScriptUrl: Boolean(json.hasEnvScriptUrl),
           serverHasScriptUrl: Boolean(json.serverHasScriptUrl),
           serverReachable: true,
           serverError: undefined,
         });
-        notifySyncUpdate();
+        if (metaChanged) {
+          notifySyncUpdate();
+        }
         return {
           ok: true,
           isVercel: Boolean(json.isVercel || window.location.hostname.includes('vercel.app')),
@@ -823,8 +890,9 @@ export const StorageService = {
       throw new Error('Respon server tidak valid');
     } catch (err: any) {
       const errMsg = err?.message || 'Tidak dapat menghubungi /api/health';
-      writeServerMeta({ serverReachable: false, serverError: errMsg });
-      notifySyncUpdate();
+      if (writeServerMeta({ serverReachable: false, serverError: errMsg })) {
+        notifySyncUpdate();
+      }
       return {
         ok: false,
         isVercel: window.location.hostname.includes('vercel.app'),
@@ -880,7 +948,7 @@ export const StorageService = {
             }
           } else if (item.type === 'ATTENDANCE') {
             const rec = attendance.find(r => r.id === item.key);
-            if (!rec || this.isPreResetAttendance(rec.id, rec.tanggal, rec.nis, rec.syncedAt || '', resetState)) {
+            if (!rec || this.isPreResetAttendance(rec.id, rec.tanggal, rec.nis, rec.syncedAt || '', resetState, rec.recordedAt)) {
               this.dequeuePendingSync('ATTENDANCE', item.key);
               continue;
             }
@@ -1168,19 +1236,24 @@ export const StorageService = {
             this.saveResetState(resetState);
             this.purgePreResetLocalData(resetState);
           }
+          const students = this.getUsers();
+          const defaultTahun = this.getActiveTahunAjaran();
+
           // Merge remote records with any post-reset unsynced local records
-          const localRecords = this.getAttendance().filter(
-            lr => !this.isPreResetAttendance(lr.id, lr.tanggal, lr.nis, lr.syncedAt || '', resetState)
+          const prevLocal = this.getAttendance();
+          const localRecords = prevLocal.filter(
+            lr => !this.isPreResetAttendance(lr.id, lr.tanggal, lr.nis, lr.syncedAt || '', resetState, lr.recordedAt)
           );
-          const remoteRecords: AttendanceRecord[] = (json.data as AttendanceRecord[]).filter(
-            r => r && !this.isPreResetAttendance(r.id, r.tanggal, r.nis, r.syncedAt || '', resetState)
-          );
+          const remoteRecords: AttendanceRecord[] = (json.data as any[])
+            .map(r => normalizeAttendanceRecord(r, students, defaultTahun))
+            .filter((r): r is AttendanceRecord =>
+              Boolean(r) && !this.isPreResetAttendance(r!.id, r!.tanggal, r!.nis, r!.syncedAt || '', resetState, r!.recordedAt)
+            );
           const map = new Map<string, AttendanceRecord>();
-          const remoteKeys = new Set<string>();
 
           remoteRecords.forEach(r => {
+            this.unignoreAttendanceKeys(r.id, r.tanggal, r.nis);
             const key = `${r.tanggal}::${String(r.nis || '').trim().toLowerCase()}`;
-            remoteKeys.add(key);
             map.set(key, r);
           });
 
@@ -1208,13 +1281,17 @@ export const StorageService = {
                 mapsUrlPulang: ex.mapsUrlPulang && ex.mapsUrlPulang !== '-' ? ex.mapsUrlPulang : lr.mapsUrlPulang,
                 fotoBukti: ex.fotoBukti || lr.fotoBukti,
                 fotoPulang: ex.fotoPulang || lr.fotoPulang,
+                recordedAt: ex.recordedAt || lr.recordedAt,
+                tahunAjaran: ex.tahunAjaran || lr.tahunAjaran,
                 syncStatus: localHasPulang && !remoteHasPulang ? 'pending' : ex.syncStatus,
               });
             }
           });
 
-          const merged = Array.from(map.values());
-          this.saveAttendance(merged);
+          const merged = sortAttendanceRecordsDeterministic(Array.from(map.values()));
+          if (getAttendanceSignature(merged) !== getAttendanceSignature(prevLocal)) {
+            this.saveAttendance(merged);
+          }
           return filterNis
             ? merged.filter(r => String(r.nis || '').trim().toLowerCase() === filterNis.trim().toLowerCase())
             : merged;
@@ -1474,10 +1551,13 @@ export const StorageService = {
       };
     }
 
-    const mergeRemoteRecords = (remoteList: AttendanceRecord[]): number => {
+    const mergeRemoteRecords = (remoteList: any[]): { changedCount: number; dataChanged: boolean } => {
       const resetState = this.getResetState();
-      const localRecords = this.getAttendance().filter(
-        lr => !this.isPreResetAttendance(lr.id, lr.tanggal, lr.nis, lr.syncedAt || '', resetState)
+      const students = this.getUsers();
+      const defaultTahun = this.getActiveTahunAjaran();
+      const prevRecords = this.getAttendance();
+      const localRecords = prevRecords.filter(
+        lr => !this.isPreResetAttendance(lr.id, lr.tanggal, lr.nis, lr.syncedAt || '', resetState, lr.recordedAt)
       );
       const map = new Map<string, AttendanceRecord>();
       let changedCount = 0;
@@ -1487,12 +1567,22 @@ export const StorageService = {
         map.set(key, lr);
       });
 
-      remoteList.forEach(rem => {
-        if (!rem || !rem.tanggal || !rem.nis) return;
-        if (this.isPreResetAttendance(rem.id, rem.tanggal, rem.nis, rem.syncedAt || '', resetState)) {
+      remoteList.forEach(rawRem => {
+        const rem = normalizeAttendanceRecord(
+          {
+            ...rawRem,
+            syncStatus: 'synced',
+            syncedAt: rawRem?.syncedAt || new Date().toISOString(),
+          },
+          students,
+          defaultTahun
+        );
+        if (!rem) return;
+        if (this.isPreResetAttendance(rem.id, rem.tanggal, rem.nis, rem.syncedAt || '', resetState, rem.recordedAt)) {
           return;
         }
-        const normNis = String(rem.nis).trim().toLowerCase();
+        this.unignoreAttendanceKeys(rem.id, rem.tanggal, rem.nis);
+        const normNis = rem.nis.toLowerCase();
         const key = `${rem.tanggal}::${normNis}`;
         const existing = map.get(key);
 
@@ -1518,15 +1608,20 @@ export const StorageService = {
             mapsUrlPulang: (rem.mapsUrlPulang && rem.mapsUrlPulang !== '-') ? rem.mapsUrlPulang : (existing.mapsUrlPulang || '-'),
             fotoBukti: existing.fotoBukti || rem.fotoBukti,
             fotoPulang: existing.fotoPulang || rem.fotoPulang,
+            recordedAt: existing.recordedAt || rem.recordedAt,
+            tahunAjaran: existing.tahunAjaran || rem.tahunAjaran,
             syncStatus: isLocalPending ? 'pending' : 'synced',
           });
           changedCount++;
         }
       });
 
-      const merged = Array.from(map.values());
-      this.saveAttendance(merged);
-      return changedCount;
+      const merged = sortAttendanceRecordsDeterministic(Array.from(map.values()));
+      const dataChanged = getAttendanceSignature(merged) !== getAttendanceSignature(prevRecords);
+      if (dataChanged) {
+        this.saveAttendance(merged);
+      }
+      return { changedCount, dataChanged };
     };
 
     // 1. Try server pull first (server forwards directly, bypassing CORS)
@@ -1540,14 +1635,18 @@ export const StorageService = {
         const json = await serverRes.json();
         if (json && json.success) {
           let changed = json.count || 0;
+          let dataChanged = false;
           if (Array.isArray(json.data)) {
-            changed = mergeRemoteRecords(json.data);
+            const mergeRes = mergeRemoteRecords(json.data);
+            changed = mergeRes.changedCount;
+            dataChanged = mergeRes.dataChanged;
           } else {
             await this.fetchAttendanceFromServer(filterNis);
+            dataChanged = true;
           }
           config.lastSync = new Date().toISOString();
           config.connected = true;
-          this.saveGoogleSheetConfig(config, false);
+          this.saveGoogleSheetConfig(config, false, dataChanged);
           const updatedRecords = this.getAttendance();
           return {
             success: true,
@@ -1579,48 +1678,33 @@ export const StorageService = {
 
       const data = JSON.parse(rawText);
       if (data && data.status === 'success' && Array.isArray(data.data)) {
+        const students = this.getUsers();
+        const defaultTahun = this.getActiveTahunAjaran();
         const mapped: AttendanceRecord[] = data.data
-          .filter((item: any) => item && item.tanggal && item.nis)
-          .map((item: any) => {
-            const cleanNis = String(item.nis).trim();
-            const recordId = item.id || `ABS-${String(item.tanggal).replace(/-/g, '')}-${cleanNis}`;
-            const hasOut = Boolean(item.jamPulang && item.jamPulang !== '-');
-            return {
-              id: recordId,
-              tanggal: item.tanggal,
-              nis: cleanNis,
-              namaSiswa: item.namaSiswa || 'Siswa PKL',
-              kelas: item.kelas || 'XII TKR 1',
-              namaPembimbing: item.namaPembimbing || '-',
-              asalSekolah: item.asalSekolah || 'SMKN 1 Tegalsari',
-              jurusan: item.jurusan || 'Teknik Kendaraan Ringan (TKR)',
-              jamDatang: item.jamDatang || '-',
-              jamPulang: item.jamPulang || '-',
-              status: item.status || 'Hadir',
-              statusDatang: item.statusDatang || item.status || 'Hadir',
-              statusPulang: item.statusPulang || (hasOut ? 'Sudah Pulang' : 'Belum Pulang'),
-              keterangan: item.keterangan || '-',
-              tempatPkl: item.tempatPkl || '-',
-              koordinatGps: item.koordinatGps || '-',
-              mapsUrl: item.mapsUrl || (item.koordinatGps && item.koordinatGps !== '-' ? `https://www.google.com/maps?q=${encodeURIComponent(item.koordinatGps)}` : '-'),
-              koordinatPulang: item.koordinatPulang || '-',
-              mapsUrlPulang: item.mapsUrlPulang || (item.koordinatPulang && item.koordinatPulang !== '-' ? `https://www.google.com/maps?q=${encodeURIComponent(item.koordinatPulang)}` : '-'),
-              syncStatus: 'synced' as const,
-              syncedAt: item.syncedAt || new Date().toISOString(),
-            };
-          });
+          .map((item: any) =>
+            normalizeAttendanceRecord(
+              {
+                ...item,
+                syncStatus: 'synced',
+                syncedAt: item?.syncedAt || new Date().toISOString(),
+              },
+              students,
+              defaultTahun
+            )
+          )
+          .filter((r: AttendanceRecord | null): r is AttendanceRecord => Boolean(r));
 
-        const addedOrUpdated = mergeRemoteRecords(mapped);
+        const mergeRes = mergeRemoteRecords(mapped);
         const total = this.getAttendance().length;
         config.lastSync = new Date().toISOString();
         config.connected = true;
-        this.saveGoogleSheetConfig(config, false);
+        this.saveGoogleSheetConfig(config, false, mergeRes.dataChanged);
 
         return {
           success: true,
-          newCount: addedOrUpdated,
+          newCount: mergeRes.changedCount,
           total,
-          message: `Berhasil menarik ${addedOrUpdated} catatan presensi dari Google Spreadsheet. Total: ${total} presensi.`,
+          message: `Berhasil menarik ${mergeRes.changedCount} catatan presensi dari Google Spreadsheet. Total: ${total} presensi.`,
         };
       } else {
         throw new Error(data.message || 'Format data Google Spreadsheet tidak sesuai.');
@@ -1659,11 +1743,13 @@ export const StorageService = {
           const filteredRemote = (json.data as User[]).filter(
             st => st && !this.isPreResetStudent(st.nis || '', st.username || '', st.createdAt || '', resetState)
           );
+          const prevUsersStr = JSON.stringify(this.getUsers());
           // Pass syncToCloud = false so pulling does NOT re-push students back to Spreadsheet
           this.addUsersBulk(filteredRemote, false);
+          const nextUsersStr = JSON.stringify(this.getUsers());
           config.lastSync = new Date().toISOString();
           config.connected = true;
-          this.saveGoogleSheetConfig(config, false);
+          this.saveGoogleSheetConfig(config, false, prevUsersStr !== nextUsersStr);
           return {
             success: true,
             count: filteredRemote.length,
@@ -1716,11 +1802,13 @@ export const StorageService = {
             createdAt: st.createdAt || new Date().toISOString().slice(0, 10),
           }));
 
+        const prevUsersStr = JSON.stringify(this.getUsers());
         // IMPORTANT: pass false for syncToCloud so pulled students aren't re-pushed!
         const result = this.addUsersBulk(studentUsers, false);
+        const nextUsersStr = JSON.stringify(this.getUsers());
         config.lastSync = new Date().toISOString();
         config.connected = true;
-        this.saveGoogleSheetConfig(config, false);
+        this.saveGoogleSheetConfig(config, false, prevUsersStr !== nextUsersStr);
         return {
           success: true,
           count: result.addedCount + result.updatedCount,
@@ -2324,29 +2412,39 @@ export const StorageService = {
     return false;
   },
 
-  isPreResetAttendance(id: string, tanggal: string, nis: string, syncedAt: string, resetState?: DataResetState): boolean {
+  isPreResetAttendance(
+    id: string,
+    tanggal: string,
+    nis: string,
+    syncedAt: string,
+    resetState?: DataResetState,
+    recordedAt?: string
+  ): boolean {
     const rs = resetState || this.getResetState();
     if (!rs.attendanceResetAt) return false;
     const resetMs = Date.parse(rs.attendanceResetAt);
     if (Number.isNaN(resetMs)) return false;
 
-    const composite = `${tanggal}::${String(nis || '').trim().toLowerCase()}`;
-    const ignored = new Set(rs.ignoredAttendanceKeys || []);
-    const syncedMs = parseGasTimestampMs(syncedAt);
-    const hasTimePrecision = /\d{2}:\d{2}/.test(String(syncedAt || ''));
+    const normTanggal = normalizeDateYmd(tanggal) || String(tanggal || '').trim();
+    const composite = `${normTanggal}::${String(nis || '').trim().toLowerCase()}`;
+    const ignored = new Set((rs.ignoredAttendanceKeys || []).map(k => String(k).toLowerCase()));
+    const syncedParsed = parseTimestampMsSafe(syncedAt);
+    const recordedParsed = parseTimestampMsSafe(recordedAt);
+    const bestMs = Math.max(syncedParsed.ms, recordedParsed.ms);
+    const hasTimePrecision = syncedParsed.hasTimePrecision || recordedParsed.hasTimePrecision;
 
-    if (hasTimePrecision && syncedMs > resetMs + 1000) {
+    if (hasTimePrecision && bestMs > resetMs + 1000) {
       return false;
     }
-    if (ignored.has(id) || ignored.has(composite)) {
+    if (ignored.has(String(id || '').toLowerCase()) || ignored.has(composite)) {
       return true;
     }
-    if (hasTimePrecision && syncedMs > 0 && syncedMs <= resetMs) {
+    if (hasTimePrecision && bestMs > 0 && bestMs <= resetMs) {
       return true;
     }
-    if (!hasTimePrecision && tanggal) {
+    if (!hasTimePrecision && normTanggal) {
       const resetJakartaDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta' }).format(new Date(resetMs));
-      if (tanggal <= resetJakartaDate) return true;
+      if (normTanggal <= resetJakartaDate) return true;
     }
     return false;
   },
@@ -2371,7 +2469,7 @@ export const StorageService = {
     if (rs.attendanceResetAt) {
       const records = this.getAttendance();
       const filteredRecords = records.filter(
-        r => !this.isPreResetAttendance(r.id, r.tanggal, r.nis, r.syncedAt || '', rs)
+        r => !this.isPreResetAttendance(r.id, r.tanggal, r.nis, r.syncedAt || '', rs, r.recordedAt)
       );
       if (filteredRecords.length !== records.length) {
         this.saveAttendance(filteredRecords);

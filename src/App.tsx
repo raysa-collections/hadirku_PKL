@@ -30,8 +30,55 @@ import {
   CheckCircle2,
   AlertTriangle,
   Info,
-  X
+  X,
+  RefreshCw
 } from 'lucide-react';
+
+interface ViewErrorBoundaryState {
+  hasError: boolean;
+  errorMessage: string;
+}
+
+class ViewErrorBoundary extends React.Component<{ children: React.ReactNode; onReset?: () => void }, ViewErrorBoundaryState> {
+  constructor(props: { children: React.ReactNode; onReset?: () => void }) {
+    super(props);
+    this.state = { hasError: false, errorMessage: '' };
+  }
+
+  static getDerivedStateFromError(error: Error): ViewErrorBoundaryState {
+    return { hasError: true, errorMessage: error?.message || 'Terjadi kesalahan saat menampilkan data.' };
+  }
+
+  componentDidCatch(error: Error) {
+    console.error('Portal view error recovered by boundary:', error);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="p-6 rounded-2xl bg-white border border-red-200 shadow-sm text-center space-y-3 my-4">
+          <AlertTriangle className="w-8 h-8 text-red-600 mx-auto" />
+          <h3 className="text-sm font-bold text-slate-900">Gagal Memuat Tampilan Data</h3>
+          <p className="text-xs text-slate-600 max-w-md mx-auto">
+            {this.state.errorMessage}
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              this.setState({ hasError: false, errorMessage: '' });
+              this.props.onReset?.();
+            }}
+            className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            Muat Ulang Tampilan
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(() => StorageService.getCurrentUser());
@@ -242,7 +289,7 @@ export default function App() {
     <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans selection:bg-blue-600 selection:text-white">
       
       {/* Top Navigation Bar with Dynamic Header Border Style & 4-Color Accent Strip */}
-      <header className={`${getHeaderBorderClass()} bg-white/95 backdrop-blur-md sticky top-0 z-40 print:hidden transition-all duration-300`}>
+      <header className={`${getHeaderBorderClass()} bg-white/95 backdrop-blur-md sticky top-0 z-40 print:hidden transition-colors duration-200`}>
         <div className="h-1 w-full bg-gradient-to-r from-red-600 via-amber-500 via-blue-600 to-emerald-600" />
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-3">
           
@@ -448,19 +495,21 @@ export default function App() {
               </button>
             </div>
 
-            {studentTab === 'dashboard' && (
-              <StudentDashboard 
-                user={currentUser} 
-                onNavigateToHistory={() => setStudentTab('history')} 
-              />
-            )}
+            <ViewErrorBoundary key={`student-${studentTab}`}>
+              {studentTab === 'dashboard' && (
+                <StudentDashboard 
+                  user={currentUser} 
+                  onNavigateToHistory={() => setStudentTab('history')} 
+                />
+              )}
 
-            {studentTab === 'history' && (
-              <StudentHistory 
-                user={currentUser} 
-                onBackToDashboard={() => setStudentTab('dashboard')} 
-              />
-            )}
+              {studentTab === 'history' && (
+                <StudentHistory 
+                  user={currentUser} 
+                  onBackToDashboard={() => setStudentTab('dashboard')} 
+                />
+              )}
+            </ViewErrorBoundary>
 
           </div>
         )}
@@ -475,7 +524,7 @@ export default function App() {
             <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-3 print:hidden">
               <button
                 onClick={() => setAdminTab('dashboard')}
-                className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition cursor-pointer ${
+                className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-colors cursor-pointer ${
                   adminTab === 'dashboard'
                     ? 'bg-blue-600 text-white shadow-sm shadow-blue-600/20'
                     : 'bg-white text-slate-700 hover:text-blue-700 hover:bg-blue-50 border border-slate-200'
@@ -487,19 +536,19 @@ export default function App() {
 
               <button
                 onClick={() => setAdminTab('students')}
-                className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition cursor-pointer ${
+                className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-colors cursor-pointer ${
                   adminTab === 'students'
                     ? 'bg-blue-600 text-white shadow-sm shadow-blue-600/20'
                     : 'bg-white text-slate-700 hover:text-blue-700 hover:bg-blue-50 border border-slate-200'
                 }`}
               >
                 <Users className={`w-4 h-4 ${adminTab === 'students' ? 'text-white' : 'text-blue-600'}`} />
-                Manajemen Siswa & Bengkel PKL
+                Manajemen Siswa &amp; Bengkel PKL
               </button>
 
               <button
                 onClick={() => setAdminTab('attendance')}
-                className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition cursor-pointer ${
+                className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-colors cursor-pointer ${
                   adminTab === 'attendance'
                     ? 'bg-red-600 text-white shadow-sm shadow-red-600/20'
                     : 'bg-white text-slate-700 hover:text-red-700 hover:bg-red-50 border border-slate-200'
@@ -511,70 +560,72 @@ export default function App() {
 
               <button
                 onClick={() => setAdminTab('reports')}
-                className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition cursor-pointer ${
+                className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-colors cursor-pointer ${
                   adminTab === 'reports'
                     ? 'bg-blue-600 text-white shadow-sm shadow-blue-600/20'
                     : 'bg-white text-slate-700 hover:text-blue-700 hover:bg-blue-50 border border-slate-200'
                 }`}
               >
                 <FileText className={`w-4 h-4 ${adminTab === 'reports' ? 'text-white' : 'text-blue-600'}`} />
-                Laporan & Ekspor (.xlsx / PDF)
+                Laporan &amp; Ekspor (.xlsx / PDF)
               </button>
 
               <button
                 onClick={() => setAdminTab('gas_sync')}
-                className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition cursor-pointer ${
+                className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-colors cursor-pointer ${
                   adminTab === 'gas_sync'
                     ? 'bg-emerald-600 text-white shadow-sm shadow-emerald-600/20'
                     : 'bg-white text-slate-700 hover:text-emerald-700 hover:bg-emerald-50 border border-slate-200'
                 }`}
               >
                 <FileSpreadsheet className={`w-4 h-4 ${adminTab === 'gas_sync' ? 'text-white' : 'text-emerald-600'}`} />
-                <span>Sinkron Spreadsheet & Code.gs</span>
+                <span>Sinkron Spreadsheet &amp; Code.gs</span>
               </button>
 
               <button
                 onClick={() => setAdminTab('settings')}
-                className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition cursor-pointer ${
+                className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-colors cursor-pointer ${
                   adminTab === 'settings'
                     ? 'bg-amber-500 text-white shadow-sm shadow-amber-500/20'
                     : 'bg-white text-slate-700 hover:text-amber-800 hover:bg-amber-50 border border-slate-200'
                 }`}
               >
                 <Settings className={`w-4 h-4 ${adminTab === 'settings' ? 'text-white' : 'text-amber-600'}`} />
-                Setting & Backup Data
+                Setting &amp; Backup Data
               </button>
             </div>
 
-            {adminTab === 'dashboard' && (
-              <AdminDashboard 
-                onNavigateTab={(tab) => setAdminTab(tab)} 
-                onOpenGoogleSheetConfig={() => setShowGoogleSheetModal(true)} 
-              />
-            )}
+            <ViewErrorBoundary key={`admin-${adminTab}`}>
+              {adminTab === 'dashboard' && (
+                <AdminDashboard 
+                  onNavigateTab={(tab) => setAdminTab(tab)} 
+                  onOpenGoogleSheetConfig={() => setShowGoogleSheetModal(true)} 
+                />
+              )}
 
-            {adminTab === 'students' && (
-              <AdminStudentManagement />
-            )}
+              {adminTab === 'students' && (
+                <AdminStudentManagement />
+              )}
 
-            {adminTab === 'attendance' && (
-              <AdminAttendanceManagement />
-            )}
+              {adminTab === 'attendance' && (
+                <AdminAttendanceManagement />
+              )}
 
-            {adminTab === 'reports' && (
-              <AdminReports />
-            )}
+              {adminTab === 'reports' && (
+                <AdminReports />
+              )}
 
-            {adminTab === 'gas_sync' && (
-              <AdminGasIntegration />
-            )}
+              {adminTab === 'gas_sync' && (
+                <AdminGasIntegration />
+              )}
 
-            {adminTab === 'settings' && (
-              <AdminSettings
-                onThemeUpdated={(newTheme) => setThemeConfig(newTheme)}
-                onNavigateTab={(tab) => setAdminTab(tab)}
-              />
-            )}
+              {adminTab === 'settings' && (
+                <AdminSettings
+                  onThemeUpdated={(newTheme) => setThemeConfig(newTheme)}
+                  onNavigateTab={(tab) => setAdminTab(tab)}
+                />
+              )}
+            </ViewErrorBoundary>
 
           </div>
         )}

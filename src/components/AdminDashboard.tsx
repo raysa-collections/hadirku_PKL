@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { User, AttendanceRecord, TahunAjaranConfig } from '../types/pkl';
 import { StorageService, getJakartaDate, formatIndonesianDate, getAttendanceSplitStatus } from '../services/storage';
+import { sortAttendanceRecordsDeterministic, getAttendanceSignature } from '../utils/attendanceUtils';
 import { 
   Users, 
   UserCheck, 
@@ -31,8 +32,10 @@ interface AdminDashboardProps {
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigateTab, onOpenGoogleSheetConfig }) => {
-  const [allUsers, setAllUsers] = useState<User[]>(() => StorageService.getUsers().filter(u => u.role === 'siswa'));
-  const [allAttendance, setAllAttendance] = useState<AttendanceRecord[]>(() => StorageService.getAttendance());
+  const initialStudents = useMemo(() => StorageService.getUsers().filter(u => u.role === 'siswa'), []);
+  const initialAttendance = useMemo(() => sortAttendanceRecordsDeterministic(StorageService.getAttendance()), []);
+  const [allUsers, setAllUsers] = useState<User[]>(initialStudents);
+  const [allAttendance, setAllAttendance] = useState<AttendanceRecord[]>(initialAttendance);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncToast, setSyncToast] = useState<string | null>(null);
   const [copiedLink, setCopiedLink] = useState(false);
@@ -40,61 +43,94 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigateTab, o
   const [diagnostics, setDiagnostics] = useState(() => StorageService.getServerDiagnostics());
   const [tahunConfig, setTahunConfig] = useState<TahunAjaranConfig>(() => StorageService.getTahunAjaranConfig());
 
+  const attSigRef = useRef(getAttendanceSignature(initialAttendance));
+  const usersSigRef = useRef(JSON.stringify(initialStudents));
+  const diagSigRef = useRef(JSON.stringify(diagnostics));
+  const tahunSigRef = useRef(JSON.stringify(tahunConfig));
+  const syncingRef = useRef(false);
+
   const todayDate = getJakartaDate();
   const sheetConfig = StorageService.getGoogleSheetConfig();
   const isConnected = StorageService.isGoogleSheetConnected();
   const studentShareUrl = StorageService.getStudentShareUrl();
   const isDevPreviewHost = typeof window !== 'undefined' && window.location.hostname.includes('ais-dev');
 
-  const handleCloudSync = async (notify = true) => {
-    setIsSyncing(true);
+  const commitLocalSnapshot = useCallback(() => {
+    const nextAtt = sortAttendanceRecordsDeterministic(StorageService.getAttendance());
+    const nextAttSig = getAttendanceSignature(nextAtt);
+    if (nextAttSig !== attSigRef.current) {
+      attSigRef.current = nextAttSig;
+      setAllAttendance(nextAtt);
+    }
+
+    const nextUsers = StorageService.getUsers().filter(u => u.role === 'siswa');
+    const nextUsersSig = JSON.stringify(nextUsers);
+    if (nextUsersSig !== usersSigRef.current) {
+      usersSigRef.current = nextUsersSig;
+      setAllUsers(nextUsers);
+    }
+
+    const nextDiag = StorageService.getServerDiagnostics();
+    const nextDiagSig = JSON.stringify(nextDiag);
+    if (nextDiagSig !== diagSigRef.current) {
+      diagSigRef.current = nextDiagSig;
+      setDiagnostics(nextDiag);
+    }
+
+    const nextTa = StorageService.getTahunAjaranConfig();
+    const nextTaSig = JSON.stringify(nextTa);
+    if (nextTaSig !== tahunSigRef.current) {
+      tahunSigRef.current = nextTaSig;
+      setTahunConfig(nextTa);
+    }
+  }, []);
+
+  const handleCloudSync = useCallback(async (notify = true) => {
+    if (syncingRef.current) return;
+    syncingRef.current = true;
+    if (notify) setIsSyncing(true);
     try {
       await StorageService.pingServerHealth();
-      setDiagnostics(StorageService.getServerDiagnostics());
 
       // 1. Fetch latest from Application Server
       const serverRecords = await StorageService.fetchAttendanceFromServer();
-      const serverStudents = await StorageService.fetchStudentsFromServer();
-      setAllAttendance(serverRecords);
-      setAllUsers(serverStudents.filter(u => u.role === 'siswa'));
+      await StorageService.fetchStudentsFromServer();
 
       // 2. If Google Spreadsheet is connected, also pull from cloud
       if (StorageService.isGoogleSheetConnected()) {
         const attRes = await StorageService.pullAttendanceFromCloud();
         await StorageService.pullStudentsFromCloud();
-        setAllAttendance(StorageService.getAttendance());
-        setAllUsers(StorageService.getUsers().filter(u => u.role === 'siswa'));
+        commitLocalSnapshot();
         if (notify) {
           setSyncToast(attRes.message || 'Sinkronisasi berhasil!');
           confetti({ particleCount: 40, spread: 60 });
           setTimeout(() => setSyncToast(null), 4000);
         }
-      } else if (notify) {
-        setSyncToast(`Data diperbarui dari Server Aplikasi. Total: ${serverRecords.length} presensi.`);
-        setTimeout(() => setSyncToast(null), 3000);
+      } else {
+        commitLocalSnapshot();
+        if (notify) {
+          setSyncToast(`Data diperbarui dari Server Aplikasi. Total: ${serverRecords.length} presensi.`);
+          setTimeout(() => setSyncToast(null), 3000);
+        }
       }
     } catch (e: any) {
       if (notify) alert('Gagal sinkron: ' + e.message);
     } finally {
-      setIsSyncing(false);
+      syncingRef.current = false;
+      if (notify) setIsSyncing(false);
     }
-  };
+  }, [commitLocalSnapshot]);
 
   useEffect(() => {
-    const onSyncUpdate = () => {
-      setAllAttendance(StorageService.getAttendance());
-      setAllUsers(StorageService.getUsers().filter(u => u.role === 'siswa'));
-      setDiagnostics(StorageService.getServerDiagnostics());
-      setTahunConfig(StorageService.getTahunAjaranConfig());
-    };
+    const onSyncUpdate = () => commitLocalSnapshot();
     window.addEventListener('pkl-sync-updated', onSyncUpdate);
 
     // 1. Immediate fetch from server & Google Spreadsheet
     handleCloudSync(false);
 
-    // 2. Real-time background polling every 12 seconds:
-    // Captures student registrations and attendance submitted from different phones via Server & Google Spreadsheet
+    // 2. Real-time background polling every 12 seconds (paused when tab hidden)
     const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) return;
       handleCloudSync(false);
     }, 12000);
 
@@ -102,7 +138,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigateTab, o
       window.removeEventListener('pkl-sync-updated', onSyncUpdate);
       clearInterval(interval);
     };
-  }, []);
+  }, [commitLocalSnapshot, handleCloudSync]);
 
   const handleCopyWhatsAppText = () => {
     if (!isConnected) {
@@ -117,8 +153,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigateTab, o
     setTimeout(() => setCopiedLink(false), 3000);
   };
 
-  // Metrics for today
-  const todayRecords = allAttendance.filter(r => r.tanggal === todayDate);
+  // Metrics for today (deterministically sorted)
+  const todayRecords = useMemo(
+    () => sortAttendanceRecordsDeterministic(allAttendance.filter(r => r.tanggal === todayDate)),
+    [allAttendance, todayDate]
+  );
   const totalStudents = allUsers.length;
   const hadirHariIni = todayRecords.filter(r => r.status === 'Hadir' || r.status === 'Terlambat').length;
   const sudahPulang = todayRecords.filter(r => r.jamPulang && r.jamPulang !== '-').length;
@@ -128,9 +167,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigateTab, o
   return (
     <div className="space-y-6">
       
-      {/* Toast Alert */}
+      {/* Floating Toast Alert */}
       {syncToast && (
-        <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs flex items-center justify-between shadow-sm animate-in fade-in">
+        <div className="fixed bottom-5 right-5 z-50 max-w-md p-3.5 rounded-2xl bg-emerald-50 border border-emerald-300 text-emerald-950 text-xs flex items-center justify-between gap-2.5 shadow-lg">
           <div className="flex items-center gap-2.5">
             <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
             <span className="font-medium">{syncToast}</span>
@@ -172,10 +211,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigateTab, o
           <button
             onClick={() => handleCloudSync(true)}
             disabled={isSyncing}
-            className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs flex items-center gap-2 shadow-sm transition cursor-pointer disabled:opacity-50"
+            className="w-[172px] justify-center px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs flex items-center gap-2 shadow-sm transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap"
             title="Tarik data presensi terbaru yang baru saja dikirim siswa dari HP mereka"
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`w-3.5 h-3.5 shrink-0 ${isSyncing ? 'animate-spin' : ''}`} />
             <span>{isSyncing ? 'Menyinkronkan...' : 'Tarik Data Terbaru'}</span>
           </button>
 
@@ -373,7 +412,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigateTab, o
                   <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-xs font-bold text-white shrink-0 ${
                     statusDatang === 'Hadir' ? 'bg-emerald-600' : statusDatang === 'Terlambat' ? 'bg-amber-500' : 'bg-red-600'
                   }`}>
-                    {item.namaSiswa.slice(0, 2).toUpperCase()}
+                    {String(item.namaSiswa || 'SP').slice(0, 2).toUpperCase()}
                   </div>
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">

@@ -2,6 +2,12 @@ import fs from 'fs';
 import path from 'path';
 import { User, AttendanceRecord, GoogleSheetConfig, AppThemeConfig, ReportPrintConfig, TahunAjaranConfig, DataResetState } from '../types/pkl';
 import { INITIAL_USERS, generateSeedAttendance, DEFAULT_THEME_CONFIG, DEFAULT_REPORT_CONFIG, DEFAULT_TAHUN_AJARAN_CONFIG } from '../constants/defaults';
+import {
+  normalizeAttendanceRecord,
+  normalizeDateYmd,
+  parseTimestampMsSafe,
+  sortAttendanceRecordsDeterministic,
+} from '../utils/attendanceUtils';
 
 interface ServerDatabase {
   users: User[];
@@ -250,7 +256,7 @@ class ServerStore {
     if (merged.attendanceResetAt) {
       const before = data.attendance.length;
       data.attendance = data.attendance.filter(
-        r => !this.isPreResetAttendance(r.id, r.tanggal, r.nis, r.syncedAt || '', merged)
+        r => !this.isPreResetAttendance(r.id, r.tanggal, r.nis, r.syncedAt || '', merged, r.recordedAt)
       );
       if (data.attendance.length !== before) changed = true;
     }
@@ -326,30 +332,20 @@ class ServerStore {
   // --- ATTENDANCE METHODS ---
   public getAttendance(filterNis?: string): AttendanceRecord[] {
     const data = this.load();
+    const defaultTahun = data.config.tahunAjaran?.tahunAktif || '2025/2026';
+    const normalized = data.attendance
+      .map(r => normalizeAttendanceRecord(r, data.users, defaultTahun))
+      .filter((r): r is AttendanceRecord => Boolean(r));
+    const sorted = sortAttendanceRecordsDeterministic(normalized);
     if (filterNis) {
       const target = filterNis.trim().toLowerCase();
-      return data.attendance.filter(r => String(r.nis || '').trim().toLowerCase() === target);
+      return sorted.filter(r => String(r.nis || '').trim().toLowerCase() === target);
     }
-    return data.attendance;
+    return sorted;
   }
 
   private parseGasTimestampMs(raw?: string): number {
-    if (!raw) return 0;
-    const str = String(raw).replace(/\s*WIB\s*$/i, '').trim();
-    if (!str) return 0;
-    // Match "YYYY-MM-DD HH:mm:ss" (Asia/Jakarta UTC+7)
-    if (/^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}(:\d{2})?$/.test(str)) {
-      const iso = str.replace(/\s+/, 'T') + (str.length <= 16 ? ':00' : '') + '+07:00';
-      const ms = Date.parse(iso);
-      return Number.isNaN(ms) ? 0 : ms;
-    }
-    if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
-      // Date only — treat as start of day Jakarta; compared alongside ignoredKeys
-      const ms = Date.parse(`${str}T00:00:00+07:00`);
-      return Number.isNaN(ms) ? 0 : ms;
-    }
-    const ms = Date.parse(str);
-    return Number.isNaN(ms) ? 0 : ms;
+    return parseTimestampMsSafe(raw).ms;
   }
 
   private unignoreStudentKeys(nis?: string, username?: string) {
@@ -410,29 +406,33 @@ class ServerStore {
     tanggal: string,
     nis: string,
     syncedAt: string,
-    resetState?: DataResetState
+    resetState?: DataResetState,
+    recordedAt?: string
   ): boolean {
     if (!resetState?.attendanceResetAt) return false;
     const resetMs = Date.parse(resetState.attendanceResetAt);
     if (Number.isNaN(resetMs)) return false;
 
-    const composite = `${tanggal}::${nis.trim().toLowerCase()}`;
-    const ignored = new Set((resetState.ignoredAttendanceKeys || []));
-    const syncedMs = this.parseGasTimestampMs(syncedAt);
-    const hasTimePrecision = /\d{2}:\d{2}/.test(String(syncedAt || ''));
+    const normTanggal = normalizeDateYmd(tanggal) || String(tanggal || '').trim();
+    const composite = `${normTanggal}::${String(nis || '').trim().toLowerCase()}`;
+    const ignored = new Set((resetState.ignoredAttendanceKeys || []).map(k => String(k).toLowerCase()));
+    const syncedParsed = parseTimestampMsSafe(syncedAt);
+    const recordedParsed = parseTimestampMsSafe(recordedAt);
+    const bestMs = Math.max(syncedParsed.ms, recordedParsed.ms);
+    const hasTimePrecision = syncedParsed.hasTimePrecision || recordedParsed.hasTimePrecision;
 
-    if (hasTimePrecision && syncedMs > resetMs + 1000) {
+    if (hasTimePrecision && bestMs > resetMs + 1000) {
       return false;
     }
-    if (ignored.has(id) || ignored.has(composite)) {
+    if (ignored.has(String(id || '').toLowerCase()) || ignored.has(composite)) {
       return true;
     }
-    if (hasTimePrecision && syncedMs > 0 && syncedMs <= resetMs) {
+    if (hasTimePrecision && bestMs > 0 && bestMs <= resetMs) {
       return true;
     }
-    if (!hasTimePrecision && tanggal) {
+    if (!hasTimePrecision && normTanggal) {
       const resetJakartaDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta' }).format(new Date(resetMs));
-      if (tanggal <= resetJakartaDate) return true;
+      if (normTanggal <= resetJakartaDate) return true;
     }
     return false;
   }
@@ -442,26 +442,43 @@ class ServerStore {
     overrideScriptUrl?: string
   ): Promise<{ record: AttendanceRecord; sheetSynced: boolean; sheetError?: string; timedOut?: boolean }> {
     const data = this.load();
-    this.unignoreAttendanceKeys(record.id, record.tanggal, record.nis);
-    const normNis = String(record.nis || '').trim().toLowerCase();
+    const defaultTahun = data.config.tahunAjaran?.tahunAktif || '2025/2026';
+    const normalizedInput = normalizeAttendanceRecord(record, data.users, defaultTahun) || record;
+
+    this.unignoreAttendanceKeys(normalizedInput.id, normalizedInput.tanggal, normalizedInput.nis);
+    const normNis = String(normalizedInput.nis || '').trim().toLowerCase();
     const existingIdx = data.attendance.findIndex(
-      r => r.id === record.id || (r.tanggal === record.tanggal && String(r.nis || '').trim().toLowerCase() === normNis)
+      r =>
+        r.id === normalizedInput.id ||
+        (normalizeDateYmd(r.tanggal) === normalizedInput.tanggal &&
+          String(r.nis || '').trim().toLowerCase() === normNis)
     );
 
-    let finalRecord: AttendanceRecord = { ...record };
+    const attResetMs = data.config.resetState?.attendanceResetAt
+      ? Date.parse(data.config.resetState.attendanceResetAt)
+      : 0;
+    const safeRecordedAt = new Date(Math.max(Date.now(), (Number.isNaN(attResetMs) ? 0 : attResetMs) + 2000)).toISOString();
+
+    let finalRecord: AttendanceRecord = {
+      ...normalizedInput,
+      recordedAt: normalizedInput.recordedAt || safeRecordedAt,
+    };
 
     if (existingIdx >= 0) {
+      const existing = data.attendance[existingIdx];
       finalRecord = {
-        ...data.attendance[existingIdx],
-        ...record,
-        fotoBukti: record.fotoBukti || data.attendance[existingIdx].fotoBukti,
-        fotoPulang: record.fotoPulang || data.attendance[existingIdx].fotoPulang,
+        ...existing,
+        ...normalizedInput,
+        recordedAt: safeRecordedAt,
+        fotoBukti: normalizedInput.fotoBukti || existing.fotoBukti,
+        fotoPulang: normalizedInput.fotoPulang || existing.fotoPulang,
       };
       data.attendance[existingIdx] = finalRecord;
     } else {
       data.attendance.unshift(finalRecord);
     }
 
+    data.attendance = sortAttendanceRecordsDeterministic(data.attendance);
     this.saveToDisk();
 
     // Forward to Google Apps Script if configured
@@ -1050,56 +1067,75 @@ class ServerStore {
     if (json && json.status === 'success' && Array.isArray(json.data)) {
       let updated = 0;
       const resetState = data.config.resetState;
+      const defaultTahun = data.config.tahunAjaran?.tahunAktif || '2025/2026';
+
       json.data.forEach((item: any) => {
-        if (!item.tanggal || !item.nis) return;
-        const itemNis = String(item.nis).trim();
-        const id = item.id || `ABS-${String(item.tanggal).replace(/-/g, '')}-${itemNis}`;
-        if (this.isPreResetAttendance(id, String(item.tanggal), itemNis, String(item.syncedAt || ''), resetState)) {
+        const normalized = normalizeAttendanceRecord(
+          {
+            ...item,
+            syncStatus: 'synced',
+            syncedAt: item?.syncedAt || new Date().toISOString(),
+          },
+          data.users,
+          defaultTahun
+        );
+        if (!normalized) return;
+
+        if (
+          this.isPreResetAttendance(
+            normalized.id,
+            normalized.tanggal,
+            normalized.nis,
+            normalized.syncedAt || '',
+            resetState,
+            normalized.recordedAt
+          )
+        ) {
           return;
         }
+
+        // Valid post-reset cloud record unignores any stale local/server tombstone
+        this.unignoreAttendanceKeys(normalized.id, normalized.tanggal, normalized.nis);
+
+        const normNis = normalized.nis.toLowerCase();
         const existingIdx = data.attendance.findIndex(
-          r => r.id === id || (r.tanggal === item.tanggal && String(r.nis).trim().toLowerCase() === itemNis.toLowerCase())
+          r =>
+            r.id === normalized.id ||
+            (normalizeDateYmd(r.tanggal) === normalized.tanggal &&
+              String(r.nis || '').trim().toLowerCase() === normNis)
         );
 
-        const record: AttendanceRecord = {
-          id,
-          tanggal: item.tanggal,
-          nis: itemNis,
-          namaSiswa: item.namaSiswa || 'Siswa PKL',
-          kelas: item.kelas || 'XII TKR 1',
-          namaPembimbing: item.namaPembimbing || '-',
-          asalSekolah: item.asalSekolah || 'SMKN 1 Tegalsari',
-          jurusan: item.jurusan || 'Teknik Kendaraan Ringan (TKR)',
-          jamDatang: item.jamDatang || '-',
-          jamPulang: item.jamPulang || '-',
-          status: item.status || 'Hadir',
-          keterangan: item.keterangan || '-',
-          tempatPkl: item.tempatPkl || '-',
-          koordinatGps: item.koordinatGps || '-',
-          mapsUrl: item.mapsUrl || '-',
-          koordinatPulang: item.koordinatPulang || '-',
-          mapsUrlPulang: item.mapsUrlPulang || '-',
-          syncStatus: 'synced',
-          syncedAt: item.syncedAt || new Date().toISOString(),
-        };
-
         if (existingIdx >= 0) {
+          const ex = data.attendance[existingIdx];
+          const remoteHasOut = normalized.jamPulang && normalized.jamPulang !== '-';
+          const localHasOut = ex.jamPulang && ex.jamPulang !== '-';
+          const preserveLocalOut = !remoteHasOut && localHasOut && ex.syncStatus === 'pending';
+
           data.attendance[existingIdx] = {
-            ...record,
-            fotoBukti: data.attendance[existingIdx].fotoBukti || record.fotoBukti,
-            fotoPulang: data.attendance[existingIdx].fotoPulang || record.fotoPulang,
+            ...ex,
+            ...normalized,
+            jamPulang: preserveLocalOut ? ex.jamPulang : (remoteHasOut ? normalized.jamPulang : (ex.jamPulang || '-')),
+            statusPulang: preserveLocalOut ? ex.statusPulang : (remoteHasOut ? normalized.statusPulang : (ex.statusPulang || 'Belum Pulang')),
+            koordinatPulang: preserveLocalOut ? ex.koordinatPulang : (normalized.koordinatPulang !== '-' ? normalized.koordinatPulang : (ex.koordinatPulang || '-')),
+            mapsUrlPulang: preserveLocalOut ? ex.mapsUrlPulang : (normalized.mapsUrlPulang !== '-' ? normalized.mapsUrlPulang : (ex.mapsUrlPulang || '-')),
+            fotoBukti: ex.fotoBukti || normalized.fotoBukti,
+            fotoPulang: ex.fotoPulang || normalized.fotoPulang,
+            tahunAjaran: ex.tahunAjaran || normalized.tahunAjaran,
+            recordedAt: ex.recordedAt || normalized.recordedAt,
+            syncStatus: preserveLocalOut ? 'pending' : 'synced',
           };
         } else {
-          data.attendance.unshift(record);
+          data.attendance.push(normalized);
         }
         updated++;
       });
 
+      data.attendance = sortAttendanceRecordsDeterministic(data.attendance);
       data.config.googleSheet.lastSync = new Date().toISOString();
       data.config.googleSheet.connected = true;
       this.saveToDisk();
 
-      const returnData = filterNis ? this.getAttendance(filterNis) : data.attendance;
+      const returnData = this.getAttendance(filterNis);
 
       return {
         success: true,

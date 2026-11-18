@@ -256,6 +256,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onNavi
           fotoBukti: data.photo,
           tahunAjaran: user.tahunAjaran || StorageService.getActiveTahunAjaran(),
           syncStatus: 'pending',
+          recordedAt: new Date().toISOString(),
         };
 
         StorageService.addOrUpdateAttendance(newRecord);
@@ -328,6 +329,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ user, onNavi
           mapsUrlPulang: data.mapsUrl,
           fotoPulang: data.photo,
           syncStatus: 'pending',
+          recordedAt: new Date().toISOString(),
         };
 
         StorageService.addOrUpdateAttendance(updatedRecord);

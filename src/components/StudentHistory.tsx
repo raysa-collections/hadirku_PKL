@@ -44,15 +44,21 @@ export const StudentHistory: React.FC<StudentHistoryProps> = ({ user, onBackToDa
 
   // Filter records
   const filteredRecords = allRecords.filter(record => {
-    const [y, m] = record.tanggal.split('-');
+    const tgl = String(record.tanggal || '');
+    const [y = '', m = ''] = tgl.split('-');
     const matchesMonth = selectedMonth === 'all' || m === selectedMonth;
     const matchesYear = selectedYear === 'all' || y === selectedYear;
-    const matchesQuery = !searchQuery || 
-      record.tanggal.includes(searchQuery) || 
-      record.keterangan.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      record.status.toLowerCase().includes(searchQuery.toLowerCase());
+    const q = searchQuery.toLowerCase();
+    const matchesQuery = !q || 
+      tgl.includes(searchQuery) || 
+      String(record.keterangan || '').toLowerCase().includes(q) ||
+      String(record.status || '').toLowerCase().includes(q);
     return matchesMonth && matchesYear && matchesQuery;
-  }).sort((a, b) => b.tanggal.localeCompare(a.tanggal));
+  }).sort((a, b) =>
+    String(b.tanggal || '').localeCompare(String(a.tanggal || '')) ||
+    String(b.jamDatang || '').localeCompare(String(a.jamDatang || '')) ||
+    String(a.id || '').localeCompare(String(b.id || ''))
+  );
 
   const totalHadir = filteredRecords.filter(r => r.status === 'Hadir' || r.status === 'Terlambat').length;
   const totalTerlambat = filteredRecords.filter(r => r.status === 'Terlambat').length;
